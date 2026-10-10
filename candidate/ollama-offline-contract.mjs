@@ -20,9 +20,9 @@ const FINDINGS_FORMAT=Object.freeze({
       properties:{
         severity:{type:'string',enum:['critical','high','medium','low','informational']},
         path:{type:'string',maxLength:300},
-        line:{type:'integer',minimum:1},
-        message:{type:'string',maxLength:500},
-        evidence:{type:'string',maxLength:1000}
+        line:{type:'integer',minimum:1,maximum:1000000},
+        message:{type:'string',minLength:1,maxLength:500},
+        evidence:{type:'string',minLength:1,maxLength:1000}
       }
     }}
   }
@@ -58,17 +58,23 @@ export function prepareOfflineOllamaCandidate({
   if(!MODELS.includes(model)||!Number.isSafeInteger(maxOutputTokens)||
     maxOutputTokens<128||maxOutputTokens>4096)
     deny('OLLAMA_MODEL_OR_CONTEXT_UNSUPPORTED');
+  const reviewSchema=structuredClone(FINDINGS_FORMAT);
+  // Force the model to use exact, GitHub-bound changed paths.
+  reviewSchema.properties.findings.items.properties.path.enum=[...plan.changedPaths];
   const system=plan.systemInstructions.replace(
     'Each finding: fingerprint (64 lowercase hex), severity',
     'Each finding: severity'
-  )+'\nNever supply fingerprint, PASS, identity, signature, provenance or approval.';
+  )+'\nNever supply fingerprint, PASS, identity, signature, provenance or approval.'+
+    '\nReport only concrete newly introduced bugs proven by added diff lines.'+
+    '\nUse only exact changed_paths names and new-side line numbers.'+
+    '\nNo stylistic or speculative findings; write one-line message and evidence.';
   const input=JSON.stringify({
     repository:plan.exactScope.repository,pr_number:plan.exactScope.prNumber,
     head_sha:plan.exactScope.headSha,base_sha:plan.exactScope.baseSha,
     changed_paths:plan.changedPaths,untrusted_unified_diff:plan.privateDiffText
   });
   const privateRequest=JSON.stringify({
-    model,stream:false,format:FINDINGS_FORMAT,keep_alive:0,
+    model,stream:false,format:reviewSchema,keep_alive:0,
     options:{temperature:0,num_ctx:8192,num_predict:maxOutputTokens},
     messages:[{role:'system',content:system},{role:'user',content:input}]
   });

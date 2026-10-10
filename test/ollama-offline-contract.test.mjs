@@ -37,6 +37,8 @@ test('build local Ollama JSON request, never authorize or publish',()=>{
  assert.equal(input.format.additionalProperties,false);
  assert.deepEqual(input.format.required,['summary','findings']);
  assert.equal(input.format.properties.findings.items.additionalProperties,false);
+ assert.deepEqual(input.format.properties.findings.items.properties.path.enum,
+  ['src/check.mjs']);
  assert.equal(input.options.num_ctx,8192);
  assert.equal(input.options.temperature,0);
  assert.equal(input.options.num_predict,2048);

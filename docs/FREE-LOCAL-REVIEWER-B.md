@@ -69,3 +69,11 @@ a safe null-check change. The public GitHub Actions canary tests 7B and
 reports detection plus false-alarm counts, while explicitly keeping
 modelQualityCertified=false. A complete, valid summary is mandatory for CI;
 no empty/silent process can make this job PASS. No private source is used.
+
+## Model finding schema improvement
+
+The first Qwen 7B smoke run rejected invalid model-produced findings, as
+required by fail-closed policy. The next adapter revision binds Ollama's
+structured-output schema to the *exact changed paths* and requests specific
+added-line evidence. Invalid responses remain BLOCKED; outputs are not silently
+filtered or promoted into authorization.
