@@ -1,0 +1,13 @@
+# Local Semgrep Community Edition rules; no cloud registry or sign-in.
+# A match is provisional advice, NEVER an independent approval.
+rules:
+  - id: devfactory.javascript-dynamic-eval
+    message: Direct eval of changed JavaScript requires security inspection.
+    severity: ERROR
+    languages: [javascript, typescript]
+    pattern: eval(...)
+  - id: devfactory.javascript-dynamic-function
+    message: Dynamic Function constructor requires security inspection.
+    severity: ERROR
+    languages: [javascript, typescript]
+    pattern: new Function(...)
