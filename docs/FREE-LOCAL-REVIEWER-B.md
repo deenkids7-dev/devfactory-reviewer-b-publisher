@@ -110,3 +110,12 @@ and refuses any caller-supplied system instruction changes or changed-path
 lists that differ from the canonical parser. This closes a self-declared
 prompt/scope spoofing path. It does not by itself authenticate GitHub API
 origin or make the review independent: those remain separate trust gates.
+
+## Quality calibration after first 7B review
+
+The real synthetic Qwen 7B test found the seeded auth bypass, but falsely
+claimed that an isolated read-only permission YAML hunk was malformed and
+that defensive optional chaining weakened an admin-role comparison. The
+read-only example is now a more realistic *write-to-read permission reduction*;
+model instructions emphasize partial-diff limitations, reproducible paths and
+actual guard semantics. Do not treat this small benchmark as a release gate.

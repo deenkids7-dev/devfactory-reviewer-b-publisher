@@ -81,7 +81,11 @@ export function prepareOfflineOllamaCandidate({
   )+'\nNever supply fingerprint, PASS, identity, signature, provenance or approval.'+
     '\nReport only concrete newly introduced bugs proven by added diff lines.'+
     '\nUse only exact changed_paths names and new-side line numbers.'+
-    '\nNo stylistic or speculative findings; write one-line message and evidence.';
+    '\nNo stylistic or speculative findings; write one-line message and evidence.'+
+    '\nDiff snippets are not full files: omitted surrounding code and configuration may already exist.'+
+    '\nBefore reporting, name a concrete failing input, runtime path, or security bypass introduced by the change.'+
+    '\nTrace the actual result of guards and comparisons; do not mistake defensive null handling for an authorization bypass.'+
+    '\nIf no reproducible regression is supported by the diff, return an empty findings array.';
   const input=JSON.stringify({
     repository:plan.exactScope.repository,pr_number:plan.exactScope.prNumber,
     head_sha:plan.exactScope.headSha,base_sha:plan.exactScope.baseSha,

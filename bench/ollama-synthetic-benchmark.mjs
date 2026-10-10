@@ -16,10 +16,10 @@ const AUTH_PATH='src/auth-synthetic.mjs';
 const SHA=value=>createHash('sha256').update(value).digest('hex');
 const FIXTURES=Object.freeze([
   Object.freeze({label:'static risky trigger',path:WORKFLOW_PATH,
-    before:'name: original',source:'on: [push, pull_request_target]',
+    before:'on: [push, pull_request]',source:'on: [push, pull_request_target]',
     knownStaticBlocker:true,knownSemanticBug:false}),
-  Object.freeze({label:'ordinary read-only workflow',path:WORKFLOW_PATH,
-    before:'name: original',source:'contents: read',
+  Object.freeze({label:'read-only permission hardening',path:WORKFLOW_PATH,
+    before:'    contents: write',source:'    contents: read',
     knownStaticBlocker:false,knownSemanticBug:false}),
   Object.freeze({label:'removed authorization check',path:AUTH_PATH,
     before:"function isAuthorized(user) { return user?.role === 'admin'; }",
