@@ -107,6 +107,7 @@ export async function runSyntheticLocalOllamaBenchmark({
     const completion=validateOfflineOllamaCompletion({
       response:raw,expectedModel:candidate.model,runId:RUN,
       trustedChangedPaths:plan.changedPaths,
+      trustedDiffBytes:bytes,expectedDiffSha256:SHA(bytes),
       maxPromptTokens:8192,maxCompletionTokens:candidate.maxOutputTokens
     });
     const combined=combineReviewerFindings({

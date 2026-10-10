@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { inspect } from 'node:util';
+import { deriveAddedLinesFromDiff,isAddedLine } from './diff-added-lines.mjs';
 import { canonicalJson } from '../src/canonical.mjs';
 import { normalizeUntrustedModelFindings,prepareBoundedSemanticReview }
   from './semantic-review-request.mjs';
@@ -124,6 +125,7 @@ export function prepareOfflineOllamaCandidate({
  */
 export function validateOfflineOllamaCompletion({
   response,expectedModel,runId,trustedChangedPaths,
+  trustedDiffBytes,expectedDiffSha256,
   maxPromptTokens=200000,maxCompletionTokens=4096
 }={}){
   if(!MODELS.includes(expectedModel)||!RUN.test(runId)||
@@ -152,6 +154,14 @@ export function validateOfflineOllamaCompletion({
   if(!exact(parsed,['summary','findings'])||
     typeof parsed.summary!=='string'||!Array.isArray(parsed.findings)||
     parsed.findings.length>50)deny('OLLAMA_FINDINGS_SCHEMA_INVALID');
+  if(!Buffer.isBuffer(trustedDiffBytes)||
+    !HASH.test(expectedDiffSha256)||
+    digest(trustedDiffBytes)!==expectedDiffSha256)
+    deny('OLLAMA_ADDED_LINE_SCOPE_UNVERIFIED');
+  const anchors=deriveAddedLinesFromDiff({diffBytes:trustedDiffBytes});
+  if(!Array.isArray(trustedChangedPaths)||
+    JSON.stringify(Object.keys(anchors))!==JSON.stringify(trustedChangedPaths))
+    deny('OLLAMA_ADDED_LINE_SCOPE_UNVERIFIED');
   const changed=new Set(trustedChangedPaths);
   const seen=new Set();
   // Normalize harmless layout whitespace, never drop a finding or guess data.
@@ -170,6 +180,8 @@ export function validateOfflineOllamaCompletion({
     if(!changed.has(f.path))deny('OLLAMA_FINDING_PATH_MISMATCH');
     if(!Number.isSafeInteger(f.line)||f.line<1||f.line>1000000)
       deny('OLLAMA_FINDING_LINE_INVALID');
+    if(!isAddedLine({anchors,path:f.path,line:f.line}))
+      deny('OLLAMA_FINDING_NOT_ADDED_LINE');
     if(!['critical','high','medium','low','informational'].includes(f.severity))
       deny('OLLAMA_FINDING_SEVERITY_INVALID');
     const normalized={

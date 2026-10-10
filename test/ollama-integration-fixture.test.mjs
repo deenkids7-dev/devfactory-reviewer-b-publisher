@@ -25,7 +25,7 @@ function fixture(trigger='contents: read') {
   const staticAudit=runFailOnlyStaticDiffAudit({diffBytes:diff,runId});
   const plan=prepareBoundedSemanticReview({snapshot:target,rawDiffBytes:diff});
   const candidate=prepareOfflineOllamaCandidate({plan});
-  return {staticAudit,plan,candidate};
+  return {staticAudit,plan,candidate,diff};
 }
 function analyze(f,findings=[]) {
   const completion=validateOfflineOllamaCompletion({
@@ -38,6 +38,7 @@ function analyze(f,findings=[]) {
     },
     expectedModel:'qwen2.5-coder:7b',runId,
     trustedChangedPaths:f.plan.changedPaths,
+    trustedDiffBytes:f.diff,expectedDiffSha256:digest(f.diff),
     maxPromptTokens:1000,maxCompletionTokens:512
   });
   return combineReviewerFindings({

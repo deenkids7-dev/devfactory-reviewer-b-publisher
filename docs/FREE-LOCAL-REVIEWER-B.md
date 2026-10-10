@@ -130,3 +130,18 @@ This measures only provisional error rates and never claims independent
 reviewer provenance or production safety. A 14B model may exceed runner
 resources or free execution limits; such an outcome is a failed experiment,
 not permission to fall back silently or weaken controls.
+
+## Exact diff-line evidence and efficient manual canary gate
+
+Model findings are now rejected if their reported path and new-side line
+number do not identify an actual added line in the separately trusted unified
+diff. The validator also requires the exact SHA-256 diff digest and rejects
+missing/mismatched source bytes, duplicate paths, malformed hunks and fake
+source locations. This is evidence-location integrity, not an independent
+semantic judgment or HUMAN_GO.
+
+The free model benchmark is now deliberately opt-in with the
+`reviewer-b-benchmark` PR label. This prevents every small hardening commit
+from repeatedly downloading large models; an authorized repository writer
+may label PR #2 when another synthetic quality run is needed. The job uses no
+secrets or private source. Existing in-flight workflow runs are unaffected.

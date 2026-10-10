@@ -26,7 +26,9 @@ const finding=JSON.stringify({summary:'Synthetic blocker',findings:[{
  evidence:'Synthetic evidence'}]});
 const parse=(resp,more={})=>validateOfflineOllamaCompletion({
  response:resp,expectedModel:'qwen2.5-coder:7b',
- runId:'synthetic-ollama-898',trustedChangedPaths:['src/check.mjs'],...more
+ runId:'synthetic-ollama-898',trustedChangedPaths:['src/check.mjs'],
+ trustedDiffBytes:diff,
+ expectedDiffSha256:createHash('sha256').update(diff).digest('hex'),...more
 });
 test('build local Ollama JSON request, never authorize or publish',()=>{
  const result=prepareOfflineOllamaCandidate({plan:plan()});
@@ -154,4 +156,18 @@ test('forged changedPaths that disagree with diff bytes are rejected',()=>{
   changedPaths:['other/forged-file.mjs']};
  assert.throws(()=>prepareOfflineOllamaCandidate({plan:forged}),
   /OLLAMA_SCOPE_UNVERIFIED/);
+});
+
+test('model findings must cite a real newly added line, not an invented location',()=>{
+ const item={severity:'high',path:'src/check.mjs',line:2,
+  message:'Synthetic out-of-hunk finding',evidence:'no supporting line'};
+ assert.throws(()=>parse(completion(JSON.stringify({summary:'fixture',findings:[item]}))),
+  /OLLAMA_FINDING_NOT_ADDED_LINE/);
+});
+test('model result rejects a diff that was changed after the GitHub snapshot',()=>{
+ const content=completion(JSON.stringify({summary:'fixture',findings:[]}));
+ assert.throws(()=>parse(content,{trustedDiffBytes:Buffer.from('forged')}),
+  /OLLAMA_ADDED_LINE_SCOPE_UNVERIFIED/);
+ assert.throws(()=>parse(content,{expectedDiffSha256:'0'.repeat(64)}),
+  /OLLAMA_ADDED_LINE_SCOPE_UNVERIFIED/);
 });

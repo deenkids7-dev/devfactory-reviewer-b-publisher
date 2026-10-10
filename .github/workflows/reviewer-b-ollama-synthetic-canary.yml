@@ -2,6 +2,7 @@ name: Reviewer B - Free Ollama Synthetic Canary
 
 on:
   pull_request:
+    types: [opened, reopened, synchronize, labeled]
     branches: [main]
     paths:
       - '.github/workflows/reviewer-b-ollama-synthetic-canary.yml'
@@ -14,7 +15,7 @@ permissions:
 
 jobs:
   synthetic-local-ollama:
-    if: github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.event.pull_request.head.repo.full_name == github.repository
+    if: github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark')
     name: Synthetic Ollama ${{ matrix.model }} - NO secrets or private code
     runs-on: ubuntu-24.04
     timeout-minutes: 45
