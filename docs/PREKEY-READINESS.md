@@ -64,6 +64,10 @@ synthetic until the independently witnessed runtime is implemented.
 - [x] GitHub native reviews GET + duplicate reviewer protections (synthetic).
 - [x] Source-independent regression tests for candidate trust boundaries.
 - [ ] Independent security review of Publisher PR #2 on its exact HEAD.
+- [x] Prepared a zero-credential, manual-only environment probe workflow
+      `.github/workflows/reviewer-b-environment-hold-probe.yml` on PR #2.
+      It cannot execute from the protected default branch until an
+      independently reviewed merge occurs. This is NOT a completed gate.
 - [ ] Validate GitHub environment hold-and-release on protected `main`
       **using a zero-secret, zero-diff workflow** (cannot simply rely on
       the Settings screenshot).
@@ -113,3 +117,13 @@ A `candidate/` module does NOT establish deployment readiness. Passing
 tests means only that synthetic contracts and fail-closed behavior passed.
 No production App installation JWT, native RSA signature, Ed25519 independent
 analyzer attestation, genuine review, or GitHub APPROVED review has occurred.
+
+## Current pre-key blocker (must not bypass)
+
+The source-level candidate and the no-secret environment probe are on
+**DRAFT Publisher PR #2**, not the protected `main`. The separate operator
+reviewer can only approve an environment deployment after its workflow has
+been independently audited and reached protected `main` by an authorized PR
+merge. No independent external provenance engine or real semantic model has
+been provisioned. The required action is therefore **security review and
+approval of a safe promotion**, NOT generation of a private key today.
