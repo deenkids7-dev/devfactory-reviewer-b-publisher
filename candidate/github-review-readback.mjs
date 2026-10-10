@@ -80,7 +80,16 @@ export async function readNativeReviews({
       }
       // Other commits are included for a downstream independent consumer;
       // they cannot be counted as reviews of expectedHeadSha.
-      seen.add(review.id);result.push(Object.freeze(review));
+      seen.add(review.id);
+      // Copy only trusted schema fields. No mutable nested GitHub response
+      // object is exposed to a later provenance/signature verifier.
+      result.push(Object.freeze({
+        id:review.id,
+        user:Object.freeze({id:review.user.id,login:review.user.login}),
+        commit_id:review.commit_id,state:review.state,body:review.body,
+        submitted_at:review.submitted_at||null,
+        pull_request_url:review.pull_request_url
+      }));
       if(result.length>MAX_REVIEWS)deny('REVIEWS_TOO_MANY');
     }
     if(pageData.length<100){
