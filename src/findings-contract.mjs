@@ -59,6 +59,7 @@ export function validateReviewerFindings({reportBytes,changedPaths}) {
   const blocking=value.findings.filter(f=>
     f.severity==='critical'||f.severity==='high');
   return Object.freeze({
+    runId:value.run_id,
     parsedFindingCount:value.findings.length,
     blockingFindingCount:blocking.length,
     provisionalState:blocking.length>0?'FAIL':'INCONCLUSIVE',
