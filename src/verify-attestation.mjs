@@ -87,6 +87,9 @@ export function verifyAttestation({ envelope, reportBytes, trustedKeys, trustedT
   if (typeof s.value !== 'string' || !/^[A-Za-z0-9+/]{86}==$/.test(s.value)) reject('MALFORMED_SIGNATURE');
   const rawSignature = Buffer.from(s.value, 'base64');
   if (rawSignature.length !== 64) reject('MALFORMED_SIGNATURE');
+  // Node's base64 parser accepts non-zero unused pad bits. Refuse alternate
+  // encodings of the same signature bytes to avoid transport malleability.
+  if (rawSignature.toString('base64') !== s.value) reject('MALFORMED_SIGNATURE');
   let valid = false;
   try {
     const key = createPublicKey(keyRecord.publicKeyPem);
