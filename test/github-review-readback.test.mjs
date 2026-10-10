@@ -6,6 +6,11 @@ const TOKEN='ghs_SYNTHETIC_ONLY_NOT_REAL_TOKEN';
 const repo='deenkids7-dev/deenkids';
 const url=p=>`https://api.github.com/repos/${repo}/pulls/898/reviews?per_page=100&page=${p}`;
 const head='a'.repeat(40);
+const META_URL=`https://api.github.com/repos/${repo}/pulls/898`;
+const meta=(sha=head)=>({number:898,state:'open',merged_at:null,
+  head:{sha,repo:{id:1282086207,full_name:repo}},
+  base:{repo:{id:1282086207,full_name:repo}}
+});
 const review=(id,changes={})=>({
   id,user:{id:340237276,login:'devfactory-reviewer-b[bot]'},
   commit_id:head,state:'COMMENTED',
@@ -26,6 +31,10 @@ function mock(pageSets,opts={}){
   const fetchImpl=async (target,req)=>{
     calls.push({target,req});
     if(opts.fail)throw Error('secret: '+TOKEN);
+    if(target===META_URL){
+      const count=calls.filter(c=>c.target===META_URL).length;
+      return response(target,meta(count===2?(opts.headAfter||head):(opts.headBefore||head)),opts);
+    }
     const page=Number(new URL(target).searchParams.get('page'));
     return response(target,pageSets[page-1]||[],opts);
   };
@@ -45,10 +54,12 @@ test('reads bounded native reviews from private API, without review authority',a
   assert.ok(Object.isFrozen(result.reviews[0].user));
   assert.equal(result.approvalAuthorized,false);
   assert.equal(result.independentReviewVerified,false);
-  assert.equal(fake.calls[0].target,url(1));
-  assert.equal(fake.calls[0].req.method,'GET');
-  assert.equal(fake.calls[0].req.redirect,'error');
-  assert.equal(fake.calls[0].req.headers.Authorization,'Bearer '+TOKEN);
+  assert.equal(fake.calls[0].target,META_URL);
+  assert.equal(fake.calls[1].target,url(1));
+  assert.equal(fake.calls[2].target,META_URL);
+  assert.ok(fake.calls.every(c=>c.req.method==='GET'));
+  assert.ok(fake.calls.every(c=>c.req.redirect==='error'));
+  assert.ok(fake.calls.every(c=>c.req.headers.Authorization==='Bearer '+TOKEN));
   assert.ok(!JSON.stringify(result).includes(TOKEN));
 });
 test('paginates without truncating when exactly 100 reviews',async()=>{
@@ -56,7 +67,7 @@ test('paginates without truncating when exactly 100 reviews',async()=>{
   const fake=mock([first,[review(101)]]);
   const result=await readNativeReviews(context(fake.fetchImpl));
   assert.equal(result.reviews.length,101);
-  assert.deepEqual(fake.calls.map(x=>x.target),[url(1),url(2)]);
+  assert.deepEqual(fake.calls.map(x=>x.target),[META_URL,url(1),url(2),META_URL]);
 });
 test('rejects >250 review records rather than silently discarding evidence',async()=>{
   const pages=[
@@ -111,4 +122,17 @@ test('empty reviews cannot grant approval',async()=>{
   const result=await readNativeReviews(context(fake.fetchImpl));
   assert.equal(result.reviews.length,0);
   assert.equal(result.approvalAuthorized,false);
+});
+
+test('HEAD move during review pagination fails closed before publishing',async()=>{
+  const fake=mock([[review(1)]],{headAfter:'c'.repeat(40)});
+  await assert.rejects(()=>readNativeReviews(context(fake.fetchImpl)),
+    /REVIEWS_HEAD_CHANGED_OR_UNVERIFIED/);
+  assert.deepEqual(fake.calls.map(x=>x.target),[META_URL,url(1),META_URL]);
+});
+test('caller-provided expected HEAD must match observed GitHub HEAD',async()=>{
+  const fake=mock([[review(1)]],{headBefore:'d'.repeat(40)});
+  await assert.rejects(()=>readNativeReviews(context(fake.fetchImpl)),
+    /REVIEWS_HEAD_CHANGED_OR_UNVERIFIED/);
+  assert.deepEqual(fake.calls.map(x=>x.target),[META_URL]);
 });
