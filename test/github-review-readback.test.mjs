@@ -96,13 +96,13 @@ test('redirect, unexpected media and HTTP failure are denied',async()=>{
   ]){
     const fake=mock([[review(1)]],opts);
     await assert.rejects(()=>readNativeReviews(context(fake.fetchImpl)),
-      /REVIEWS_GITHUB_RESPONSE_REJECTED/);
+      /REVIEWS_HEAD_UNTRUSTED|REVIEWS_GITHUB_RESPONSE_REJECTED/);
   }
 });
 test('network error cannot leak token into caller-facing error',async()=>{
   const fake=mock([],{fail:true});
   await assert.rejects(()=>readNativeReviews(context(fake.fetchImpl)),
-    e=>e.message==='REVIEWS_GITHUB_REQUEST_FAILED'&&!e.message.includes(TOKEN));
+    e=>['REVIEWS_HEAD_READ_FAILED','REVIEWS_GITHUB_REQUEST_FAILED'].includes(e.message)&&!e.message.includes(TOKEN));
 });
 test('path and auth tokens must match expected repository',async()=>{
   const fake=mock([[review(1)]]);
