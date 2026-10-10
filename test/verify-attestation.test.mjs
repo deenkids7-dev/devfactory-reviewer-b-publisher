@@ -62,6 +62,17 @@ denied('rejects issued-in-future artifact', e=>e, {now:Date.parse('2026-10-10T07
 denied('rejects window longer than 15 min', ()=>signedFixture({expires_at:'2026-10-10T09:00:00Z'}), {}, 'ATTESTATION_NOT_FRESH');
 denied('rejects unsigned payload extensions', e=>({...e,payload:{...e.payload,override:true}}), {}, 'INVALID_PAYLOAD_FIELDS');
 denied('rejects wrong signer', ()=>signedFixture({},otherPrivateKey), {}, 'SIGNATURE_VERIFICATION_FAILED');
+denied('rejects signer missing trusted SPKI fingerprint',e=>e,{
+  trustedKeys:new Map([['TEST_ONLY_NEVER_PRODUCTION',{
+    publicKeyPem:publicKey.export({type:'spki',format:'pem'}),
+    issuer:'fixture-isolated-signer',reviewerId:'fixture-reviewer'
+  }]])},'UNPINNED_SIGNING_KEY');
+denied('rejects mismatched trusted SPKI fingerprint',e=>e,{
+  trustedKeys:new Map([['TEST_ONLY_NEVER_PRODUCTION',{
+    publicKeyPem:publicKey.export({type:'spki',format:'pem'}),
+    spkiSha256:'0'.repeat(64),
+    issuer:'fixture-isolated-signer',reviewerId:'fixture-reviewer'
+  }]])},'SIGNING_KEY_FINGERPRINT_MISMATCH');
 denied('rejects unknown key id', e=>({...e,signature:{...e.signature,key_id:'unknown'}}), {}, 'UNTRUSTED_SIGNER');
 denied('rejects missing trust authority',e=>e,{trustedKeys:new Map()},'MISSING_TRUST_OR_REPLAY_AUTHORITY');
 denied('rejects missing trusted target',e=>e,{trustedTarget:null},'MISSING_GITHUB_TARGET');
