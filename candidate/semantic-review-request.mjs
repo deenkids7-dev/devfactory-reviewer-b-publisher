@@ -73,28 +73,28 @@ export function prepareBoundedSemanticReview({snapshot,rawDiffBytes}={}){
     changedPaths:Object.freeze(paths),
     // This object proves neither source provenance nor review independence.
     approvedToSendToModel:false,
-    approvalAuthorized:false,
-    // Redact accidental JSON serialization and Node debugging output.
-    // Direct .privateDiffText access remains possible ONLY inside a trusted
-    // future reviewer worker; never pass this object to public CI/logs.
-    toJSON(){
-      return {
-        privateDiffText:'[REDACTED]',
-        exactScope:this.exactScope,
-        changedPaths:this.changedPaths,
-        approvedToSendToModel:false,
-        approvalAuthorized:false
-      };
-    },
-    [inspect.custom](){
-      return '[PrivateSemanticReviewPlan: REDACTED]';
-    }
+    approvalAuthorized:false
   };
-  // Private source must not leak via Object.keys/Object.assign/object spread,
-  // JSON.stringify or structuredClone. Only a trusted worker with the exact
-  // object can explicitly read this property. Never hand the plan to PR CI.
-  Object.defineProperty(plan,'privateDiffText',{
-    enumerable:false,configurable:false,writable:false,value:text
+  // Nonenumerable private data and nonenumerable serialization functions:
+  // Object.assign, spreads and structuredClone cannot copy secret bytes.
+  // Direct .privateDiffText access remains possible only for the intended
+  // trusted worker; never pass this object to public PR CI/logs.
+  Object.defineProperties(plan,{
+    privateDiffText:{
+      enumerable:false,configurable:false,writable:false,value:text
+    },
+    toJSON:{
+      enumerable:false,configurable:false,writable:false,
+      value:()=>({
+        privateDiffText:'[REDACTED]',
+        exactScope:plan.exactScope,changedPaths:plan.changedPaths,
+        approvedToSendToModel:false,approvalAuthorized:false
+      })
+    },
+    [inspect.custom]:{
+      enumerable:false,configurable:false,writable:false,
+      value:()=> '[PrivateSemanticReviewPlan: REDACTED]'
+    }
   });
   return Object.freeze(plan);
 }
