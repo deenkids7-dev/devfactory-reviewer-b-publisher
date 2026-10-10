@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { inspect } from 'node:util';
 import { createHash, generateKeyPairSync } from 'node:crypto';
 import { signNativeMarkerOnly } from '../candidate/native-marker-sign.mjs';
 
@@ -75,4 +76,16 @@ test('native RSA signature binds exact report bytes',()=>{
 test('PASS is unconditionally refused before native RSA signing',()=>{
   assert.throws(()=>signNativeMarkerOnly(args({payload:{...payload(),verdict:'PASS'}})),
     /NATIVE_SIGNER_PASS_NOT_AUTHORIZED/);
+});
+
+test('RSA signer never accidentally serializes private GitHub review body',()=>{
+ const secret='SYNTHETIC_PRIVATE_REVIEW_TEXT_SHOULD_NOT_LOG';
+ const p=payload();
+ p.report_sha256=sha(secret);
+ const result=signNativeMarkerOnly(args({payload:p,reportText:secret}));
+ assert.ok(result.reviewBody.includes(secret));
+ for(const raw of [JSON.stringify(result),JSON.stringify({...result}),inspect(result)])
+  assert.ok(!raw.includes(secret));
+ assert.equal(Object.keys(result).includes('reviewBody'),false);
+ assert.equal(result.publishEvent,null);
 });

@@ -1,4 +1,5 @@
 import { createHash, createPrivateKey, createPublicKey, sign } from 'node:crypto';
+import { inspect } from 'node:util';
 import { nativePayloadBytes, formatNativeReviewFixture } from '../src/native-review-wire.mjs';
 
 // Format-only RSA marker signature. DOES NOT POST, APPROVE, or attest review
@@ -48,13 +49,24 @@ export function signNativeMarkerOnly({
     pinnedPublicKeyPem:publicKey.export({type:'spki',format:'pem'}),
     pinnedKeySha256:pinnedSignerSpkiSha256
   });
-  return Object.freeze({
-    reviewBody:wire.reviewBody,
+  const privateReviewBody=wire.reviewBody;
+  const output={
     signerSpkiSha256:spkiSha256,
     dispositionClaimedBySigner:payload.verdict,
     // No GitHub write event: native review must remain unpublishable.
     publishEvent:null,
     approvalAuthorized:false,
     reviewIndependenceVerified:false
+  };
+  Object.defineProperties(output,{
+    reviewBody:{enumerable:false,configurable:false,
+      get:()=>privateReviewBody},
+    toJSON:{enumerable:false,configurable:false,
+      value:()=>({...Object.fromEntries(Object.entries(output)),
+        reviewBody:'[REDACTED_PRIVATE_REVIEW]'})},
+    [inspect.custom]:{enumerable:false,configurable:false,
+      value:()=> '[NativeMarkerSigner: PRIVATE REVIEW BODY REDACTED]'
+    }
   });
+  return Object.freeze(output);
 }

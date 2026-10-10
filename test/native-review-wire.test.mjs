@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { inspect } from 'node:util';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { formatNativeReviewFixture, nativePayloadBytes } from '../src/native-review-wire.mjs';
 
@@ -96,4 +97,19 @@ test('native payload signing bytes use deterministic ASCII key ordering',()=>{
   const obj=payload();
   const encoded=nativePayloadBytes(obj).toString('utf8');
   assert.deepEqual(Object.keys(JSON.parse(encoded)),Object.keys(obj).sort());
+});
+
+test('native formatter keeps sensitive reports inaccessible to accidental serialization',()=>{
+ const secret='SYNTHETIC_ONLY_PRIVATE_PROVENANCE_AND_FINDING';
+ const f=fixture();
+ f.reportText=secret;
+ f.payload.report_sha256=sha(secret);
+ f.signatureBase64Url=sign('sha256',nativePayloadBytes(f.payload),privateKey).toString('base64url');
+ const result=formatNativeReviewFixture(f);
+ assert.ok(result.reviewBody.includes(secret));
+ for(const serialized of [JSON.stringify(result),JSON.stringify({...result}),inspect(result)])
+  assert.ok(!serialized.includes(secret));
+ assert.match(JSON.stringify(result),/REDACTED_PRIVATE_REVIEW/);
+ assert.equal(Object.keys(result).includes('reviewBody'),false);
+ assert.equal(result.approvalAuthorized,false);
 });

@@ -1,4 +1,5 @@
 import { createHash, createPublicKey, verify as verifyRsa, timingSafeEqual } from 'node:crypto';
+import { inspect } from 'node:util';
 
 const EXPECTED_FIELDS = [
   'app_bot_id', 'base_sha', 'completed_at', 'head_sha',
@@ -94,12 +95,26 @@ export function formatNativeReviewFixture({
   }), 'utf8').toString('base64url');
   const reviewBody='<!-- devfactory-reviewer-b-native:v1:'+envelope+' -->\n'+reportText;
   if (reviewBody.length>120000) deny('NATIVE_REVIEW_BODY_TOO_LARGE');
-  return Object.freeze({
-    reviewBody, dispositionClaimedBySigner:payload.verdict,
+  // Review bodies may contain private findings and source locations.
+  // An authorized Publisher must explicitly retrieve the body; never log it
+  // through JSON, object spread or Node's standard inspection.
+  const output={
+    dispositionClaimedBySigner:payload.verdict,
     // A formatter must never decide the event to send to GitHub.
     publishEvent:null,
     cryptographicIntegrityVerified:true,
     reviewIndependenceVerified:false,
     approvalAuthorized:false
+  };
+  Object.defineProperties(output,{
+    reviewBody:{enumerable:false,configurable:false,get:()=>reviewBody},
+    toJSON:{enumerable:false,configurable:false,value:()=>({
+      ...Object.fromEntries(Object.entries(output)),
+      reviewBody:'[REDACTED_PRIVATE_REVIEW]'
+    })},
+    [inspect.custom]:{enumerable:false,configurable:false,
+      value:()=> '[NativeReviewFixture: PRIVATE REVIEW BODY REDACTED]'
+    }
   });
+  return Object.freeze(output);
 }
