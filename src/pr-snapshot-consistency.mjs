@@ -9,6 +9,60 @@ const MAX_CHANGED_FILES = 100;
 function deny(code) { throw new Error(code); }
 function isObject(x) { return x !== null && typeof x === 'object' && !Array.isArray(x); }
 
+const SAFE_PATH=/^(?!\/)(?!.*(?:^|\/)\.{1,2}(?:\/|$))[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*$/;
+
+/**
+ * GitHub text diff must have one complete and parseable header and at least
+ * one hunk for EACH changed file. Unrecognized rename, binary, whitespace-
+ * quoted paths or hunkless files are deliberately BLOCKED, not accepted.
+ */
+function checkDiffCoverage(text, expectedCount) {
+  let file=null, count=0;
+  const seen=new Set();
+  function finish() {
+    if(!file) return;
+    if(!file.oldHeader || !file.newHeader || !file.hunkSeen)
+      deny('GITHUB_DIFF_COVERAGE_UNVERIFIED');
+  }
+  for(const line of text.split('\n')) {
+    if(line.startsWith('diff --git ')) {
+      finish();
+      const m=line.match(/^diff --git a\/(\S+) b\/(\S+)$/);
+      if(!m || m[1]!==m[2] || !SAFE_PATH.test(m[1]) || seen.has(m[1]))
+        deny('GITHUB_DIFF_COVERAGE_UNVERIFIED');
+      seen.add(m[1]); count++;
+      file={path:m[1],oldHeader:false,newHeader:false,hunkSeen:false};
+      continue;
+    }
+    if(!file) {
+      if(line.trim()!=='') deny('GITHUB_DIFF_COVERAGE_UNVERIFIED');
+      continue;
+    }
+    if(!file.hunkSeen && line.startsWith('--- ')) {
+      if(file.oldHeader || (line!=='--- a/'+file.path && line!=='--- /dev/null'))
+        deny('GITHUB_DIFF_COVERAGE_UNVERIFIED');
+      file.oldHeader=true;
+      continue;
+    }
+    if(!file.hunkSeen && line.startsWith('+++ ')) {
+      if(!file.oldHeader || file.newHeader ||
+         (line!=='+++ b/'+file.path && line!=='+++ /dev/null'))
+        deny('GITHUB_DIFF_COVERAGE_UNVERIFIED');
+      file.newHeader=true;
+      continue;
+    }
+    if(line.startsWith('@@ ')) {
+      if(!file.oldHeader || !file.newHeader ||
+         !/^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@/.test(line))
+        deny('GITHUB_DIFF_COVERAGE_UNVERIFIED');
+      file.hunkSeen=true;
+      continue;
+    }
+  }
+  finish();
+  if(count!==expectedCount) deny('GITHUB_DIFF_COVERAGE_UNVERIFIED');
+}
+
 function extractMetadata(document, requestedPr) {
   if (!isObject(document) || !isObject(document.head) ||
       !isObject(document.base) || !isObject(document.base.repo)) {
@@ -59,11 +113,7 @@ export function deriveConsistentPrSnapshot({
       /^(?:GIT binary patch|Binary files )/m.test(text)) {
     deny('GITHUB_DIFF_ENCODING_OR_BINARY_UNSUPPORTED');
   }
-  const files = text.match(/^diff --git /gm) || [];
-  const hunks = text.match(/^@@ -/gm) || [];
-  if (files.length !== before.changed_files || hunks.length < before.changed_files) {
-    deny('GITHUB_DIFF_COVERAGE_UNVERIFIED');
-  }
+  checkDiffCoverage(text, before.changed_files);
   return Object.freeze({
     repository:before.repository, repository_id:before.repository_id,
     pr_number:before.pr_number, head_sha:before.head_sha,
