@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { runSyntheticLocalOllamaBenchmark }
+import { runSyntheticLocalOllamaBenchmark,safeBenchmarkErrorCode }
   from '../bench/ollama-synthetic-benchmark.mjs';
 
 const ENDPOINT='http://127.0.0.1:11434/api/chat';
@@ -87,4 +87,13 @@ test('optional small public synthetic model is pinned, not a release approval',a
   assert.equal(req.model,'qwen2.5-coder:1.5b');
   assert.equal(req.options.num_predict,512);
  }
+});
+
+test('benchmark failures expose only allowlisted codes, never private contents',()=>{
+ assert.equal(safeBenchmarkErrorCode(new Error('OLLAMA_COMPLETION_UNVERIFIED')),
+  'OLLAMA_COMPLETION_UNVERIFIED');
+ assert.equal(safeBenchmarkErrorCode(new Error('Bearer UNTRUSTED_SECRET_VALUE')),
+  'UNCLASSIFIED');
+ assert.equal(safeBenchmarkErrorCode(new Error('OLLAMA_X secret=123')),
+  'UNCLASSIFIED');
 });

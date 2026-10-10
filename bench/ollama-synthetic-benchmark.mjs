@@ -31,6 +31,13 @@ const FIXTURES=Object.freeze([
     knownStaticBlocker:false,knownSemanticBug:false})
 ]);
 function deny(code){throw Error(code);}
+// Whitelisted diagnostic codes only. NEVER echo arbitrary model/API errors.
+export function safeBenchmarkErrorCode(error){
+  const message=error?.message;
+  return typeof message==='string' &&
+    /^(?:OLLAMA|REVIEW|SEMANTIC|STATIC|COMBINED)_[A-Z0-9_]{3,80}$/.test(message)?
+    message:'UNCLASSIFIED';
+}
 function diff(fixture) {
   const path=fixture.path;
   return Buffer.from('diff --git a/'+path+' b/'+path+'\n'+
@@ -145,8 +152,8 @@ if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href){
       'qwen2.5-coder:1.5b':'qwen2.5-coder:7b';
     const summary=await runSyntheticLocalOllamaBenchmark({model});
     process.stdout.write(JSON.stringify(summary)+'\n');
-  }catch{
-    process.stderr.write('LOCAL_SYNTHETIC_BENCHMARK_BLOCKED\n');
+  }catch(error){
+    process.stderr.write('LOCAL_SYNTHETIC_BENCHMARK_BLOCKED:'+safeBenchmarkErrorCode(error)+'\n');
     process.exitCode=1;
   }
 }
