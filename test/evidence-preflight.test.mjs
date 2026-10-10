@@ -14,7 +14,8 @@ const trustedTarget={
 };
 const signerKeys=new Map([['TEST_ONLY',{issuer:'fixture-isolated',
   reviewerId:'fixture-reviewer',
-  publicKeyPem:keys.publicKey.export({type:'spki',format:'pem'})
+  publicKeyPem:keys.publicKey.export({type:'spki',format:'pem'}),
+  spkiSha256:digest(keys.publicKey.export({type:'spki',format:'der'}))
 }]]);
 const now=Date.parse('2026-10-10T08:00:30Z');
 const finding=()=>({
