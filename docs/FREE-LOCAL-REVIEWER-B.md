@@ -314,3 +314,39 @@ entry. Both paths remain public, synthetic, opt-in, secret-free, read-only
 and fail the strict model quality gate when unsuitable. The dynamic matrix
 is intentionally selected before job execution so a Qwen3-only run does
 not consume additional runners to redownload the already-failed models.
+
+## New 2026-10-10 Qwen3 8B strict quality outcome
+
+The independent-model-selection experiment ran **actual local inference on
+PUBLIC fixed synthetic examples only** in
+[GitHub Actions run 38068990280](https://github.com/devfactory-reviewer-trust/devfactory-reviewer-b-publisher/actions/runs/38068990280).
+Its Qwen3 8B job received all ten fixed samples and returned a fail-closed
+quality FAIL, not a production security review. Recorded metrics from the
+Qwen3 job (not an estimate):
+
+- Seeded semantic bugs correctly described: **2/4**.
+- Safe synthetic changes with any false alert: **4/4**.
+- Safe synthetic changes with HIGH/CRITICAL false alert: **0/4**.
+- Failed gates: `MISSED_SEEDED_SEMANTIC_DEFECT` and
+  `FALSE_ALERT_ON_SAFE_CHANGE`.
+- Private DevFactory source read: **NO**.
+- Independent provenance demonstrated: **NO**.
+- Native GitHub review or merge permission: **NONE**.
+
+Qwen3 8B identified the removed authorization check and missing HTML
+escaping, but failed the strict oracle for the negative-amount change and
+the inverted session-token condition. It also incorrectly warned on safe
+null checking, read-only permissions, a nonnegative clamp, and freezing a
+configuration. A warning about a change is NOT proof of an introduced bug.
+
+The targeted `reviewer-b-benchmark-qwen3` label independently triggered
+run 38069553213 with exactly **one Qwen3 8B matrix job**; no 7B or 14B
+job was instantiated for that opt-in path. Its label was immediately
+removed to prevent duplicate future starts. Its subsequent quality verdict
+must be read from that run, not inferred from the earlier FAIL.
+
+**Operational conclusion: BLOCKED for independent private-source reviews.**
+Do not weaken the benchmark or grant any secrets/approval privileges merely
+because the static/unit tests passed. A qualified external reviewer, isolated
+execution provenance, repository-minimum GitHub App scopes, canonical
+HUMAN_GO, and model quality improvements remain required.
