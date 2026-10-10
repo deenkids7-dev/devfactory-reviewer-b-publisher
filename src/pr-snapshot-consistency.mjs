@@ -125,6 +125,9 @@ function extractMetadata(document, requestedPr) {
   if (!Number.isSafeInteger(requestedPr) || requestedPr < 1 ||
       document.number !== requestedPr || document.state !== 'open' ||
       document.merged_at !== null || document.draft !== false ||
+      // Target PRIVATE deenkids7-dev/deenkids default branch is master.
+      // Publisher PUBLIC devfactory-reviewer-b-publisher uses main; do not
+      // mistake its default branch for the reviewed PR's required base.
       document.base.ref !== 'master' ||
       document.base.repo.full_name !== REPO ||
       document.base.repo.id !== REPO_ID ||
