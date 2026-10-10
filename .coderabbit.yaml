@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# PUBLIC Publisher only: do not grant CodeRabbit access to private deenkids.
+# AI feedback is independent external input, NOT a security certification,
+# native Reviewer B attestation, GitHub HUMAN_GO or permission to merge.
+language: "fr-FR"
+reviews:
+  profile: "assertive"
+  request_changes_workflow: false
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: true
+    auto_incremental_review: false
+  path_instructions:
+    - path: "src/**/*.mjs"
+      instructions: |
+        Review with a security-critical threat model. Treat signed data as untrusted until GitHub identity, exact PR HEAD and BASE, repository ID, diff hash and canonical report have independent proof. Check input length bounds, signature malleability, replay handling, error paths, source-of-truth boundaries, and refusal of automatic PASS. Report concrete reproducible bugs with file and line.
+    - path: "candidate/**/*.mjs"
+      instructions: |
+        These modules are dormant candidates, NOT an authorized production publisher. Inspect token exfiltration, untrusted redirects, response parsing, JWT and key separation, static and semantic finding integrity, duplicate review handling and insufficient external provenance. Never infer production readiness from positive synthetic unit tests. No real keys or privileged publication may be introduced.
+    - path: ".github/workflows/*.yml"
+      instructions: |
+        Verify that public PR CI cannot access secrets, private repository contents, write tokens, third-party untrusted code, or privileged triggers. The manual no-secret environment probe may use only protected main with permissions empty and no checkout. Flag any bypass, self-approval, untrusted code execution or unauthorized publication path.
+    - path: "test/**/*.test.mjs"
+      instructions: |
+        Challenge positive test assumptions and look for false PASS results, provenance forgery, stale HEAD, truncated Git diffs, leaked secrets in JSON, duplicate signing or review records, and mismatches between tests and real GitHub behavior. Do not mistake mocked GitHub API responses for independently verified live access.
