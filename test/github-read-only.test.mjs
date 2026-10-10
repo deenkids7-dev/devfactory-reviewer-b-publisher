@@ -125,15 +125,16 @@ test('redirected responses cannot move authorization header',async()=>{
   assert.equal(fake.calls[0].redirect,'error');
 });
 test('untrusted response type, non-200 and oversize are blocked',async()=>{
-  for(const options of [
-    {status:206}, {contentType:'text/html'},
-    {claimedLength:3*1024*1024},
-    {diff:Buffer.alloc(2*1024*1024+1,0x41)}
+  for(const [options,expected] of [
+    [{status:206},/GITHUB_REQUEST_FAILED|GITHUB_NONCANONICAL_RESPONSE/],
+    [{contentType:'text/html'},/GITHUB_REQUEST_FAILED|GITHUB_UNEXPECTED_MEDIA_TYPE/],
+    [{claimedLength:3*1024*1024},/GITHUB_REQUEST_FAILED|GITHUB_RESPONSE_OVERSIZED/],
+    [{diff:Buffer.alloc(2*1024*1024+1,0x41)},/GITHUB_REQUEST_FAILED|GITHUB_RESPONSE_OVERSIZED/]
   ]) {
     const fake=fakeGitHub(options);
     await assert.rejects(()=>readCurrentGitHubPrSnapshot({
       prNumber:898,installationToken:TOKEN,fetchImpl:fake.fetchImpl
-    }));
+    }),expected);
   }
 });
 test('no token, invalid token or untrusted client is rejected',()=>{
