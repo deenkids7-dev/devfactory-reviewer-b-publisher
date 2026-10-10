@@ -159,3 +159,13 @@ Private file paths can be present even when source lines are not copied.
 The new synthetic test proves raw report access remains possible only via
 an explicit getter while accidental logging is redacted. Operators must
 still never log getter contents.
+
+## Secret-safe token result serialization
+
+The dormant GitHub App installation-token helper now exposes its secret
+`token` only through a non-enumerable explicit-access getter. Default
+JSON/spread and Node inspect output redact the credential, while the
+repository/permission purpose remains visible. No actual GitHub App key or
+installation token was issued by these synthetic tests. This is defensive
+hardening, not authorization to provision production keys or private diff
+access. Avoid explicitly logging `.token` in any future trusted runtime.

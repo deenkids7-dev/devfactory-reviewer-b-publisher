@@ -1,4 +1,5 @@
 import { createPrivateKey, sign as rsaSign } from 'node:crypto';
+import { inspect } from 'node:util';
 
 // This is deliberately a dormant credential module: NOT loaded by public CI,
 // NOT called by workflow, NOT an independent reviewer, and NO publishing path.
@@ -129,9 +130,23 @@ export async function createScopedReviewerBInstallationToken({
        PERMISSIONS[purpose][name]===value ? false : true)) {
     deny('APP_AUTH_INSTALLATION_SCOPE_UNVERIFIED');
   }
-  return Object.freeze({
-    token:parsed.token, expiresAt:parsed.expires_at,
+  // A short-lived GitHub App token is still SECRET even if its source is
+  // correctly scoped; never expose it via JSON, spread or Node debug output.
+  const privateToken=parsed.token;
+  const safe={
+    expiresAt:parsed.expires_at,
     repositoryId:REPO_ID,installationId:INSTALLATION_ID,
     purpose
+  };
+  Object.defineProperties(safe,{
+    token:{enumerable:false,configurable:false,
+      get:()=>privateToken},
+    toJSON:{enumerable:false,configurable:false,
+      value:()=>({...Object.fromEntries(Object.entries(safe)),
+        token:'[REDACTED_INSTALLATION_TOKEN]'})},
+    [inspect.custom]:{enumerable:false,configurable:false,
+      value:()=> '[ScopedReviewerBInstallationToken: SECRET REDACTED]'
+    }
   });
+  return Object.freeze(safe);
 }

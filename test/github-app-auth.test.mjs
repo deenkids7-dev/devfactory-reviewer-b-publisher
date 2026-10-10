@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { inspect } from 'node:util';
 import { createHash, generateKeyPairSync, verify } from 'node:crypto';
 import { createReviewerBAppJwt, createScopedReviewerBInstallationToken } from
   '../candidate/github-app-auth.mjs';
@@ -228,4 +229,21 @@ test('a publish token cannot silently gain HUMAN_GO Issues read',async()=>{
  await assert.rejects(()=>createScopedReviewerBInstallationToken({
    appJwt:jwt,fetchImpl:mock.fetchImpl,now,purpose:'publish'
  }),/APP_AUTH_INSTALLATION_SCOPE_UNVERIFIED/);
+});
+
+test('scoped GitHub App installation token cannot leak from ordinary object logging',async()=>{
+ const f=fakeTransport();
+ const jwt=createReviewerBAppJwt({privateKeyPem:key,now});
+ const result=await createScopedReviewerBInstallationToken({
+  appJwt:jwt,fetchImpl:f.fetchImpl,now,purpose:'publish'
+ });
+ assert.equal(result.token,TOKEN);
+ assert.equal(Object.keys(result).includes('token'),false);
+ for(const str of [JSON.stringify(result),JSON.stringify({...result}),inspect(result)]){
+  assert.ok(!str.includes(TOKEN));
+  assert.ok(!str.includes(jwt));
+ }
+ assert.match(JSON.stringify(result),/REDACTED_INSTALLATION_TOKEN/);
+ assert.equal(result.purpose,'publish');
+ assert.equal(Object.isFrozen(result),true);
 });
