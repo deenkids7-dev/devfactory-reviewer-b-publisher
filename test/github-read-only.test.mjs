@@ -156,3 +156,41 @@ test('immutable compare uses exact BASE and HEAD even if mutable PR endpoint cou
  assert.ok(fake.calls[1].url.includes('b'.repeat(40)+'...'+'a'.repeat(40)));
  assert.equal(fake.calls[1].accept,'application/vnd.github.diff');
 });
+
+test('A-to-B-to-A PR race cannot replace immutable diff with mutable PR patch',async()=>{
+  // GitHub metadata is A before and after. The compare URL pins the exact
+  // SHA pair, even if the mutable PR HEAD temporarily moves to B.
+  const requests=[];
+  const fetchImpl=async (url,config)=>{
+    requests.push({url,accept:config.headers.Accept});
+    if(config.headers.Accept==='application/vnd.github.diff'){
+      assert.equal(url,IMMUTABLE_COMPARE);
+      return response(url,DIFF,'text/plain; charset=utf-8');
+    }
+    assert.equal(url,URL);
+    return response(url,metadata(),'application/json; charset=utf-8');
+  };
+  const snapshot=await readCurrentGitHubPrSnapshot({
+    prNumber:898,installationToken:TOKEN,fetchImpl
+  });
+  assert.equal(snapshot.head_sha,'a'.repeat(40));
+  assert.equal(snapshot.base_sha,'b'.repeat(40));
+  assert.equal(snapshot.diff_sha256,digest(DIFF));
+  assert.deepEqual(requests.map(r=>r.url),[URL,IMMUTABLE_COMPARE,URL]);
+});
+
+test('private immutable compare HTTP 403 (e.g. missing Contents:Read) fails closed',async()=>{
+  const requests=[];
+  const fetchImpl=async (url,config)=>{
+    requests.push(url);
+    if(url===IMMUTABLE_COMPARE) {
+      return response(url,{message:'Resource not accessible by integration'},
+        'application/json; charset=utf-8',403);
+    }
+    return response(url,metadata(),'application/json; charset=utf-8');
+  };
+  await assert.rejects(()=>readCurrentGitHubPrSnapshot({
+    prNumber:898,installationToken:TOKEN,fetchImpl
+  }),e=>e.message==='GITHUB_REQUEST_FAILED'&&!e.message.includes(TOKEN));
+  assert.deepEqual(requests,[URL,IMMUTABLE_COMPARE]);
+});
