@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { inspect } from 'node:util';
 import { canonicalJson } from '../src/canonical.mjs';
 import { prepareBoundedSemanticReview, normalizeUntrustedModelFindings }
   from '../candidate/semantic-review-request.mjs';
@@ -101,4 +102,23 @@ test('malformed or verbose model output is rejected',()=>{
       rawModelOutput:value,runId,trustedChangedPaths:['src/a.mjs']
     }));
   }
+});
+
+test('private diff review plan redacts accidental JSON and debug inspection',()=>{
+  const confidential=Buffer.from(
+    'diff --git a/src/secret.mjs b/src/secret.mjs\n'+
+    'index 111..222 100644\n--- a/src/secret.mjs\n'+
+    '+++ b/src/secret.mjs\n@@ -1 +1 @@\n'+
+    '-old\n+SYNTHETIC_PRIVATE_LITERAL_NEVER_PRINT\n'
+  );
+  const scoped={...snapshot,
+    diff_sha256:createHash('sha256').update(confidential).digest('hex')
+  };
+  const plan=prepareBoundedSemanticReview({
+    snapshot:scoped,rawDiffBytes:confidential
+  });
+  assert.ok(plan.privateDiffText.includes('SYNTHETIC_PRIVATE_LITERAL_NEVER_PRINT'));
+  assert.ok(!JSON.stringify(plan).includes('SYNTHETIC_PRIVATE_LITERAL_NEVER_PRINT'));
+  assert.ok(!inspect(plan).includes('SYNTHETIC_PRIVATE_LITERAL_NEVER_PRINT'));
+  assert.equal(JSON.parse(JSON.stringify(plan)).privateDiffText,'[REDACTED]');
 });
