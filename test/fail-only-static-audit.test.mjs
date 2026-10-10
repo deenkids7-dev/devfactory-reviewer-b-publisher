@@ -64,3 +64,11 @@ test('static report must not echo private added source line',()=>{
   const report=JSON.parse(result.reportBytes.toString('utf8'));
   assert.equal(report.findings[0].evidence,'Static rule workflow-write-all matched newly added line 1');
 });
+
+test('detects both inline YAML and sequence forms of privileged PR target trigger',()=>{
+  for(const added of ['on: pull_request_target','on: [push, pull_request_target]','  pull_request_target:']){
+    const result=run(diff('.github/workflows/review.yml',[added]));
+    assert.equal(result.provisionalState,'FAIL');
+    assert.ok(result.blockingFindings>=1);
+  }
+});
