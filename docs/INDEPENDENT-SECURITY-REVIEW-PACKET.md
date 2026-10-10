@@ -139,3 +139,24 @@ hold/release be observed. Later, an independently reviewed privileged
 workflow plus real analyzer/provenance are required before creating keys.
 
 **STOP: NO KEY GENERATION, PAID API ACTIVATION OR PRIVATE PR MERGE YET.**
+
+## Independent review still pending — evidence as of 2026-10-10
+
+The prototype now includes a pure external-account review-candidate filter
+in candidate/independent-review-candidates.mjs with regression tests. It
+rejects the co-owned service/DevFactory accounts, bots, stale HEAD review,
+and superseded approvals. This filter NEVER reports independent security
+review verified. There is still no GitHub APPROVED review by an externally
+qualified independent reviewer of the current Publisher PR #2 HEAD.
+
+A supplemental public CodeQL attempt failed at GitHub workflow startup
+(run 38063996156, no worker/SARIF); it was removed. Actual CodeQL default
+setup must be enabled in GitHub Repository Settings by an authorized admin,
+then its results verified on the exact latest HEAD. Do not confuse this
+with the separate third-party human security audit requirement.
+
+The review cannot legitimately be completed by the PR author signing their
+own work, using a co-owned GitHub account, relabeling model outputs as PASS,
+or manufacturing evidence from a synthetic fixture. No Publisher or private
+DevFactory PR merge, privileged key, app-scope escalation or production
+review publication is authorized by the current record.
