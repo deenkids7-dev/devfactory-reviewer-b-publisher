@@ -93,3 +93,12 @@ message and evidence before computing canonical hashes, but does NOT discard
 findings or silently alter file paths or line numbers. Control characters
 (other than permitted whitespace), empty or oversized fields and duplicate
 findings still fail closed. Model quality is NOT certified by this fix.
+
+## Explain synthetic false alerts without exposing private source
+
+The benchmark may print a short, bounded explanation for model findings on
+the FOUR HARDCODED synthetic public-safe examples only. This output must not
+be reused for private diff reviews or in a privileged workflow. Metrics now
+show whether all seeded semantic bugs were detected and no clean fixtures
+were flagged; even if this small synthetic target becomes true, it does NOT
+establish production review quality, provenance, HUMAN_GO or approval.

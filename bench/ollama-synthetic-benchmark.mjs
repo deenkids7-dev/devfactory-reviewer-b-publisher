@@ -116,8 +116,15 @@ export async function runSyntheticLocalOllamaBenchmark({
     });
     if(fixture.knownStaticBlocker&&combined.provisionalState!=='FAIL')
       deny('OLLAMA_BENCHMARK_STATIC_FINDING_LOST');
+    // BENCHMARK FIXTURES ARE PUBLIC AND FIXED: expose only short, normalized
+    // model explanations so quality failures can be audited. NEVER reuse
+    // this console output path with private PR input or authorization tokens.
+    const syntheticReport=JSON.parse(completion.privateCanonicalReportBytes.toString('utf8'));
+    const modelMessages=syntheticReport.findings.map(f=>
+      Object.freeze({severity:f.severity,explanation:f.message.slice(0,160)}));
     cases.push(Object.freeze({
       label:fixture.label,seededStaticBlocker:fixture.knownStaticBlocker,
+      modelMessages:Object.freeze(modelMessages),
       seededSemanticBug:fixture.knownSemanticBug,
       semanticFindingDetected:completion.findingCount>0,
       semanticFindingCount:completion.findingCount,
@@ -135,6 +142,8 @@ export async function runSyntheticLocalOllamaBenchmark({
     seededSemanticBugsDetected:semanticBugCases.filter(c=>c.semanticFindingDetected).length,
     cleanFixtures:cleanCases.length,
     cleanFixtureFalseAlerts:cleanCases.filter(c=>c.semanticFindingDetected).length,
+    syntheticMetricsMeetTargets:semanticBugCases.every(c=>c.semanticFindingDetected) &&
+      cleanCases.every(c=>!c.semanticFindingDetected),
     modelQualityCertified:false,
     cases:Object.freeze(cases),
     independentReviewerProvenanceVerified:false,

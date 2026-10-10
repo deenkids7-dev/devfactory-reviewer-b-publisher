@@ -36,6 +36,9 @@ test('free local benchmark runs four FIXED synthetic examples without GitHub or 
  assert.equal(result.seededSemanticBugs,1);
  assert.equal(result.cleanFixtures,2);
  assert.equal(result.modelQualityCertified,false);
+ assert.equal(result.syntheticMetricsMeetTargets,false);
+ assert.ok(result.cases.every(c=>Array.isArray(c.modelMessages)));
+ assert.ok(result.cases.every(c=>c.modelMessages.length===0));
  assert.equal(result.cases[0].provisionalState,'FAIL');
  assert.equal(result.cases[1].provisionalState,'INCONCLUSIVE');
  assert.equal(result.privateSourceReviewed,false);
