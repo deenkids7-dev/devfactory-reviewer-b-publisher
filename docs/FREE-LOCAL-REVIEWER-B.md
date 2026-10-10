@@ -304,3 +304,13 @@ non-monotonic hunks or incompatible line numbers from being treated as a
 credible review. Malformed input fails closed with a sanitized error, not a
 false PASS. The static scanner is still not a semantic reviewer or an
 independently authenticated analysis service.
+
+## Targeted free Qwen3-only benchmark
+
+The experimental public-only Ollama canary now supports either opt-in
+`reviewer-b-benchmark` for the 7B/14B/Qwen3 comparison, or the narrower
+`reviewer-b-benchmark-qwen3` to execute **only** the Qwen3 8B matrix
+entry. Both paths remain public, synthetic, opt-in, secret-free, read-only
+and fail the strict model quality gate when unsuitable. The dynamic matrix
+is intentionally selected before job execution so a Qwen3-only run does
+not consume additional runners to redownload the already-failed models.

@@ -216,8 +216,22 @@ test('third free Qwen3 8B candidate is strictly local and cannot bypass review q
 test('opt-in Qwen3 CI must run only synthetic cases with no privileged permissions',()=>{
  const y=readFileSync(new URL('../.github/workflows/reviewer-b-ollama-synthetic-canary.yml',
   import.meta.url),'utf8');
- assert.match(y,/model: qwen3:8b/);
- assert.match(y,/cli_arg: '--qwen3-synthetic'/);
+ assert.match(y,/fromJSON\\(/);
+ assert.match(y,/"model":"qwen3:8b"/);
+ assert.match(y,/"cli_arg":"--qwen3-synthetic"/);
+ assert.match(y,/reviewer-b-benchmark-qwen3/);
  assert.match(y,/contains\(github\.event\.pull_request\.labels\.\*\.name, 'reviewer-b-benchmark'\)/);
  assert.doesNotMatch(y,/security-events:\s*write|secrets\./);
+});
+
+test('opt-in Qwen3-only benchmark selects only 8B model while preserving full comparison label',()=>{
+ const y=readFileSync(new URL('../.github/workflows/reviewer-b-ollama-synthetic-canary.yml',import.meta.url),'utf8');
+ const options=[...y.matchAll(/'(\[\{"model":.*?\}\])'/g)].map(x=>JSON.parse(x[1]));
+ assert.equal(options.length,2);
+ assert.deepEqual(options[0],[{model:'qwen3:8b',cli_arg:'--qwen3-synthetic'}]);
+ assert.deepEqual(options[1].map(x=>x.model),
+  ['qwen2.5-coder:7b','qwen2.5-coder:14b','qwen3:8b']);
+ assert.match(y,/contains\(github\.event\.pull_request\.labels\.\*\.name, 'reviewer-b-benchmark-qwen3'\)/);
+ assert.match(y,/github\.event\.pull_request\.head\.repo\.full_name == github\.repository/);
+ assert.match(y,/^\s*contents:\s*read\s*$/m);
 });
