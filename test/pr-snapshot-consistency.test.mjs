@@ -142,3 +142,17 @@ test('permits counted context/deletion/addition lines within complete hunks',()=
   const result=snapshot(fixture({rawDiff:raw}));
   assert.equal(result.diff_sha256,createHash('sha256').update(raw).digest('hex'));
 });
+
+test('forked or missing head repository cannot impersonate internal DevFactory changes',()=>{
+  const badHeadRepositories=[
+    {full_name:'attacker/fork',id:1282086207},
+    {full_name:'deenkids7-dev/deenkids',id:33},
+    null
+  ];
+  for(const badRepo of badHeadRepositories) {
+    const m=metadata();
+    m.head={sha:h,repo:badRepo};
+    assert.throws(()=>snapshot(fixture({metadataBefore:m})),
+      /(?:INVALID_GITHUB_PR_METADATA|GITHUB_PR_NOT_ELIGIBLE)/);
+  }
+});
