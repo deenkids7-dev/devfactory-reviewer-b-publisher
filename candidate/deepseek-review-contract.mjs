@@ -198,7 +198,7 @@ export function validateDeepSeekCandidateCompletion({
     rawModelOutput:canonicalJson({summary:raw.summary,findings:enhanced}),
     runId,trustedChangedPaths
   });
-  return Object.freeze({
+  const safe=({
     provisionalState:result.provisionalState,
     findingCount:result.findingCount,
     reportedInputTokens:response.usage.prompt_tokens,
@@ -210,4 +210,26 @@ export function validateDeepSeekCandidateCompletion({
     approvalAuthorized:false,
     publishEvent:null
   });
+  const signedInput=Buffer.from(result.reportBytes);
+  // Neither JSON.stringify nor object spread may accidentally expose findings
+  // from a PRIVATE PR. The only intended consumer is a trusted isolated worker.
+  // A live consumer still needs operator authorization and genuine provenance.
+  Object.defineProperties(safe,{
+    privateCanonicalReportBytes:{
+      enumerable:false,configurable:false,
+      get:()=>Buffer.from(signedInput)
+    },
+    toJSON:{
+      enumerable:false,configurable:false,writable:false,
+      value:()=>({
+        ...Object.fromEntries(Object.entries(safe)),
+        privateCanonicalReportBytes:'[REDACTED]'
+      })
+    },
+    [inspect.custom]:{
+      enumerable:false,configurable:false,writable:false,
+      value:()=> '[DeepSeekCompletion: PRIVATE REPORT REDACTED; NOT AUTHORIZED]'
+    }
+  });
+  return Object.freeze(safe);
 }

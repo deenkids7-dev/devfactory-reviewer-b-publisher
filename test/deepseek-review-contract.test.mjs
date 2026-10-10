@@ -184,3 +184,34 @@ test('malformed model findings cannot bypass deterministic fingerprints',()=>{
   assert.throws(()=>parseResponse(modelResponse(fake)),
     e=>e.message==='MODEL_FINDING_SCHEMA_INVALID');
 });
+
+test('validated model report can flow privately into the signed evidence pipeline',()=>{
+  const completion=parseResponse(modelResponse(blocker));
+  const bytes=completion.privateCanonicalReportBytes;
+  assert.ok(Buffer.isBuffer(bytes));
+  const report=JSON.parse(bytes.toString('utf8'));
+  assert.equal(report.schema,'devfactory.reviewer-b.findings.v1');
+  assert.equal(report.run_id,'synthetic-run-898');
+  assert.equal(report.findings.length,1);
+  assert.match(report.findings[0].fingerprint,/^[0-9a-f]{64}$/);
+  assert.equal(completion.approvalAuthorized,false);
+  assert.equal(completion.publishEvent,null);
+});
+test('private model findings stay out of logs, copies and JSON serialization',()=>{
+  const sensitive='SYNTHETIC_PRIVATE_FINDING_NEVER_IN_LOGS';
+  const payload=JSON.stringify({summary:'synthetic',findings:[{
+    severity:'high',path:'src/check.mjs',line:1,
+    message:sensitive,evidence:'synthetic-only evidence'
+  }]});
+  const r=parseResponse(modelResponse(payload));
+  assert.ok(r.privateCanonicalReportBytes.toString().includes(sensitive));
+  assert.doesNotMatch(JSON.stringify(r),/SYNTHETIC_PRIVATE_FINDING/);
+  assert.doesNotMatch(JSON.stringify({...r}),/SYNTHETIC_PRIVATE_FINDING/);
+  assert.doesNotMatch(inspect(r),/SYNTHETIC_PRIVATE_FINDING/);
+  assert.match(JSON.stringify(r),/\\[REDACTED\\]/);
+  assert.ok(!Object.keys(r).includes('privateCanonicalReportBytes'));
+  const exposed=r.privateCanonicalReportBytes;
+  exposed.fill(0);
+  assert.ok(r.privateCanonicalReportBytes.toString().includes(sensitive),
+    'caller cannot mutate privately held canonical report by altering a copy');
+});
