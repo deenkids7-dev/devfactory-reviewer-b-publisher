@@ -6,8 +6,10 @@ Issues in private `deenkids7-dev/deenkids` and the DevFactory canonical
 authority implemented by `devfactory/lib/human-go-batch*.mjs`.
 
 The current GitHub App `DevFactory Reviewer B` is installed on ONLY the
-private `deenkids7-dev/deenkids` repository, with Metadata Read and Pull
-requests Read/Write. Its App ID is 5253138 (from owner UI) and its historical
+private `deenkids7-dev/deenkids` repository, historically with Metadata Read
+and Pull requests Read/Write. **Contents: Read is additionally required for
+the immutable compare endpoint**; do not assume this permission is granted.
+Its App ID is 5253138 (from owner UI) and its historical
 installation ID is 169674558 (reverify). The Publisher cannot presently
 assume independent access to Issue metadata and contracts.
 
@@ -24,9 +26,13 @@ visibility as HUMAN_GO proof.**
    Reviewer B GitHub App installation to **Issues: Read-only**, never Issues
    Write. Keep installation scoped to the sole private `deenkids` repo.
    GitHub installation permission changes require explicit operator action.
-2. Use a *newly downscoped short-lived installation token* for read-only Issue
-   metadata, and keep it separate from the `Pull requests:write` review
-   publication token. Enforce zero cross-repository access.
+2. Use separate short-lived downscoped installation tokens for each
+   privilege purpose: immutable private PR diff (`Contents:read` +
+   `Pull requests:read`); Issue/LOT metadata (`Issues:read` with only
+   the minimum accompanying access); native review publication
+   (`Pull requests:write`, WITHOUT Contents access). NEVER reuse a
+   publication token as the analysis token. Enforce exact repository ID
+   1282086207 and zero cross-repository access.
 3. Fetch current Issues, labels, LOT text, canonical approval markers and
    exact GitHub actor with GitHub API—not via source text supplied by a PR.
 4. Reuse canonical parsing, contract hashing and issue-lifecycle checks from

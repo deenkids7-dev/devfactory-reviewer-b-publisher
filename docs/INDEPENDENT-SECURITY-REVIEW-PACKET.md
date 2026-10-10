@@ -77,15 +77,31 @@ credentials, full private diffs, private Issue/LOT content.
    report is only INCONCLUSIVE in the current candidate. Real review
    quality, model deployment and credential separation need further audit.
 
+## External CodeRabbit review on an older commit (NOT approval)
+
+CodeRabbit submitted GitHub review 5478886673 on 2026-10-10 at
+`906c79cf387b517af26710a9edffbca7607fe122` with status COMMENTED
+and 13 inline findings, including a MAJOR immutable-diff/HEAD TOCTOU
+concern. This is real external review feedback, not an APPROVED review
+of the latest HEAD. The subsequent source uses immutable
+`compare/{base_sha}...{head_sha}` plus before/after PR metadata, and
+tests require that exact immutable endpoint. GitHub's documented
+`Contents: Read` permission is a mandatory still-unmet operator gate
+before using it on a private repository. Do not treat previous CodeRabbit
+feedback or green synthetic tests as complete current-HEAD security
+clearance; request a NEW external review after code stabilizes.
+
 ## Known blockers and limitations (not PASS)
 
-- No genuinely independent security or semantic review of this PR.
+- No independent security review that covers the CURRENT PR #2 HEAD.
 - No actual external analyzer service, isolated model provider or
   authenticated independent execution provenance witness.
 - No live privileged Publisher, approved publish policy or GitHub review
   POST; no native GitHub review has been published.
 - No access to canonical private Issues through a separately scoped
   GitHub App Issues:Read token; scope change needs explicit operator consent.
+- No Contents:Read on the private GitHub App installation yet; immutable
+  compare endpoint will not work without independently approved scope.
 - No live no-secret environment hold-and-release test yet.
 - No protected secret-bearing `main` job/security review.
 - No real private keys provisioned; all existing tests use synthetic

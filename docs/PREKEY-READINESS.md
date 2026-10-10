@@ -32,8 +32,14 @@ or emitted to public Actions logs.
    `DevFactory Reviewer B`, App ID `5253138` from owner UI; installation
    ID `169674558` from historical state (REVERIFY on actual App settings).
    The installation must remain scoped to private
-   `deenkids7-dev/deenkids`, with Metadata Read and Pull requests Read/Write
-   only. GitHub generates this private key; it must be provisioned to a
+   `deenkids7-dev/deenkids`. Historically it has Metadata: Read and
+   Pull requests: Read/Write. An immutable compare/{base}...{head} diff of
+   this PRIVATE repo ALSO requires **Contents: Read**, which is NOT YET
+   approved or configured. The protected reviewer will request a separately
+   downscoped read token (Contents: Read, Pull requests: Read) distinct from
+   the publish token (Pull requests: Write, no Contents access). NEVER grant
+   Contents: Write. GitHub generates the App JWT private key; it must be
+   provisioned to a
    protected environment **only after workflow security audit and successful
    secret-free environment hold test**. Never give it to MSI or ChatGPT.
 2. **Native review-marker RSA signing key**: independently generated RSA
@@ -81,6 +87,12 @@ synthetic until the independently witnessed runtime is implemented.
       runner, with explicit approval before any charges.
 - [ ] Implement a separately verified external provenance witness bound to
       exact PR/HEAD/BASE/report/GitHub review ID.
+- [ ] Independently approve GitHub App **Contents: Read** to fetch an
+      immutable private commit comparison. GitHub REST Compare two commits
+      documents this mandatory permission. The App DOES NOT have it yet.
+      Do not grant Contents: Write. The split purpose-bound tokens in
+      candidate/github-app-auth.mjs remain synthetic pending authorization.
+      https://docs.github.com/en/rest/commits/commits#compare-two-commits
 - [ ] Independently approve minimum GitHub App Issues:Read (if used) for
       canonical Issue/LOT metadata; present App has Metadata Read and Pull
       requests Read/Write only. Do not permit Issues Write.
