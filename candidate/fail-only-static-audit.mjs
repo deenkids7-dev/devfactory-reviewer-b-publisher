@@ -7,7 +7,7 @@ const PATH=/^(?!\/)(?!.*(?:^|\/)\.{1,2}(?:\/|$))[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.
 const RULES=Object.freeze([
   Object.freeze({id:'unsafe-pr-target-workflow',severity:'high',
     pathOnly:/^\.github\/workflows\/.*\.ya?ml$/,
-    pattern:/^\s*pull_request_target\s*:/,
+    pattern:/\bpull_request_target\b/,
     message:'Untrusted pull_request_target workflow trigger newly introduced'}),
   Object.freeze({id:'workflow-write-all',severity:'high',
     pathOnly:/^\.github\/workflows\/.*\.ya?ml$/,
