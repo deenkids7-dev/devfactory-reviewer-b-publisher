@@ -216,7 +216,7 @@ test('third free Qwen3 8B candidate is strictly local and cannot bypass review q
 test('opt-in Qwen3 CI must run only synthetic cases with no privileged permissions',()=>{
  const y=readFileSync(new URL('../.github/workflows/reviewer-b-ollama-synthetic-canary.yml',
   import.meta.url),'utf8');
- assert.match(y,/fromJSON\\(/);
+ assert.match(y,/fromJSON\(/);
  assert.match(y,/"model":"qwen3:8b"/);
  assert.match(y,/"cli_arg":"--qwen3-synthetic"/);
  assert.match(y,/reviewer-b-benchmark-qwen3/);
