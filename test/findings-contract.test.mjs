@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { validateReviewerFindings } from '../src/findings-contract.mjs';
+import { canonicalJson } from '../src/canonical.mjs';
 
 const changedPaths=['src/compute.mjs','test/compute.test.mjs'];
 const finding=()=>({
@@ -17,7 +18,7 @@ const payload=()=>({
   summary:'This is only a fixture, not an independent reviewer.',
   findings:[finding()]
 });
-const report = overrides => Buffer.from(JSON.stringify({...payload(),...overrides}),'utf8');
+const report = overrides => Buffer.from(canonicalJson({...payload(),...overrides}),'utf8');
 function evaluate(bytes,other={}) {
   return validateReviewerFindings({reportBytes:bytes,changedPaths,...other});
 }
@@ -66,5 +67,5 @@ denies('rejects invalid UTF8',Buffer.from([0xff,0xff,0xff]),'REVIEW_INVALID_UTF8
 denies('rejects oversized report',Buffer.alloc(64*1024+1,0x20),'REVIEW_INPUT_UNTRUSTED');
 denies('rejects empty summary',report({summary:''}),'REVIEW_INVALID_FIELDS');
 denies('rejects duplicate report fields with unapproved key',
-  Buffer.from(JSON.stringify({...payload(),auth:'verified'})),
+  Buffer.from(canonicalJson({...payload(),auth:'verified'})),
   'REVIEW_INVALID_FIELDS');
