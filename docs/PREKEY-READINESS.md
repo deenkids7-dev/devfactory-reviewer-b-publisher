@@ -150,3 +150,12 @@ been independently audited and reached protected `main` by an authorized PR
 merge. No independent external provenance engine or real semantic model has
 been provisioned. The required action is therefore **security review and
 approval of a safe promotion**, NOT generation of a private key today.
+
+## Private preflight serialization hardening
+
+The private read-only preflight's static report bytes use a nonenumerable
+defensive-copy getter and redact from JSON, spread and Node inspect.
+Private file paths can be present even when source lines are not copied.
+The new synthetic test proves raw report access remains possible only via
+an explicit getter while accidental logging is redacted. Operators must
+still never log getter contents.

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { inspect } from 'node:util';
 import { runReadOnlyReviewPreflight }
   from '../candidate/private-review-preflight.mjs';
 
@@ -93,4 +94,27 @@ test('a network error never exposes an installation token',async()=>{
   await assert.rejects(()=>runReadOnlyReviewPreflight({
     prNumber:898,runId:RUN,installationToken:TOKEN,fetchImpl:fake.fetchImpl
   }),e=>!e.message.includes(TOKEN));
+});
+
+test('private finding paths are protected from automatic serialization',async()=>{
+ const privatePath='.github/workflows/SYNTHETIC_SECRET_FILE_NAME.yml';
+ const bytes=Buffer.from(
+  'diff --git a/'+privatePath+' b/'+privatePath+'\n'+
+  'index aa..bb 100644\n--- a/'+privatePath+'\n'+
+  '+++ b/'+privatePath+'\n@@ -1 +1 @@\n-old\n'+
+  '+permissions: write-all\n'
+ );
+ const fake=service({diff:bytes});
+ const result=await runReadOnlyReviewPreflight({
+  prNumber:898,runId:RUN,installationToken:TOKEN,fetchImpl:fake.fetchImpl
+ });
+ assert.ok(result.staticReportBytes.toString('utf8').includes(privatePath));
+ assert.doesNotMatch(JSON.stringify(result),/SYNTHETIC_SECRET_FILE_NAME/);
+ assert.doesNotMatch(JSON.stringify({...result}),/SYNTHETIC_SECRET_FILE_NAME/);
+ assert.doesNotMatch(inspect(result),/SYNTHETIC_SECRET_FILE_NAME/);
+ assert.match(JSON.stringify(result),/REDACTED_PRIVATE_REPORT/);
+ assert.ok(!Object.keys(result).includes('staticReportBytes'));
+ const copy=result.staticReportBytes;copy.fill(0);
+ assert.ok(result.staticReportBytes.toString('utf8').includes(privatePath));
+ assert.equal(result.approvalAuthorized,false);
 });

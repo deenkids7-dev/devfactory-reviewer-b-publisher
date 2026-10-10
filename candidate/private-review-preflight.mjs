@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { inspect } from 'node:util';
 import { createReadOnlyGitHubTransport } from './github-read-only.mjs';
 import { observePrSnapshot } from '../src/github-pr-observer.mjs';
 import { runFailOnlyStaticDiffAudit } from './fail-only-static-audit.mjs';
@@ -45,15 +46,22 @@ export async function runReadOnlyReviewPreflight({
     baseSha:snapshot.base_sha,
     diffSha256:snapshot.diff_sha256
   });
-  return Object.freeze({
-    target:summary,
-    // Static findings omit raw source excerpts; paths can still be private.
-    staticReportBytes:Buffer.from(audit.reportBytes),
-    staticDisposition:audit.provisionalState,
+  const report=Buffer.from(audit.reportBytes);
+  // Private file names remain sensitive even when no code line is echoed.
+  const output={
+    target:summary,staticDisposition:audit.provisionalState,
     blockingFindings:audit.blockingFindings,
-    semanticAnalysisCompleted:false,
-    independentReviewVerified:false,
-    approvalAuthorized:false,
-    publishEvent:null
+    semanticAnalysisCompleted:false,independentReviewVerified:false,
+    approvalAuthorized:false,publishEvent:null
+  };
+  Object.defineProperties(output,{
+    staticReportBytes:{enumerable:false,configurable:false,
+      get:()=>Buffer.from(report)},
+    toJSON:{enumerable:false,configurable:false,
+      value:()=>({...Object.fromEntries(Object.entries(output)),
+        staticReportBytes:'[REDACTED_PRIVATE_REPORT]'})},
+    [inspect.custom]:{enumerable:false,configurable:false,
+      value:()=> '[ReadOnlyReviewPreflight: PRIVATE REPORT REDACTED; NOT AUTHORIZED]'}
   });
+  return Object.freeze(output);
 }
