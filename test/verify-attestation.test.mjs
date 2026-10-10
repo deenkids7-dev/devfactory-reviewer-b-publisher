@@ -83,6 +83,12 @@ denied('rejects wrong repository ID',()=>signedFixture({target:{...target,reposi
 denied('rejects wrong signature algorithm',e=>({...e,signature:{...e.signature,algorithm:'RSA'}}),{},'UNTRUSTED_SIGNER');
 denied('rejects missing signature',e=>({payload:e.payload}),{},'INVALID_ENVELOPE_FIELDS');
 test('canonical JSON is deterministic across property order',()=>assert.equal(canonicalJson({z:2,a:1}),canonicalJson({a:1,z:2})));
+test('canonical JSON rejects sparse arrays instead of emitting malformed JSON',()=>{
+  assert.equal(canonicalJson([1,2,3]),'[1,2,3]');
+  assert.throws(()=>canonicalJson([1,,3]),/UNSUPPORTED_CANONICAL_VALUE/);
+  assert.throws(()=>canonicalJson({nested:[,]}),/UNSUPPORTED_CANONICAL_VALUE/);
+  assert.throws(()=>canonicalJson([1,undefined]),/UNSUPPORTED_CANONICAL_VALUE/);
+});
 test('canonical JSON rejects floating point and dangerous object keys',()=>{
   assert.throws(()=>canonicalJson({x:1.5}),/UNSUPPORTED_CANONICAL_VALUE/);
   assert.throws(()=>canonicalJson(JSON.parse('{"__proto__":1}')),/UNSAFE_OBJECT_KEY/);
