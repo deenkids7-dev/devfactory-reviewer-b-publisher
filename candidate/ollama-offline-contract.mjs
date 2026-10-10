@@ -136,9 +136,15 @@ export function validateOfflineOllamaCompletion({
     parsed.findings.length>50)deny('OLLAMA_FINDINGS_SCHEMA_INVALID');
   const changed=new Set(trustedChangedPaths);
   const seen=new Set();
-  const validText=(value,max)=>typeof value==='string' &&
-    value.length>=1 && value.length<=max &&
-    !/[\x00-\x1f\x7f]/.test(value);
+  // Normalize harmless layout whitespace, never drop a finding or guess data.
+  // Other control characters, empty text and oversized evidence remain blocked.
+  const normalizedText=(value,max,code)=>{
+    if(typeof value!=='string')deny(code);
+    const clean=value.replace(/[\t\r\n ]+/g,' ').trim();
+    if(!clean.length||clean.length>max||
+      /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(clean))deny(code);
+    return clean;
+  };
   const findings=[];
   for(const f of parsed.findings){
     if(!exact(f,['severity','path','line','message','evidence']))
@@ -148,16 +154,20 @@ export function validateOfflineOllamaCompletion({
       deny('OLLAMA_FINDING_LINE_INVALID');
     if(!['critical','high','medium','low','informational'].includes(f.severity))
       deny('OLLAMA_FINDING_SEVERITY_INVALID');
-    if(!validText(f.message,500)||!validText(f.evidence,1000))
-      deny('OLLAMA_FINDING_TEXT_INVALID');
+    const normalized={
+      ...f,
+      message:normalizedText(f.message,500,'OLLAMA_FINDING_TEXT_INVALID'),
+      evidence:normalizedText(f.evidence,1000,'OLLAMA_FINDING_TEXT_INVALID')
+    };
     const fingerprint=digest(
-      'devfactory.review-finding.v1\0'+canonicalJson(f));
+      'devfactory.review-finding.v1\0'+canonicalJson(normalized));
     if(seen.has(fingerprint))deny('OLLAMA_FINDING_DUPLICATE');
     seen.add(fingerprint);
-    findings.push({...f,fingerprint});
+    findings.push({...normalized,fingerprint});
   }
+  const summary=normalizedText(parsed.summary,2000,'OLLAMA_SUMMARY_TEXT_INVALID');
   const checked=normalizeUntrustedModelFindings({
-    rawModelOutput:canonicalJson({summary:parsed.summary,findings}),
+    rawModelOutput:canonicalJson({summary,findings}),
     runId,trustedChangedPaths
   });
   const report=Buffer.from(checked.reportBytes);

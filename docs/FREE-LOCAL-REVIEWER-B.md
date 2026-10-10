@@ -84,3 +84,12 @@ Model output defects are classified without showing findings or source in
 public Actions logs: changed-path mismatch, non-positive line, unsupported
 severity, malformed/multiline evidence or duplicate finding. Such errors
 remain blocked, never silently fixed or converted to a model PASS.
+
+## Safe findings normalization
+
+A genuine Qwen 7B run exposed multiline/formatting in model findings. The
+adapter now deterministically flattens CR/LF/tab/space runs in summary,
+message and evidence before computing canonical hashes, but does NOT discard
+findings or silently alter file paths or line numbers. Control characters
+(other than permitted whitespace), empty or oversized fields and duplicate
+findings still fail closed. Model quality is NOT certified by this fix.

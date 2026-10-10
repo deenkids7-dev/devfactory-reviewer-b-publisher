@@ -124,13 +124,16 @@ test('private findings not leaked through safe result serialization',()=>{
  assert.doesNotMatch(inspect(v),/SYNTHETIC_ONLY_PRIVATE_FINDING/);
 });
 
-test('model validator categorizes invalid line, multiline text and duplicates without leaking them',()=>{
+test('model validator categorizes invalid lines and duplicate findings, while flattening harmless whitespace without leaking them',()=>{
  const item={severity:'high',path:'src/check.mjs',line:1,
   message:'fixture',evidence:'fixture proof'};
  const encode=findings=>completion(JSON.stringify({summary:'fixture',findings}));
  assert.throws(()=>parse(encode([{...item,line:0}])),
   /OLLAMA_FINDING_LINE_INVALID/);
- assert.throws(()=>parse(encode([{...item,message:'newline\nnot allowed'}])),
+ const flattened=parse(encode([{...item,message:'newline\nnot allowed'}]));
+ const report=JSON.parse(flattened.privateCanonicalReportBytes.toString('utf8'));
+ assert.equal(report.findings[0].message,'newline not allowed');
+ assert.throws(()=>parse(encode([{...item,message:'\u0000bad'}])),
   /OLLAMA_FINDING_TEXT_INVALID/);
  assert.throws(()=>parse(encode([item,item])),
   /OLLAMA_FINDING_DUPLICATE/);
