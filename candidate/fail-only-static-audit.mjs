@@ -16,7 +16,14 @@ const RULES=Object.freeze([
   Object.freeze({id:'workflow-untrusted-shell',severity:'high',
     pathOnly:/^\.github\/workflows\/.*\.ya?ml$/,
     pattern:/(?:curl|wget)\b.*\|\s*(?:sh|bash)\b/,
-    message:'Remote downloaded shell code execution newly introduced'})
+    message:'Remote downloaded shell code execution newly introduced'}),
+  Object.freeze({id:'workflow-token-write-scope',severity:'high',
+    pathOnly:/^\.github\/workflows\/.*\.ya?ml$/,
+    // Conservative trigger. A write scope can occur at job-level, where it
+    // overrides a safe root permissions block. False positives remain FAIL,
+    // never a silent PASS; independent review decides final authorization.
+    pattern:/^\s*(?:actions|attestations|checks|contents|deployments|discussions|id-token|issues|models|packages|pages|pull-requests|repository-projects|security-events|statuses)\s*:\s*write\s*(?:#.*)?$/,
+    message:'Workflow newly requests a GitHub token write permission'})
 ]);
 function deny(code){throw Error(code);}
 function hash(v){return createHash('sha256').update(v).digest('hex');}
