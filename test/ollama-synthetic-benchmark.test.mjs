@@ -31,10 +31,11 @@ function mock(options={}){
 test('free local benchmark runs four FIXED synthetic examples without GitHub or secrets',async()=>{
  const f=mock();
  const result=await runSyntheticLocalOllamaBenchmark({fetchImpl:f.fetchImpl});
- assert.equal(f.calls.length,4);
- assert.equal(result.testsCompleted,4);
- assert.equal(result.seededSemanticBugs,1);
- assert.equal(result.cleanFixtures,2);
+ assert.equal(f.calls.length,10);
+ assert.equal(result.testsCompleted,10);
+ assert.equal(result.seededSemanticBugs,4);
+ assert.equal(result.cleanFixtures,4);
+ assert.equal(result.cleanFixtureBlockingFalseAlerts,0);
  assert.equal(result.modelQualityCertified,false);
  assert.equal(result.syntheticMetricsMeetTargets,false);
  assert.ok(result.cases.every(c=>Array.isArray(c.modelMessages)));
@@ -84,7 +85,7 @@ test('optional small public synthetic model is pinned, not a release approval',a
  assert.equal(r.model,'qwen2.5-coder:1.5b');
  assert.equal(r.approvalAuthorized,false);
  assert.equal(r.independentReviewerProvenanceVerified,false);
- assert.equal(f.calls.length,4);
+ assert.equal(f.calls.length,10);
  for(const call of f.calls){
   const req=JSON.parse(call.config.body);
   assert.equal(req.model,'qwen2.5-coder:1.5b');
@@ -107,10 +108,10 @@ test('14B synthetic selection stays bounded, identity-pinned and nonauthorizing'
    fetchImpl:f.fetchImpl,model:'qwen2.5-coder:14b'
  });
  assert.equal(x.model,'qwen2.5-coder:14b');
- assert.equal(x.testsCompleted,4);
+ assert.equal(x.testsCompleted,10);
  assert.equal(x.approvalAuthorized,false);
  assert.equal(x.modelQualityCertified,false);
- assert.equal(f.calls.length,4);
+ assert.equal(f.calls.length,10);
  for(const call of f.calls){
    assert.equal(JSON.parse(call.config.body).model,'qwen2.5-coder:14b');
  }

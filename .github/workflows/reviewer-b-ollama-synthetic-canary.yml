@@ -96,8 +96,9 @@ jobs:
             import { readFileSync } from "node:fs";
             const r=JSON.parse(readFileSync(process.argv[1],"utf8"));
             if(r.benchmark!=="synthetic-local-ollama-v1" ||
-              r.model!==process.argv[2] || r.testsCompleted!==4 ||
-              r.seededSemanticBugs!==1 || r.cleanFixtures!==2 ||
+              r.model!==process.argv[2] || r.testsCompleted!==10 ||
+              r.seededSemanticBugs!==4 || r.cleanFixtures!==4 ||
+              !Number.isSafeInteger(r.cleanFixtureBlockingFalseAlerts) ||
               r.approvalAuthorized!==false ||
               r.independentReviewerProvenanceVerified!==false ||
               r.privateSourceReviewed!==false ||

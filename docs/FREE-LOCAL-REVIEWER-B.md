@@ -145,3 +145,18 @@ The free model benchmark is now deliberately opt-in with the
 from repeatedly downloading large models; an authorized repository writer
 may label PR #2 when another synthetic quality run is needed. The job uses no
 secrets or private source. Existing in-flight workflow runs are unaffected.
+
+## Expanded quality dataset (ten synthetic scenarios)
+
+The free benchmark now contains two deterministic high-risk workflow cases,
+four deliberately introduced semantic defects (authorization bypass, removed
+HTML escaping, weakened amount validation, inverted session-token rejection),
+and four supposedly safe hardening cases (read-only permission reduction,
+null-safe guard, nonnegative clamp, immutable configuration). Only FIXED,
+synthetic text is sent to Ollama.
+
+Semantic recall is counted conservatively only when the model's message or
+evidence includes an oracle term associated with the seeded defect. The
+benchmark separately records any false alert and *blocking* false alerts.
+This dataset is still too small and synthetic to certify a production reviewer.
+The default remains fail-closed and no-model-PASS.

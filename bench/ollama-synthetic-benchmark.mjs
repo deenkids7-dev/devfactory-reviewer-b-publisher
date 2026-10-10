@@ -24,10 +24,36 @@ const FIXTURES=Object.freeze([
   Object.freeze({label:'removed authorization check',path:AUTH_PATH,
     before:"function isAuthorized(user) { return user?.role === 'admin'; }",
     source:'function isAuthorized(user) { return true; }',
-    knownStaticBlocker:false,knownSemanticBug:true}),
+    knownStaticBlocker:false,knownSemanticBug:true,
+    oracleTokens:['authorization','access','permission','always','bypass']}),
   Object.freeze({label:'safe null-checked authorization',path:AUTH_PATH,
     before:"function isAuthorized(user) { return user.role === 'admin'; }",
     source:"function isAuthorized(user) { return user?.role === 'admin'; }",
+    knownStaticBlocker:false,knownSemanticBug:false}),
+  Object.freeze({label:'broad workflow write permission introduced',path:WORKFLOW_PATH,
+    before:'    contents: read',source:'    contents: write',
+    knownStaticBlocker:true,knownSemanticBug:false}),
+  Object.freeze({label:'removed HTML escaping',path:'src/render-synthetic.mjs',
+    before:'const rendered = escapeHtml(userInput);',
+    source:'const rendered = userInput;',
+    knownStaticBlocker:false,knownSemanticBug:true,
+    oracleTokens:['html','escape','xss','injection','input']}),
+  Object.freeze({label:'negative amount validation weakened',path:'src/payment-synthetic.mjs',
+    before:"if (amount < 0) throw new Error('invalid');",
+    source:"if (amount < -100) throw new Error('invalid');",
+    knownStaticBlocker:false,knownSemanticBug:true,
+    oracleTokens:['negative','amount','limit','threshold','validation']}),
+  Object.freeze({label:'session token check inverted',path:'src/session-synthetic.mjs',
+    before:'if (token !== session.token) return false;',
+    source:'if (token === session.token) return false;',
+    knownStaticBlocker:false,knownSemanticBug:true,
+    oracleTokens:['token','session','invert','reject','legitimate']}),
+  Object.freeze({label:'safe nonnegative clamp',path:'src/bounds-synthetic.mjs',
+    before:'const limit = Math.min(amount, max);',
+    source:'const limit = Math.max(0, Math.min(amount, max));',
+    knownStaticBlocker:false,knownSemanticBug:false}),
+  Object.freeze({label:'safe immutable config',path:'src/config-synthetic.mjs',
+    before:'return config;',source:'return Object.freeze(config);',
     knownStaticBlocker:false,knownSemanticBug:false})
 ]);
 function deny(code){throw Error(code);}
@@ -123,10 +149,16 @@ export async function runSyntheticLocalOllamaBenchmark({
     const syntheticReport=JSON.parse(completion.privateCanonicalReportBytes.toString('utf8'));
     const modelMessages=syntheticReport.findings.map(f=>
       Object.freeze({severity:f.severity,explanation:f.message.slice(0,160)}));
+    const modelText=syntheticReport.findings.map(f=>
+      (f.message+' '+f.evidence).toLowerCase()).join(' ');
+    const semanticOracleHit=fixture.knownSemanticBug &&
+      completion.findingCount>0 && fixture.oracleTokens.some(term=>
+        modelText.includes(term));
     cases.push(Object.freeze({
       label:fixture.label,seededStaticBlocker:fixture.knownStaticBlocker,
       modelMessages:Object.freeze(modelMessages),
       seededSemanticBug:fixture.knownSemanticBug,
+      semanticOracleHit,
       semanticFindingDetected:completion.findingCount>0,
       semanticFindingCount:completion.findingCount,
       combinedBlockingCount:combined.blockingFindings,
@@ -140,10 +172,11 @@ export async function runSyntheticLocalOllamaBenchmark({
     benchmark:'synthetic-local-ollama-v1',
     testsCompleted:cases.length,model,
     seededSemanticBugs:semanticBugCases.length,
-    seededSemanticBugsDetected:semanticBugCases.filter(c=>c.semanticFindingDetected).length,
+    seededSemanticBugsDetected:semanticBugCases.filter(c=>c.semanticOracleHit).length,
     cleanFixtures:cleanCases.length,
     cleanFixtureFalseAlerts:cleanCases.filter(c=>c.semanticFindingDetected).length,
-    syntheticMetricsMeetTargets:semanticBugCases.every(c=>c.semanticFindingDetected) &&
+    cleanFixtureBlockingFalseAlerts:cleanCases.filter(c=>c.combinedBlockingCount>0).length,
+    syntheticMetricsMeetTargets:semanticBugCases.every(c=>c.semanticOracleHit) &&
       cleanCases.every(c=>!c.semanticFindingDetected),
     modelQualityCertified:false,
     cases:Object.freeze(cases),
