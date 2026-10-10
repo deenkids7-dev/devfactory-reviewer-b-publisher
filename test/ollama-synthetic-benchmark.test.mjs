@@ -53,7 +53,10 @@ test('free local benchmark runs four FIXED synthetic examples without GitHub or 
   assert.doesNotMatch(call.config.body,/PRIVATE KEY|GITHUB_TOKEN|ghp_/);
   const request=JSON.parse(call.config.body);
   assert.equal(request.model,'qwen2.5-coder:7b');
-  assert.match(request.messages[1].content,/synthetic\.yml|auth-synthetic\.mjs/);
+  const payload=JSON.parse(request.messages[1].content);
+  assert.equal(payload.changed_paths.length,1);
+  assert.match(payload.changed_paths[0],
+    /^(?:\.github\/workflows\/fake-synthetic\.yml|src\/[a-z-]+-synthetic\.mjs)$/);
  }
 });
 test('no remote endpoints, redirects, wrong model or failed HTTP are accepted',async()=>{
