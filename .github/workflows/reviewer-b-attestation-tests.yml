@@ -1,0 +1,48 @@
+name: Reviewer B - Attestation Verification Tests
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  attestation-tests:
+    name: Verify fail-closed attestation logic
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # No checkout action: the repo currently allows only its own actions.
+      # GitHub's read-only token is confined to this download step.
+      - name: Download exact GitHub commit tree
+        shell: bash
+        env:
+          GH_READ_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          GH_EVENT: ${{ github.event_name }}
+          GH_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name || '' }}
+          GH_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$GH_REPO" = "devfactory-reviewer-trust/devfactory-reviewer-b-publisher"
+          if [[ "$GH_EVENT" == "pull_request" ]]; then
+            test "$GH_HEAD_REPO" = "$GH_REPO"
+          fi
+          [[ "$GH_SHA" =~ ^[0-9a-f]{40}$ ]]
+          mkdir source
+          curl --fail --silent --show-error --location --retry 2 \
+            --header "Authorization: Bearer ${GH_READ_TOKEN}" \
+            --header 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/${GH_REPO}/tarball/${GH_SHA}" \
+            --output source.tar.gz
+          unset GH_READ_TOKEN
+          tar -xzf source.tar.gz -C source --strip-components=1
+      - name: Verify Node and run tests without token
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd source
+          node --version
+          node --test test/*.test.mjs
