@@ -24,7 +24,7 @@ const finding=()=>({
 });
 function fixture({findings=[],disposition='PASS',reportRun='fixture-run-001',
     signedRun=reportRun,modifiedTarget={}}={}) {
-  const reportBytes=Buffer.from(JSON.stringify({
+  const reportBytes=Buffer.from(canonicalJson({
     schema:'devfactory.reviewer-b.findings.v1',
     run_id:reportRun, summary:'Synthetic review; no independent analysis',
     findings
