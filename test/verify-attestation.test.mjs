@@ -89,6 +89,25 @@ test('canonical JSON rejects sparse arrays instead of emitting malformed JSON',(
   assert.throws(()=>canonicalJson({nested:[,]}),/UNSUPPORTED_CANONICAL_VALUE/);
   assert.throws(()=>canonicalJson([1,undefined]),/UNSUPPORTED_CANONICAL_VALUE/);
 });
+test('identity types fail closed before regexp string coercion', () => {
+  for (const invalid of [
+    {issuer:true}, {issuer:123}, {review_id:123},
+    {analysis:{reviewer_id:456, disposition:'PASS',report_sha256:sha256(reportBytes)}},
+    {nonce:['11111111-2222-4333-8444-555555555555']}
+  ]) {
+    assert.throws(()=>verify(signedFixture(invalid)),e=>e.message==='INVALID_IDENTITY');
+  }
+});
+test('nonstring key IDs fail closed despite a matching trusted key map',()=>{
+  const env=signedFixture();
+  env.signature.key_id=true;
+  const booleanKey=new Map([[true,{...trustedKeys.get('TEST_ONLY_NEVER_PRODUCTION')}]]);
+  assert.throws(()=>verify(env,{trustedKeys:booleanKey}),e=>e.message==='UNTRUSTED_SIGNER');
+});
+test('null-prototype objects are deliberately outside the canonical protocol',()=>{
+  assert.throws(()=>canonicalJson(Object.assign(Object.create(null),{key:'value'})),
+    /UNSUPPORTED_CANONICAL_VALUE/);
+});
 test('canonical JSON rejects floating point and dangerous object keys',()=>{
   assert.throws(()=>canonicalJson({x:1.5}),/UNSUPPORTED_CANONICAL_VALUE/);
   assert.throws(()=>canonicalJson(JSON.parse('{"__proto__":1}')),/UNSAFE_OBJECT_KEY/);
