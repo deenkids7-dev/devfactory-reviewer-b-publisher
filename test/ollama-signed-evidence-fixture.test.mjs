@@ -65,7 +65,7 @@ function verify(d,seenNonces=new Set()){
   trustedKeys:new Map([['synthetic-ed25519',{
    issuer:'synthetic-independent-engine',
    reviewerId:'synthetic-ollama-runner',
-   publicKeyPem,spkiSha256:fingerprint
+   publicKeyPem:publicPem,spkiSha256:fingerprint
   }]]),
   trustedTarget:d.target,trustedChangedPaths:d.plan.changedPaths,
   seenReviewIds:new Set(),seenNonces,now
