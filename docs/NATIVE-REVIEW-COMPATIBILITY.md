@@ -37,7 +37,7 @@ then a newline followed by the exact report text. The envelope has exactly
 `payload` and `signature`; the latter is an RSA-SHA256 base64url
 signature of the adapter's lexicographically sorted JSON payload.
 
-The signed payload has exactly these eleven fields:
+The signed payload has exactly these twelve fields:
 
 - `repository`: exact target name.
 - `pr_number`: positive integer; exact live PR.
@@ -51,9 +51,9 @@ The signed payload has exactly these eleven fields:
 - `provenance_ref`: 8-240 chars; resolvable independent provenance reference.
 - `completed_at`: analysis-completion instant, prior to publication.
 
-The above field count is **12** (not 11). Future implementers MUST derive
-this schema from the canonical PR #900 adapter at its reviewed HEAD; never
-trust this prose as a replacement for automated cross-repository checks.
+Future implementers MUST derive this schema from the canonical PR #900 adapter
+at its reviewed HEAD; never trust this prose as a replacement for automated
+cross-repository checks.
 The adapter binds RSA signature to a GitHub review made by the exact bot,
 on the exact commit, with GitHub review state APPROVED for PASS or
 CHANGES_REQUESTED for FAIL, and verifies report digest/independent execution.
