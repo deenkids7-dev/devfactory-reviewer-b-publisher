@@ -7,9 +7,11 @@ reviews:
   profile: "assertive"
   request_changes_workflow: false
   poem: false
+  # Disable all automatic and draft CodeRabbit reviews: use our free
+  # local synthetic engine instead. No billing or quota-triggering requests.
   auto_review:
-    enabled: true
-    drafts: true
+    enabled: false
+    drafts: false
     auto_incremental_review: false
   path_instructions:
     - path: "src/**/*.mjs"

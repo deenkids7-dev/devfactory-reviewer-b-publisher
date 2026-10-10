@@ -202,3 +202,16 @@ protected execution, minimally scoped App permissions, trustworthy independent
 provenance, replay protection, and canonical HUMAN_GO. See PREKEY-READINESS.md.
 No private source, protected keys, paid API, production native review or
 privileged merge was used during these synthetic experiments.
+
+## Zero-CodeRabbit auto-review policy
+
+The Publisher's existing `.coderabbit.yaml` previously had
+`reviews.auto_review.enabled: true` and `drafts: true`, even though the
+project has now switched to a free local Ollama review experiment. They have
+been explicitly changed to `false`, and a test enforces those settings.
+This is a repository policy to avoid requesting further external/possibly
+billable automated reviews. It does NOT cancel a third-party CodeRabbit
+subscription, change the service-side GitHub installation, or retroactively
+erase old comments. Do not invoke CodeRabbit manually, on its CLI or via
+`@coderabbitai` without a separately verified cost-free entitlement and
+operator consent. Model-only advisory signals remain INCONCLUSIVE, not PASS.
