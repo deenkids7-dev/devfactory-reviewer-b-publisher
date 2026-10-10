@@ -1,4 +1,5 @@
 import { canonicalJson } from '../src/canonical.mjs';
+import { inspect } from 'node:util';
 import { validateReviewerFindings } from '../src/findings-contract.mjs';
 
 function deny(code){throw Error(code);}
@@ -48,8 +49,8 @@ export function combineReviewerFindings({
     findings:combined
   }));
   const result=validateReviewerFindings({reportBytes,changedPaths});
-  return Object.freeze({
-    reportBytes,
+  const privateReport=Buffer.from(reportBytes);
+  const safe={
     runId:a.value.run_id,
     provisionalState:result.provisionalState,
     blockingFindings:result.blockingFindingCount,
@@ -58,5 +59,16 @@ export function combineReviewerFindings({
     independentReviewVerified:false,
     approvalAuthorized:false,
     publishEvent:null
+  };
+  Object.defineProperties(safe,{
+    reportBytes:{enumerable:false,configurable:false,
+      get:()=>Buffer.from(privateReport)},
+    toJSON:{enumerable:false,configurable:false,
+      value:()=>({...Object.fromEntries(Object.entries(safe)),
+        reportBytes:'[REDACTED_PRIVATE_REPORT]'})},
+    [inspect.custom]:{enumerable:false,configurable:false,
+      value:()=> '[CombinedReviewerFindings: PRIVATE REPORT REDACTED]'
+    }
   });
+  return Object.freeze(safe);
 }

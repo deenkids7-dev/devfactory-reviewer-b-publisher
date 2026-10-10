@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { inspect } from 'node:util';
 import { canonicalJson } from '../src/canonical.mjs';
 import { validateReviewerFindings } from '../src/findings-contract.mjs';
 
@@ -89,9 +90,22 @@ export function runFailOnlyStaticDiffAudit({diffBytes,runId}={}){
     findings
   }));
   const checked=validateReviewerFindings({reportBytes,changedPaths:paths});
-  return Object.freeze({
-    reportBytes,provisionalState:checked.provisionalState,
+  // Private file paths may appear in findings; hide bytes from generic logs.
+  const privateReport=Buffer.from(reportBytes);
+  const safe={
+    provisionalState:checked.provisionalState,
     blockingFindings:checked.blockingFindingCount,
     approvalAuthorized:false,independenceVerified:false
+  };
+  Object.defineProperties(safe,{
+    reportBytes:{enumerable:false,configurable:false,
+      get:()=>Buffer.from(privateReport)},
+    toJSON:{enumerable:false,configurable:false,
+      value:()=>({...Object.fromEntries(Object.entries(safe)),
+        reportBytes:'[REDACTED_PRIVATE_REPORT]'})},
+    [inspect.custom]:{enumerable:false,configurable:false,
+      value:()=> '[StaticDiffAudit: PRIVATE REPORT REDACTED]'
+    }
   });
+  return Object.freeze(safe);
 }

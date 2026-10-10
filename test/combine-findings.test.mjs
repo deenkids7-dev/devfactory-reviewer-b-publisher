@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { inspect } from 'node:util';
 import { canonicalJson } from '../src/canonical.mjs';
 import { combineReviewerFindings } from '../candidate/combine-findings.mjs';
 
@@ -71,4 +72,17 @@ test('too many combined findings cannot drop evidence silently',()=>{
     ...item('f'),fingerprint:(i+30).toString(16).padStart(64,'0')
   }));
   assert.throws(()=>call(a,b),/COMBINED_REVIEW_TOO_MANY_FINDINGS/);
+});
+
+test('combined private findings cannot escape via JSON or object inspection',()=>{
+ const secret='SYNTHETIC_PRIVATE_FINDING_DONT_LOG';
+ const finding={...item('b'),message:secret};
+ const result=call([],[finding]);
+ assert.ok(result.reportBytes.toString('utf8').includes(secret));
+ for(const text of [JSON.stringify(result),JSON.stringify({...result}),inspect(result)])
+  assert.ok(!text.includes(secret));
+ assert.ok(JSON.stringify(result).includes('REDACTED'));
+ const copy=result.reportBytes;copy.fill(0);
+ assert.ok(result.reportBytes.toString('utf8').includes(secret));
+ assert.equal(result.approvalAuthorized,false);
 });

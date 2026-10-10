@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { inspect } from 'node:util';
 import { runFailOnlyStaticDiffAudit } from '../candidate/fail-only-static-audit.mjs';
 
 const runId='synthetic-static-audit';
@@ -71,4 +72,18 @@ test('detects both inline YAML and sequence forms of privileged PR target trigge
     assert.equal(result.provisionalState,'FAIL');
     assert.ok(result.blockingFindings>=1);
   }
+});
+
+test('static audit report paths are private in JSON, spread and inspection',()=>{
+ const secretPath='.github/workflows/private-secret-policy.yml';
+ const result=run(diff(secretPath,['permissions: write-all','safe','safe']));
+ assert.ok(result.reportBytes.toString('utf8').includes(secretPath));
+ for(const text of [JSON.stringify(result),JSON.stringify({...result}),inspect(result)])
+  assert.ok(!text.includes(secretPath));
+ assert.ok(JSON.stringify(result).includes('REDACTED'));
+ assert.equal(Object.keys(result).includes('reportBytes'),false);
+ const first=result.reportBytes;
+ first.fill(0);
+ assert.ok(result.reportBytes.toString('utf8').includes(secretPath));
+ assert.equal(result.approvalAuthorized,false);
 });
