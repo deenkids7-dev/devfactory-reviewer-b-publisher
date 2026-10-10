@@ -51,7 +51,18 @@ export async function observePrSnapshot({ prNumber, request }) {
   }
   const beforeResponse=await retrieve('application/vnd.github+json',512*1024);
   const before=parseMetadata(beforeResponse,url);
-  const diffResponse=await retrieve('application/vnd.github.diff',2*1024*1024);
+  // Read diff from IMMUTABLE commit-to-commit comparison. The mutable PR
+  // .diff endpoint can return a different HEAD during an A->B->A race.
+  const sha=before?.head?.sha,base=before?.base?.sha;
+  if(typeof sha!=='string'||!SHA40.test(sha)||
+     typeof base!=='string'||!SHA40.test(base))
+    deny('GITHUB_PR_COMMIT_IDENTITY_INVALID');
+  const compareUrl='https://api.github.com/repos/deenkids7-dev/deenkids/compare/'+base+'...'+sha;
+  const diffResponse=await request(Object.freeze({
+    url:compareUrl, method:'GET',
+    accept:'application/vnd.github.diff',maxBytes:2*1024*1024
+  }));
+  checkResult(diffResponse,compareUrl,'application/vnd.github.diff',2*1024*1024);
   if (typeof diffResponse.contentType !== 'string' ||
       !DIFF_CONTENT_TYPE.test(diffResponse.contentType)) deny('GITHUB_DIFF_MEDIA_TYPE');
   const afterResponse=await retrieve('application/vnd.github+json',512*1024);
