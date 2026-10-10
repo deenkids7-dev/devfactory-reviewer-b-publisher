@@ -146,7 +146,7 @@ test('model-supplied PASS or unauthorized file path fails closed',()=>{
       line:1,message:'fake',evidence:'out of scope'
     }]
   });
-  assert.throws(()=>parseResponse(modelResponse(withPass)),/SEMANTIC_MODEL_FIELDS_INVALID/);
+  assert.throws(()=>parseResponse(modelResponse(withPass)),/MODEL_FINDING_SCHEMA_INVALID/);
   assert.throws(()=>parseResponse(modelResponse(wrongPath)),/REVIEW_FINDING_INVALID/);
 });
 
