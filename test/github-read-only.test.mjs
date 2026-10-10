@@ -6,6 +6,7 @@ import { createReadOnlyGitHubTransport, readCurrentGitHubPrSnapshot }
 
 const TOKEN='ghs_SYNTHETIC_NOT_A_REAL_TOKEN';
 const URL='https://api.github.com/repos/deenkids7-dev/deenkids/pulls/898';
+const IMMUTABLE_COMPARE='https://api.github.com/repos/deenkids7-dev/deenkids/compare/'+'b'.repeat(40)+'...'+'a'.repeat(40);
 const digest=b=>createHash('sha256').update(b).digest('hex');
 const DIFF=Buffer.from(
   'diff --git a/demo.mjs b/demo.mjs\nindex abcd111..1234abc 100644\n' +
@@ -56,8 +57,8 @@ test('real transport shape reads exact PR twice and raw diff once; no writes',as
   assert.deepEqual(fake.calls.map(x=>x.accept),
     ['application/vnd.github+json','application/vnd.github.diff',
      'application/vnd.github+json']);
+  assert.deepEqual(fake.calls.map(c=>c.url),[URL,IMMUTABLE_COMPARE,URL]);
   for(const c of fake.calls){
-    assert.equal(c.url,URL);
     assert.equal(c.method,'GET');
     assert.equal(c.redirect,'error');
     assert.equal(c.authorization,`Bearer ${TOKEN}`);
@@ -109,6 +110,9 @@ test('transport forbids alternate endpoint, non-GET and unapproved Accept',async
     {...valid,url:'https://github.example/repos/deenkids7-dev/deenkids/pulls/898'},
     {...valid,url:'https://api.github.com/repos/other/private/pulls/898'},
     {...valid,url:URL+'/reviews'},
+    {...valid,url:URL,accept:'application/vnd.github.diff'},
+    {...valid,url:IMMUTABLE_COMPARE,accept:'application/vnd.github+json'},
+    {...valid,url:'https://api.github.com/repos/deenkids7-dev/deenkids/compare/'+'a'.repeat(40)+'...master',accept:'application/vnd.github.diff'},
     {...valid,method:'POST'},
     {...valid,accept:'application/octet-stream'},
     {...valid,maxBytes:10000000}
@@ -143,4 +147,12 @@ test('no token, invalid token or untrusted client is rejected',()=>{
       installationToken,fetchImpl:async()=>{throw Error('should never run')}
     }),/INVALID_INSTALLATION_TOKEN/);
   }
+});
+
+test('immutable compare uses exact BASE and HEAD even if mutable PR endpoint could be raced',async()=>{
+ const fake=fakeGitHub();
+ await readCurrentGitHubPrSnapshot({prNumber:898,installationToken:TOKEN,fetchImpl:fake.fetchImpl});
+ assert.deepEqual(fake.calls.map(c=>c.url),[URL,IMMUTABLE_COMPARE,URL]);
+ assert.ok(fake.calls[1].url.includes('b'.repeat(40)+'...'+'a'.repeat(40)));
+ assert.equal(fake.calls[1].accept,'application/vnd.github.diff');
 });
