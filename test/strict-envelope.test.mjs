@@ -64,7 +64,8 @@ rejects('rejects oversized attestation', () => Buffer.alloc(65537, 0x20),
   'INVALID_ATTESTATION_SIZE');
 rejects('rejects dangerous __proto__ key', () =>
   Buffer.from('{"__proto__":1}'), 'INVALID_ATTESTATION_SCHEMA_ENCODING');
-rejects('rejects broken JSON', () => Buffer.from('{\"payload\":'), 'INVALID_ATTESTATION_JSON');\nrejects('rejects undersized JSON', () => Buffer.from('{'), 'INVALID_ATTESTATION_SIZE');
+rejects('rejects broken JSON', () => Buffer.from('{\"payload\":'), 'INVALID_ATTESTATION_JSON');
+rejects('rejects undersized JSON', () => Buffer.from('{'), 'INVALID_ATTESTATION_SIZE');
 
 test('rejects oversized raw report', () => assert.throws(() => verify(bytes(), {
   reportBytes: Buffer.alloc(2*1024*1024+1)
