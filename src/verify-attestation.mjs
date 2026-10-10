@@ -58,7 +58,10 @@ export function verifyAttestation({ envelope, reportBytes, trustedKeys, trustedT
   const p = envelope.payload;
   const s = envelope.signature;
   if (p.schema !== SCHEMA) reject('INVALID_SCHEMA');
-  if (!IDENT.test(p.issuer) || !IDENT.test(p.review_id) || !IDENT.test(p.analysis.reviewer_id) || !UUID.test(p.nonce)) reject('INVALID_IDENTITY');
+  if (typeof p.issuer !== 'string' || typeof p.review_id !== 'string' ||
+      typeof p.analysis.reviewer_id !== 'string' || typeof p.nonce !== 'string' ||
+      !IDENT.test(p.issuer) || !IDENT.test(p.review_id) ||
+      !IDENT.test(p.analysis.reviewer_id) || !UUID.test(p.nonce)) reject('INVALID_IDENTITY');
   if (!['PASS', 'FAIL', 'BLOCKED'].includes(p.analysis.disposition)) reject('INVALID_DISPOSITION');
   if (!HEX40.test(p.target.head_sha) || !HEX40.test(p.target.base_sha)) reject('INVALID_COMMIT_SHA');
   if (!HEX64.test(p.target.diff_sha256) || !HEX64.test(p.analysis.report_sha256)) reject('INVALID_DIGEST');
@@ -80,7 +83,8 @@ export function verifyAttestation({ envelope, reportBytes, trustedKeys, trustedT
   if (seenReviewIds.has(p.review_id) || seenNonces.has(p.nonce)) reject('REPLAY_DETECTED');
 
   const keyRecord = trustedKeys.get(s.key_id);
-  if (s.algorithm !== 'Ed25519' || !IDENT.test(s.key_id) || !keyRecord ||
+  if (s.algorithm !== 'Ed25519' || typeof s.key_id !== 'string' ||
+      !IDENT.test(s.key_id) || !keyRecord ||
       keyRecord.issuer !== p.issuer || keyRecord.reviewerId !== p.analysis.reviewer_id) reject('UNTRUSTED_SIGNER');
   if (!Buffer.isBuffer(reportBytes)) reject('MISSING_RAW_REPORT');
   sameHash(p.analysis.report_sha256, createHash('sha256').update(reportBytes).digest('hex'), 'REPORT_MISMATCH');
