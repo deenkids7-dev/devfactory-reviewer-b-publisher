@@ -1,5 +1,11 @@
 # Deployment approver separation — zero-secret migration runbook
 
+> **SUPERSEDED — HISTORICAL REFERENCE ONLY (2026-10-10).** The repository
+> transfer to `devfactory-reviewer-trust` and read-only primary membership
+> have already taken place. DO NOT re-run the transfer or follow the steps
+> below. Consult `docs/MIGRATION-VERIFICATION.md` and
+> `docs/PREKEY-READINESS.md` for current verified/reported state.
+
 **Status:** PREPARATION ONLY. No repository transfer, identity change, GitHub
 App key provisioning, required-reviewer change, or protected-branch merge
 is authorized by this document.
