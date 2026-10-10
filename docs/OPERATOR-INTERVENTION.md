@@ -16,26 +16,27 @@ prototype uses synthetic keys and fake diff fixtures only.
   PR #900 (no GitHub API write, no signing key, no review event).
 - CI prohibits production secrets and GitHub write endpoints in prototype code.
 
-## First operator action required: independent environment reviewer
+## Completed operator configuration (reported 2026-10-10)
 
-On `devfactory-reviewer-service/devfactory-reviewer-b-publisher`:
+- Moved the PUBLIC Publisher into `devfactory-reviewer-trust` without changing
+  repository ID or the private DevFactory repository.
+- Added `deenkids7-dev` as organization Member with base Read.
+- GitHub confirmed `deenkids7-dev` has no Publisher push/admin permission.
+- Installed OpenAI ChatGPT Codex Connector for the organization with repository
+  access scoped to Publisher. Authenticated write was successfully tested.
+- Configured `reviewer-b-publish`: `deenkids7-dev` required reviewer,
+  Prevent self-review enabled, administrator bypass disabled, protected
+  branches only. Owner explicitly confirmed saving these settings.
+- Owner confirmed adding both `Verify independent runner` and
+  `Verify fail-closed attestation logic` to protected `main` required
+  checks, with up-to-date checks and no bypass. Direct branch protection
+  detail GET returned HTTP 403 for the connector; this particular fact
+  is based on owner UI and explicit confirmation, not an API-level read.
 
-1. Settings > Environments > `reviewer-b-publish`.
-2. Check Required reviewers; **replace** `devfactory-reviewer-service`
-   with `deenkids7-dev`, **if GitHub permits choosing a public-repo reader
-   without granting collaborator/write privileges**.
-3. Enable `Prevent self-review`. Leave administrator bypass disabled.
-4. Keep Deployment branches as `Protected branches only`.
-5. Save protection rules. Capture the result (no secrets).
-
-If GitHub will not allow a distinct reviewer without adding collaborator
-write rights to the Publisher repository, STOP. Do not add `deenkids7-dev`
-as a write collaborator, because the original MSI OAuth could then modify
-the independent publisher code. Choose another independently controlled
-account with only necessary deployment-review rights or redesign the gate.
-
-This review is an OPERATOR deployment authorization only. It never
-constitutes an independent code review or signed analysis provenance.
+**UNVERIFIED:** no secret-free deployment hold-and-release test has run;
+the protected environment gate must not be represented as proven operational.
+The current trusted branch contains only a smoke test, not a production
+Publisher; reviewer evidence is synthetic.
 
 ## Later human actions — only after a trusted publisher is reviewed
 
