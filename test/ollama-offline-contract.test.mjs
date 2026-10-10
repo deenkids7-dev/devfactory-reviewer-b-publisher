@@ -173,10 +173,10 @@ test('model result rejects a diff that was changed after the GitHub snapshot',()
 });
 
 test('local model refuses large diff even when the generic 128KB plan accepts it',()=>{
- const huge=Buffer.from('diff --git a/src/check.mjs b/src/check.mjs\\n'+
-  'index 1234567..abcdef0 100644\\n--- a/src/check.mjs\\n'+
-  '+++ b/src/check.mjs\\n@@ -1 +1 @@\\n-before()\\n+'+
-  'SYNTHETIC_BIG_DIFF_'.repeat(600)+'\\n');
+ const huge=Buffer.from('diff --git a/src/check.mjs b/src/check.mjs\n'+
+  'index 1234567..abcdef0 100644\n--- a/src/check.mjs\n'+
+  '+++ b/src/check.mjs\n@@ -1 +1 @@\n-before()\n+'+
+  'SYNTHETIC_BIG_DIFF_'.repeat(600)+'\n');
  const bounded=prepareBoundedSemanticReview({
   snapshot:{repository:'deenkids7-dev/deenkids',repository_id:1282086207,
    pr_number:898,head_sha:'a'.repeat(40),base_sha:'b'.repeat(40),
