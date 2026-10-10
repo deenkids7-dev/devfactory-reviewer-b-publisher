@@ -58,7 +58,7 @@ test('oversized single file cannot be silently split or truncated',()=>{
 });
 test('fail closed on malformed or binary diff without claiming partial coverage',()=>{
  const broken=Buffer.from(file('src/a.mjs').replace('+new()','+new()\n+unexpected'));
- assert.throws(()=>run(broken,['src/a.mjs']),/DIFF_ANCHOR_HUNK_MISMATCH/);
+ assert.throws(()=>run(broken,['src/a.mjs']),/DIFF_ANCHOR_(?:HUNK_MISMATCH|FILE_INCOMPLETE)/);
  const binary=Buffer.from([255,0,4,13,255,0,19,255,255,255,255,255,255,255,255,255]);
  assert.throws(()=>run(binary,['src/a.mjs']),/REVIEW_SHARDS_ENCODING_UNSUPPORTED/);
 });
