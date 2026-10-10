@@ -1,7 +1,7 @@
 name: Reviewer B - No-secret environment approval probe
 
 # This is a manual-only proof of GitHub's reviewer gate on PROTECTED main.
-# Never use this file to load secrets, private diffs or external code.
+# No credentials, private diffs or external code may run in this workflow.
 on:
   workflow_dispatch:
 
