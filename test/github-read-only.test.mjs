@@ -12,7 +12,7 @@ const DIFF=Buffer.from(
   '--- a/demo.mjs\n+++ b/demo.mjs\n@@ -1 +1 @@\n-before\n+after\n');
 const metadata=()=>({
   number:898,state:'open',merged_at:null,draft:false,changed_files:1,
-  head:{sha:'a'.repeat(40)},base:{sha:'b'.repeat(40),ref:'master',
+  head:{sha:'a'.repeat(40),repo:{full_name:'deenkids7-dev/deenkids',id:1282086207}},base:{sha:'b'.repeat(40),ref:'master',
     repo:{full_name:'deenkids7-dev/deenkids',id:1282086207}}
 });
 function response(url,body,type,status=200,options={}) {
@@ -72,7 +72,7 @@ test('private token never appears in network exception',async()=>{
   }),e=>e.message==='GITHUB_REQUEST_FAILED'&&!e.message.includes(TOKEN));
 });
 test('PR HEAD moving between reads is rejected',async()=>{
-  const fake=fakeGitHub({after:{...metadata(),head:{sha:'c'.repeat(40)}}});
+  const fake=fakeGitHub({after:{...metadata(),head:{...metadata().head,sha:'c'.repeat(40)}}});
   await assert.rejects(()=>readCurrentGitHubPrSnapshot({
     prNumber:898,installationToken:TOKEN,fetchImpl:fake.fetchImpl
   }),/GITHUB_PR_CHANGED_DURING_READ/);
