@@ -119,3 +119,14 @@ that defensive optional chaining weakened an admin-role comparison. The
 read-only example is now a more realistic *write-to-read permission reduction*;
 model instructions emphasize partial-diff limitations, reproducible paths and
 actual guard semantics. Do not treat this small benchmark as a release gate.
+
+## Shared public-runner 7B versus 14B quality comparison
+
+The same public, no-secret GitHub Actions workflow now runs a bounded
+matrix of Qwen 2.5 Coder 7B and 14B (four fixed synthetic examples each),
+not a second production reviewer, scheduler or service. Each branch validates
+its actual model ID, number of fixtures, and absence of publishing authority.
+This measures only provisional error rates and never claims independent
+reviewer provenance or production safety. A 14B model may exceed runner
+resources or free execution limits; such an outcome is a failed experiment,
+not permission to fall back silently or weaken controls.

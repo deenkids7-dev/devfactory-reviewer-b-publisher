@@ -15,9 +15,17 @@ permissions:
 jobs:
   synthetic-local-ollama:
     if: github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.event.pull_request.head.repo.full_name == github.repository
-    name: Synthetic local Ollama execution - NO secrets or private code
+    name: Synthetic Ollama ${{ matrix.model }} - NO secrets or private code
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - model: qwen2.5-coder:7b
+            cli_arg: ''
+          - model: qwen2.5-coder:14b
+            cli_arg: '--large-synthetic'
     steps:
       - name: Checkout exact PUBLIC PR HEAD without third-party actions
         shell: bash
@@ -57,6 +65,8 @@ jobs:
           OLLAMA_HOST: 127.0.0.1:11434
           OLLAMA_NO_CLOUD: '1'
           OLLAMA_NUM_PARALLEL: '1'
+          BENCHMARK_MODEL: ${{ matrix.model }}
+          BENCHMARK_ARG: ${{ matrix.cli_arg }}
         run: |
           set -euo pipefail
           ollama serve > "$RUNNER_TEMP/ollama-service.log" 2>&1 &
@@ -69,18 +79,27 @@ jobs:
           done
           curl --fail --silent --noproxy '*' \
             "http://127.0.0.1:11434/api/tags" > /dev/null
-          ollama pull qwen2.5-coder:7b > /dev/null
+          case "$BENCHMARK_MODEL" in
+            'qwen2.5-coder:7b'|'qwen2.5-coder:14b') ;;
+            *) exit 1 ;;
+          esac
+          ollama pull "$BENCHMARK_MODEL" > /dev/null
           cd source
-          node bench/ollama-synthetic-benchmark.mjs | tee "$RUNNER_TEMP/synthetic-report.json"
+          if [[ "$BENCHMARK_ARG" == '--large-synthetic' ]]; then
+            node bench/ollama-synthetic-benchmark.mjs --large-synthetic | tee "$RUNNER_TEMP/synthetic-report.json"
+          else
+            test -z "$BENCHMARK_ARG"
+            node bench/ollama-synthetic-benchmark.mjs | tee "$RUNNER_TEMP/synthetic-report.json"
+          fi
           node --input-type=module -e '
             import { readFileSync } from "node:fs";
             const r=JSON.parse(readFileSync(process.argv[1],"utf8"));
             if(r.benchmark!=="synthetic-local-ollama-v1" ||
-              r.model!=="qwen2.5-coder:7b" || r.testsCompleted!==4 ||
+              r.model!==process.argv[2] || r.testsCompleted!==4 ||
               r.seededSemanticBugs!==1 || r.cleanFixtures!==2 ||
               r.approvalAuthorized!==false ||
               r.independentReviewerProvenanceVerified!==false ||
               r.privateSourceReviewed!==false ||
               !Array.isArray(r.cases) || r.cases.length!==4)process.exit(1);
             process.stdout.write("SYNTHETIC_MODEL_EXECUTION_VERIFIED_NOT_INDEPENDENT_REVIEW\n");
-          ' "$RUNNER_TEMP/synthetic-report.json"
+          ' "$RUNNER_TEMP/synthetic-report.json" "$BENCHMARK_MODEL"

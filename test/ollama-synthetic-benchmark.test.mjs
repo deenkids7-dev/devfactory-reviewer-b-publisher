@@ -100,3 +100,18 @@ test('benchmark failures expose only allowlisted codes, never private contents',
  assert.equal(safeBenchmarkErrorCode(new Error('OLLAMA_X secret=123')),
   'UNCLASSIFIED');
 });
+
+test('14B synthetic selection stays bounded, identity-pinned and nonauthorizing',async()=>{
+ const f=mock({model:'qwen2.5-coder:14b'});
+ const x=await runSyntheticLocalOllamaBenchmark({
+   fetchImpl:f.fetchImpl,model:'qwen2.5-coder:14b'
+ });
+ assert.equal(x.model,'qwen2.5-coder:14b');
+ assert.equal(x.testsCompleted,4);
+ assert.equal(x.approvalAuthorized,false);
+ assert.equal(x.modelQualityCertified,false);
+ assert.equal(f.calls.length,4);
+ for(const call of f.calls){
+   assert.equal(JSON.parse(call.config.body).model,'qwen2.5-coder:14b');
+ }
+});

@@ -155,10 +155,13 @@ export async function runSyntheticLocalOllamaBenchmark({
 if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href){
   try {
     if(process.argv.length>3 ||
-      (process.argv[2] && process.argv[2]!=='--small-synthetic'))
+      (process.argv[2] &&
+        !['--small-synthetic','--large-synthetic'].includes(process.argv[2])))
       deny('OLLAMA_BENCHMARK_UNSUPPORTED_ARGUMENT');
     const model=process.argv[2]==='--small-synthetic'?
-      'qwen2.5-coder:1.5b':'qwen2.5-coder:7b';
+      'qwen2.5-coder:1.5b':
+      process.argv[2]==='--large-synthetic'?
+      'qwen2.5-coder:14b':'qwen2.5-coder:7b';
     const summary=await runSyntheticLocalOllamaBenchmark({model});
     process.stdout.write(JSON.stringify(summary)+'\n');
   }catch(error){
