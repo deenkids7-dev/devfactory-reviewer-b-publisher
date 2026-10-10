@@ -1,0 +1,13 @@
+{
+  "name": "devfactory-reviewer-b-attestation-verifier",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Secret-free fail-closed verification foundation; NOT a production Publisher",
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
