@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { inspect } from 'node:util';
 import { canonicalJson } from '../src/canonical.mjs';
 import { validateReviewerFindings } from '../src/findings-contract.mjs';
 
@@ -74,7 +75,22 @@ export function prepareBoundedSemanticReview({snapshot,rawDiffBytes}={}){
     changedPaths:Object.freeze(paths),
     // This object proves neither source provenance nor review independence.
     approvedToSendToModel:false,
-    approvalAuthorized:false
+    approvalAuthorized:false,
+    // Redact accidental JSON serialization and Node debugging output.
+    // Direct .privateDiffText access remains possible ONLY inside a trusted
+    // future reviewer worker; never pass this object to public CI/logs.
+    toJSON(){
+      return {
+        privateDiffText:'[REDACTED]',
+        exactScope:this.exactScope,
+        changedPaths:this.changedPaths,
+        approvedToSendToModel:false,
+        approvalAuthorized:false
+      };
+    },
+    [inspect.custom](){
+      return '[PrivateSemanticReviewPlan: REDACTED]';
+    }
   });
 }
 
