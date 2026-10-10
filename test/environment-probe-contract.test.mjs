@@ -12,7 +12,7 @@ test('no-secret environment gate is manual-only and scoped to protected main',()
   assert.match(raw,/workflow_dispatch\s*:/);
   assert.match(raw,/^permissions:\s*\{\s*\}$/m);
   assert.equal((raw.match(/^permissions\s*:/gm)||[]).length,1);
-  assert.doesNotMatch(raw,/^\s+permissions\s*:/m);
+  assert.doesNotMatch(raw,/^[ \t]+permissions\s*:/m);
   assert.doesNotMatch(raw,/\b[A-Za-z][A-Za-z-]*\s*:\s*write\b/);
   assert.match(raw,/environment:\s*reviewer-b-publish/);
   assert.match(raw,/github\.repository == 'devfactory-reviewer-trust\/devfactory-reviewer-b-publisher'/);
