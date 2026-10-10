@@ -1,0 +1,32 @@
+name: Reviewer B - No-secret environment approval probe
+
+# This is a manual-only proof of GitHub's reviewer gate on PROTECTED main.
+# Never use this file to load secrets, private diffs or external code.
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  protected-environment-proof:
+    name: Verify separate environment approver (NO SECRETS)
+    if: ${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.actor == 'devfactory-reviewer-service' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    environment: reviewer-b-publish
+    steps:
+      - name: Confirm approved isolated context
+        shell: bash
+        env:
+          EXPECT_REPO: ${{ github.repository }}
+          EXPECT_BRANCH: ${{ github.ref }}
+          EXPECT_ACTOR: ${{ github.actor }}
+          EXPECT_EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          test "$EXPECT_REPO" = "devfactory-reviewer-trust/devfactory-reviewer-b-publisher"
+          test "$EXPECT_BRANCH" = "refs/heads/main"
+          test "$EXPECT_ACTOR" = "devfactory-reviewer-service"
+          test "$EXPECT_EVENT" = "workflow_dispatch"
+          test "$RUNNER_ENVIRONMENT" = "github-hosted"
+          echo "NO_SECRETS_APPROVAL_GATE_RELEASED"
