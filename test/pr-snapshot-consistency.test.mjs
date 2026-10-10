@@ -55,6 +55,19 @@ rejects('rejects wrong PR', {
 rejects('rejects wrong base branch', {
   metadataBefore:{...metadata(),base:{...metadata().base,ref:'release'}}
 },'GITHUB_PR_NOT_ELIGIBLE');
+test('target private master is required even though public Publisher uses main',()=>{
+  const pinned=snapshot(fixture());
+  assert.equal(pinned.repository,'deenkids7-dev/deenkids');
+  for(const field of ['metadataBefore','metadataAfter']){
+    const forged={...metadata(),base:{...metadata().base,ref:'main'}};
+    const input=fixture({[field]:forged});
+    assert.throws(()=>snapshot(input),e=>e.message==='GITHUB_PR_NOT_ELIGIBLE');
+  }
+  const both={...metadata(),base:{...metadata().base,ref:'main'}};
+  assert.throws(()=>snapshot(fixture({
+    metadataBefore:both,metadataAfter:both
+  })),e=>e.message==='GITHUB_PR_NOT_ELIGIBLE');
+});
 rejects('rejects diff without a hunk', {
   rawDiff:Buffer.from('diff --git a/f b/f\n--- a/f\n+++ b/f\n')
 },'GITHUB_DIFF_COVERAGE_UNVERIFIED');
