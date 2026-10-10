@@ -24,17 +24,23 @@ function asUtc(value) {
 async function readResponse(response) {
   if (!response?.body?.getReader) deny('APP_AUTH_RESPONSE_UNREADABLE');
   const reader=response.body.getReader();
-  const parts=[];let length=0;
+  const parts=[];let length=0,completed=false;
   try {
     for (;;) {
       const {done,value}=await reader.read();
-      if(done)break;
+      if(done){completed=true;break;}
       if(!(value instanceof Uint8Array))deny('APP_AUTH_RESPONSE_UNREADABLE');
       length+=value.byteLength;
       if(length>MAX_RESPONSE)deny('APP_AUTH_RESPONSE_OVERSIZED');
+      // Own bytes: a custom streaming transport may reuse/mutate its chunks.
       parts.push(Buffer.from(value));
     }
-  } finally {reader.releaseLock();}
+  } finally {
+    try {
+      // Denied or failed reads must release their underlying transport promptly.
+      if(!completed){try{await reader.cancel();}catch{/* retain original error */}}
+    } finally {reader.releaseLock();}
+  }
   return Buffer.concat(parts,length);
 }
 
