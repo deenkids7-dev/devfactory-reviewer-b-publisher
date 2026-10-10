@@ -294,3 +294,13 @@ than Qwen 2.5 Coder or that it will pass. No private data, cloud model, paid
 API, signing credentials or privileged publication are used. Qwen3 Coder 30B
 quantized is about 19 GB and does not fit the standard 16-GB test runner; it
 is not activated by this change.
+
+## Static-audit source-coordinate integrity
+
+The fail-only static security scanner now checks the complete UTF-8 unified
+Git diff against the shared strict added-line parser before emitting any
+finding. This prevents missing lines, forged hunk lengths, duplicate paths,
+non-monotonic hunks or incompatible line numbers from being treated as a
+credible review. Malformed input fails closed with a sanitized error, not a
+false PASS. The static scanner is still not a semantic reviewer or an
+independently authenticated analysis service.

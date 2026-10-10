@@ -11,7 +11,7 @@ function run(text){
 }
 function diff(path,lines){
   return 'diff --git a/'+path+' b/'+path+'\n'+
-    '--- a/'+path+'\n+++ b/'+path+'\n@@ -1 +1,3 @@\n-old\n'+
+    '--- a/'+path+'\n+++ b/'+path+'\n@@ -1 +1,'+lines.length+' @@\n-old\n'+
     lines.map(x=>'+'+x).join('\n')+'\n';
 }
 test('new pull_request_target is a provisional high finding, never approval',()=>{
@@ -86,4 +86,35 @@ test('static audit report paths are private in JSON, spread and inspection',()=>
  first.fill(0);
  assert.ok(result.reportBytes.toString('utf8').includes(secretPath));
  assert.equal(result.approvalAuthorized,false);
+});
+
+test('rejects incomplete, duplicate, forged and overlapping unified hunks before producing a report',()=>{
+ const header='diff --git a/.github/workflows/bad.yml b/.github/workflows/bad.yml\n'+
+  '--- a/.github/workflows/bad.yml\n+++ b/.github/workflows/bad.yml\n';
+ for(const bad of [
+  '@@ -1 +1 @@\n-old\n+permissions: write-all\n+unexpected\n',
+  '@@ -1,2 +1 @@\n-old\n+permissions: write-all\n',
+  '@@ -1 +1 @@\n-old\n+permissions: write-all\n@@ -1 +1 @@\n-old\n+permissions: write-all\n',
+  '@@ -8 +8 @@\n-old\n+permissions: write-all\n@@ -2 +2 @@\n-old\n+permissions: write-all\n'
+ ]){
+   assert.throws(()=>run(header+bad),
+     /STATIC_AUDIT_(?:DIFF_STRUCTURE_INVALID|LINE_COVERAGE_UNVERIFIED)/);
+ }
+});
+test('well-formed multi-file and two-hunk input preserves exact finding line attribution',()=>{
+ const path='.github/workflows/two.yml';
+ const d='diff --git a/'+path+' b/'+path+'\n'+
+  '--- a/'+path+'\n+++ b/'+path+'\n'+
+  '@@ -1 +1 @@\n-old\n+name: safe\n'+
+  '@@ -11 +11 @@\n-safe\n+permissions: write-all\n'+
+  'diff --git a/src/demo.mjs b/src/demo.mjs\n'+
+  '--- a/src/demo.mjs\n+++ b/src/demo.mjs\n'+
+  '@@ -1 +1 @@\n-before\n+after\n';
+ const out=run(d);
+ const f=JSON.parse(out.reportBytes).findings;
+ assert.equal(f.length,1);
+ assert.equal(f[0].path,path);
+ assert.equal(f[0].line,11);
+ assert.equal(out.provisionalState,'FAIL');
+ assert.equal(out.approvalAuthorized,false);
 });

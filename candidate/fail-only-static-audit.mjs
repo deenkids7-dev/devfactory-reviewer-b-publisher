@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { inspect } from 'node:util';
 import { canonicalJson } from '../src/canonical.mjs';
 import { validateReviewerFindings } from '../src/findings-contract.mjs';
+import {deriveAddedLinesFromDiff,isAddedLine} from './diff-added-lines.mjs';
 
 const RUN=/^[A-Za-z0-9_:-]{8,180}$/;
 const PATH=/^(?!\/)(?!.*(?:^|\/)\.{1,2}(?:\/|$))[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/;
@@ -81,6 +82,19 @@ export function runFailOnlyStaticDiffAudit({diffBytes,runId}={}){
   if(paths.length<1||paths.length>100||
      new Set(paths).size!==paths.length||
      findings.length>50)deny('STATIC_AUDIT_SCOPE_UNVERIFIED');
+  // A regex-only scanner used to accept malformed/incomplete hunks, so an
+  // adversarial patch could make the reported line numbers misleading.
+  // Require a fully counted, ordered unified diff before using any finding.
+  let trustedAnchors;
+  try {
+    trustedAnchors=deriveAddedLinesFromDiff({diffBytes});
+  } catch {
+    deny('STATIC_AUDIT_DIFF_STRUCTURE_INVALID');
+  }
+  if(JSON.stringify(Object.keys(trustedAnchors))!==JSON.stringify(paths)||
+    findings.some(f=>!isAddedLine({
+      anchors:trustedAnchors,path:f.path,line:f.line
+    }))) deny('STATIC_AUDIT_LINE_COVERAGE_UNVERIFIED');
   const reportBytes=Buffer.from(canonicalJson({
     schema:'devfactory.reviewer-b.findings.v1',
     run_id:runId,
