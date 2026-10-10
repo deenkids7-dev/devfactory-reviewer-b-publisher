@@ -10,7 +10,7 @@ export function canonicalJson(value) {
     return JSON.stringify(value);
   }
   if (Array.isArray(value)) {
-    return '[' + value.map(canonicalJson).join(',') + ']';
+    return '[' + Array.from(value, canonicalJson).join(',') + ']';
   }
   if (typeof value === 'object' && value !== null && Object.getPrototypeOf(value) === Object.prototype) {
     const keys = Object.keys(value).sort();
