@@ -11,19 +11,31 @@ import { combineReviewerFindings } from '../candidate/combine-findings.mjs';
 // An Ollama server MUST be local to an independently operated test worker.
 const OLLAMA='http://127.0.0.1:11434/api/chat';
 const RUN='synthetic-local-quality-benchmark-001';
-const PATH='.github/workflows/fake-synthetic.yml';
+const WORKFLOW_PATH='.github/workflows/fake-synthetic.yml';
+const AUTH_PATH='src/auth-synthetic.mjs';
 const SHA=value=>createHash('sha256').update(value).digest('hex');
 const FIXTURES=Object.freeze([
-  Object.freeze({label:'static risky trigger',source:'on: [push, pull_request_target]',
-    knownStaticBlocker:true}),
-  Object.freeze({label:'ordinary read-only workflow',source:'contents: read',
-    knownStaticBlocker:false})
+  Object.freeze({label:'static risky trigger',path:WORKFLOW_PATH,
+    before:'name: original',source:'on: [push, pull_request_target]',
+    knownStaticBlocker:true,knownSemanticBug:false}),
+  Object.freeze({label:'ordinary read-only workflow',path:WORKFLOW_PATH,
+    before:'name: original',source:'contents: read',
+    knownStaticBlocker:false,knownSemanticBug:false}),
+  Object.freeze({label:'removed authorization check',path:AUTH_PATH,
+    before:"function isAuthorized(user) { return user?.role === 'admin'; }",
+    source:'function isAuthorized(user) { return true; }',
+    knownStaticBlocker:false,knownSemanticBug:true}),
+  Object.freeze({label:'safe null-checked authorization',path:AUTH_PATH,
+    before:"function isAuthorized(user) { return user.role === 'admin'; }",
+    source:"function isAuthorized(user) { return user?.role === 'admin'; }",
+    knownStaticBlocker:false,knownSemanticBug:false})
 ]);
 function deny(code){throw Error(code);}
-function diff(source) {
-  return Buffer.from('diff --git a/'+PATH+' b/'+PATH+'\n'+
-    'index 1234567..abcdef0 100644\n--- a/'+PATH+'\n'+
-    '+++ b/'+PATH+'\n@@ -1 +1 @@\n-name: original\n+'+source+'\n');
+function diff(fixture) {
+  const path=fixture.path;
+  return Buffer.from('diff --git a/'+path+' b/'+path+'\n'+
+    'index 1234567..abcdef0 100644\n--- a/'+path+'\n'+
+    '+++ b/'+path+'\n@@ -1 +1 @@\n-'+fixture.before+'\n+'+fixture.source+'\n');
 }
 function planFor(bytes) {
   return prepareBoundedSemanticReview({
@@ -67,7 +79,7 @@ export async function runSyntheticLocalOllamaBenchmark({
   if(typeof fetchImpl!=='function')deny('OLLAMA_BENCHMARK_FETCH_MISSING');
   const cases=[];
   for(const fixture of FIXTURES){
-    const bytes=diff(fixture.source);
+    const bytes=diff(fixture);
     const plan=planFor(bytes);
     const candidate=prepareOfflineOllamaCandidate({
       plan,model,maxOutputTokens:model==='qwen2.5-coder:1.5b'?512:2048
@@ -99,15 +111,24 @@ export async function runSyntheticLocalOllamaBenchmark({
       deny('OLLAMA_BENCHMARK_STATIC_FINDING_LOST');
     cases.push(Object.freeze({
       label:fixture.label,seededStaticBlocker:fixture.knownStaticBlocker,
+      seededSemanticBug:fixture.knownSemanticBug,
+      semanticFindingDetected:completion.findingCount>0,
       semanticFindingCount:completion.findingCount,
       combinedBlockingCount:combined.blockingFindings,
       provisionalState:combined.provisionalState,
       approvalAuthorized:false,independenceVerified:false
     }));
   }
+  const semanticBugCases=cases.filter(c=>c.seededSemanticBug);
+  const cleanCases=cases.filter(c=>!c.seededStaticBlocker&&!c.seededSemanticBug);
   return Object.freeze({
     benchmark:'synthetic-local-ollama-v1',
     testsCompleted:cases.length,model,
+    seededSemanticBugs:semanticBugCases.length,
+    seededSemanticBugsDetected:semanticBugCases.filter(c=>c.semanticFindingDetected).length,
+    cleanFixtures:cleanCases.length,
+    cleanFixtureFalseAlerts:cleanCases.filter(c=>c.semanticFindingDetected).length,
+    modelQualityCertified:false,
     cases:Object.freeze(cases),
     independentReviewerProvenanceVerified:false,
     privateSourceReviewed:false,

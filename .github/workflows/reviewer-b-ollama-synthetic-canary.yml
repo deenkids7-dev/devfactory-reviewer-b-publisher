@@ -69,6 +69,18 @@ jobs:
           done
           curl --fail --silent --noproxy '*' \
             "http://127.0.0.1:11434/api/tags" > /dev/null
-          ollama pull qwen2.5-coder:1.5b > /dev/null
+          ollama pull qwen2.5-coder:7b > /dev/null
           cd source
-          node bench/ollama-synthetic-benchmark.mjs --small-synthetic
+          node bench/ollama-synthetic-benchmark.mjs | tee "$RUNNER_TEMP/synthetic-report.json"
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const r=JSON.parse(readFileSync(process.argv[1],"utf8"));
+            if(r.benchmark!=="synthetic-local-ollama-v1" ||
+              r.model!=="qwen2.5-coder:7b" || r.testsCompleted!==4 ||
+              r.seededSemanticBugs!==1 || r.cleanFixtures!==2 ||
+              r.approvalAuthorized!==false ||
+              r.independentReviewerProvenanceVerified!==false ||
+              r.privateSourceReviewed!==false ||
+              !Array.isArray(r.cases) || r.cases.length!==4)process.exit(1);
+            process.stdout.write("SYNTHETIC_MODEL_EXECUTION_VERIFIED_NOT_INDEPENDENT_REVIEW\n");
+          ' "$RUNNER_TEMP/synthetic-report.json"

@@ -31,8 +31,11 @@ function mock(options={}){
 test('free local benchmark runs two FIXED synthetic examples without GitHub or secrets',async()=>{
  const f=mock();
  const result=await runSyntheticLocalOllamaBenchmark({fetchImpl:f.fetchImpl});
- assert.equal(f.calls.length,2);
- assert.equal(result.testsCompleted,2);
+ assert.equal(f.calls.length,4);
+ assert.equal(result.testsCompleted,4);
+ assert.equal(result.seededSemanticBugs,1);
+ assert.equal(result.cleanFixtures,2);
+ assert.equal(result.modelQualityCertified,false);
  assert.equal(result.cases[0].provisionalState,'FAIL');
  assert.equal(result.cases[1].provisionalState,'INCONCLUSIVE');
  assert.equal(result.privateSourceReviewed,false);
@@ -78,7 +81,7 @@ test('optional small public synthetic model is pinned, not a release approval',a
  assert.equal(r.model,'qwen2.5-coder:1.5b');
  assert.equal(r.approvalAuthorized,false);
  assert.equal(r.independentReviewerProvenanceVerified,false);
- assert.equal(f.calls.length,2);
+ assert.equal(f.calls.length,4);
  for(const call of f.calls){
   const req=JSON.parse(call.config.body);
   assert.equal(req.model,'qwen2.5-coder:1.5b');

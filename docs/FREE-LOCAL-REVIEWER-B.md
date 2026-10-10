@@ -60,3 +60,12 @@ receive any credential or private PR diff. Ollama binary is pinned to an
 upstream GitHub release artifact SHA-256. A 1.5B model is NOT a suitable basis
 for automatic security approvals. GH-hosted runner resource availability,
 model registry uptime and execution success still need live verification.
+
+## Quality benchmark upgrade
+
+The first real 1.5B hosted run produced a false alarm on the normal workflow.
+The expanded benchmark now includes a seeded missing-authorization bug and
+a safe null-check change. The public GitHub Actions canary tests 7B and
+reports detection plus false-alarm counts, while explicitly keeping
+modelQualityCertified=false. A complete, valid summary is mandatory for CI;
+no empty/silent process can make this job PASS. No private source is used.
