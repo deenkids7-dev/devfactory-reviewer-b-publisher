@@ -7,7 +7,10 @@ const INSTALLATION_ID=169674558;
 const REPO_ID=1282086207;
 const API='https://api.github.com';
 const TOKEN_URL=`${API}/app/installations/${INSTALLATION_ID}/access_tokens`;
-const PERMISSIONS=Object.freeze({pull_requests:'write'});
+const PERMISSIONS=Object.freeze({
+  publish:Object.freeze({pull_requests:'write'}),
+  reviewRead:Object.freeze({pull_requests:'read',contents:'read'})
+});
 const MAX_RESPONSE=48*1024;
 
 function deny(code) { throw new Error(code); }
@@ -62,15 +65,20 @@ export function createReviewerBAppJwt({privateKeyPem,now=Date.now()}={}) {
 
 /**
  * Only creates a one-hour (or shorter) installation token bound to exact
- * repository ID and Pull requests:write. Does not review/approve/merge PRs.
+ * repository ID and an explicitly requested, downscoped PURPOSE.
+ * 'publish': Pull requests:write, no Contents access.
+ * 'reviewRead': Pull requests:read + Contents:read for immutable compare diff.
+ * No Issues:read is included; canonical HUMAN_GO needs separately approved scope.
+ * Does not review/approve/merge PRs.
  * This function is NOT allowed inside untrusted PR CI or on the MSI.
  * A fetchImpl override exists only for synthetic tests.
  */
 export async function createScopedReviewerBInstallationToken({
-  appJwt,fetchImpl=fetch,now=Date.now()
+  appJwt,fetchImpl=fetch,now=Date.now(),purpose='publish'
 }={}) {
   if(typeof appJwt!=='string'||!/^[-_A-Za-z0-9]+\.[-_A-Za-z0-9]+\.[-_A-Za-z0-9]+$/.test(appJwt)||
-     appJwt.length>6000||!Number.isFinite(now)||typeof fetchImpl!=='function')
+     appJwt.length>6000||!Number.isFinite(now)||typeof fetchImpl!=='function'||
+     !Object.hasOwn(PERMISSIONS,purpose))
     deny('APP_AUTH_INVALID_REQUEST');
   let response;
   try{
@@ -84,7 +92,7 @@ export async function createScopedReviewerBInstallationToken({
         'User-Agent':'devfactory-reviewer-b-scoped-auth'
       },
       body:JSON.stringify({
-        repository_ids:[REPO_ID],permissions:PERMISSIONS
+        repository_ids:[REPO_ID],permissions:PERMISSIONS[purpose]
       })
     });
   }catch{deny('APP_AUTH_API_REQUEST_FAILED');}
@@ -110,13 +118,18 @@ export async function createScopedReviewerBInstallationToken({
      !Array.isArray(parsed.repositories)||parsed.repositories.length!==1||
      parsed.repositories[0]?.id!==REPO_ID||
      parsed.repositories[0]?.full_name!=='deenkids7-dev/deenkids'||
-     parsed.permissions?.pull_requests!=='write'||
-     (parsed.permissions?.contents && parsed.permissions.contents!=='none')||
-     (parsed.permissions?.administration && parsed.permissions.administration!=='none')){
+     !parsed.permissions || typeof parsed.permissions!=='object' ||
+     Array.isArray(parsed.permissions) ||
+     Object.entries(PERMISSIONS[purpose]).some(([name,permission])=>
+       parsed.permissions[name]!==permission) ||
+     Object.entries(parsed.permissions).some(([name,value])=>
+       (name==='metadata'&&value==='read') ? false :
+       PERMISSIONS[purpose][name]===value ? false : true)) {
     deny('APP_AUTH_INSTALLATION_SCOPE_UNVERIFIED');
   }
   return Object.freeze({
     token:parsed.token, expiresAt:parsed.expires_at,
-    repositoryId:REPO_ID,installationId:INSTALLATION_ID
+    repositoryId:REPO_ID,installationId:INSTALLATION_ID,
+    purpose
   });
 }

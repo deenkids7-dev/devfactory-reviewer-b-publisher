@@ -130,3 +130,55 @@ test('missing JWT never calls the network',async()=>{
   }),/APP_AUTH_INVALID_REQUEST/);
   assert.equal(mock.calls.length,0);
 });
+
+test('immutable private compare requires separate Contents:read GitHub App token',async()=>{
+  const mock=fakeTransport({body:{
+    permissions:{contents:'read',pull_requests:'read',metadata:'read'}
+  }});
+  const jwt=createReviewerBAppJwt({privateKeyPem:key,now});
+  const token=await createScopedReviewerBInstallationToken({
+    appJwt:jwt,fetchImpl:mock.fetchImpl,now,purpose:'reviewRead'
+  });
+  assert.equal(token.purpose,'reviewRead');
+  assert.equal(token.repositoryId,1282086207);
+  assert.equal(token.token,TOKEN);
+  assert.deepEqual(JSON.parse(mock.calls[0].config.body),{
+    repository_ids:[1282086207],
+    permissions:{pull_requests:'read',contents:'read'}
+  });
+});
+test('separate read token cannot silently gain PR write or repository write',async()=>{
+  const jwt=createReviewerBAppJwt({privateKeyPem:key,now});
+  for(const permissions of [
+    {contents:'read',pull_requests:'write',metadata:'read'},
+    {contents:'write',pull_requests:'read',metadata:'read'},
+    {contents:'read',pull_requests:'read',issues:'write',metadata:'read'},
+    {contents:'read',pull_requests:'read',administration:'read',metadata:'read'},
+    {contents:'none',pull_requests:'read',metadata:'read'}
+  ]){
+    const mock=fakeTransport({body:{permissions}});
+    await assert.rejects(()=>createScopedReviewerBInstallationToken({
+      appJwt:jwt,fetchImpl:mock.fetchImpl,now,purpose:'reviewRead'
+    }),e=>e.message==='APP_AUTH_INSTALLATION_SCOPE_UNVERIFIED');
+  }
+});
+test('no unknown token purpose may be used to issue a GitHub credential',async()=>{
+  const mock=fakeTransport();
+  await assert.rejects(()=>createScopedReviewerBInstallationToken({
+    appJwt:createReviewerBAppJwt({privateKeyPem:key,now}),
+    fetchImpl:mock.fetchImpl,now,purpose:'issueWrite'
+  }),e=>e.message==='APP_AUTH_INVALID_REQUEST');
+  assert.equal(mock.calls.length,0);
+});
+test('publication token cannot receive Contents:read or Issues:read',async()=>{
+  const jwt=createReviewerBAppJwt({privateKeyPem:key,now});
+  for(const permissions of [
+    {pull_requests:'write',contents:'read',metadata:'read'},
+    {pull_requests:'write',issues:'read',metadata:'read'}
+  ]){
+    const mock=fakeTransport({body:{permissions}});
+    await assert.rejects(()=>createScopedReviewerBInstallationToken({
+      appJwt:jwt,fetchImpl:mock.fetchImpl,now,purpose:'publish'
+    }),e=>e.message==='APP_AUTH_INSTALLATION_SCOPE_UNVERIFIED');
+  }
+});
