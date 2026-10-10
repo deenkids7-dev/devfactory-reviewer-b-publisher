@@ -31,7 +31,7 @@ test('no workflow has access to private App secrets, write token or privileged t
     // GitHub job-level permissions can OVERRIDE a safe workflow-level block.
     // Permit exactly one root permissions mapping; reject ANY nested one.
     assert.equal((contents.match(/^permissions\s*:/gm)||[]).length,1);
-    assert.doesNotMatch(contents,/^\s+permissions\s*:/m);
+    assert.doesNotMatch(contents,/^[ \t]+permissions\s*:/m);
     assert.doesNotMatch(contents,/\b[A-Za-z][A-Za-z-]*\s*:\s*write\b/);
     assert.doesNotMatch(contents,/\bpermissions\s*:\s*write-all\b/);
     if(filename==='reviewer-b-environment-hold-probe.yml'){
