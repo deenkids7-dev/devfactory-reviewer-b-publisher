@@ -32,6 +32,7 @@ test('rejects malleable base64 pad bits even when signature bytes match', () => 
   assert.ok(Buffer.from(altered,'base64').equals(Buffer.from(signature,'base64')));
   const trustedKeys = new Map([['fixture', {
     publicKeyPem:pair.publicKey.export({format:'pem',type:'spki'}),
+    spkiSha256:createHash('sha256').update(pair.publicKey.export({format:'der',type:'spki'})).digest('hex'),
     issuer:'fixture-isolated', reviewerId:'fixture-reviewer'
   }]]);
   const context = {
