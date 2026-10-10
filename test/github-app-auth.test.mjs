@@ -191,3 +191,41 @@ test('publication token cannot receive Contents:read or Issues:read',async()=>{
     }),e=>e.message==='APP_AUTH_INSTALLATION_SCOPE_UNVERIFIED');
   }
 });
+
+test('future canonical HUMAN_GO reader can request Issues:read ONLY',async()=>{
+ const jwt=createReviewerBAppJwt({privateKeyPem:key,now});
+ const mock=fakeTransport({body:{
+   permissions:{issues:'read',metadata:'read'}
+ }});
+ const token=await createScopedReviewerBInstallationToken({
+   appJwt:jwt,fetchImpl:mock.fetchImpl,now,purpose:'humanGoRead'
+ });
+ assert.equal(token.purpose,'humanGoRead');
+ assert.equal(token.repositoryId,1282086207);
+ assert.deepEqual(JSON.parse(mock.calls[0].config.body),{
+   repository_ids:[1282086207],permissions:{issues:'read'}
+ });
+});
+test('HUMAN_GO token refuses escalation to PR write, Contents read or Issues write',async()=>{
+ const jwt=createReviewerBAppJwt({privateKeyPem:key,now});
+ for(const permissions of [
+   {issues:'read',pull_requests:'write',metadata:'read'},
+   {issues:'read',contents:'read',metadata:'read'},
+   {issues:'write',metadata:'read'},
+   {issues:'read',administration:'read',metadata:'read'}
+ ]){
+   const mock=fakeTransport({body:{permissions}});
+   await assert.rejects(()=>createScopedReviewerBInstallationToken({
+     appJwt:jwt,fetchImpl:mock.fetchImpl,now,purpose:'humanGoRead'
+   }),/APP_AUTH_INSTALLATION_SCOPE_UNVERIFIED/);
+ }
+});
+test('a publish token cannot silently gain HUMAN_GO Issues read',async()=>{
+ const jwt=createReviewerBAppJwt({privateKeyPem:key,now});
+ const mock=fakeTransport({body:{
+   permissions:{pull_requests:'write',issues:'read',metadata:'read'}
+ }});
+ await assert.rejects(()=>createScopedReviewerBInstallationToken({
+   appJwt:jwt,fetchImpl:mock.fetchImpl,now,purpose:'publish'
+ }),/APP_AUTH_INSTALLATION_SCOPE_UNVERIFIED/);
+});

@@ -71,3 +71,17 @@ new GitHub App permissions, secrets or merges have been activated.
 Official GitHub permissions reference:
 https://docs.github.com/en/rest/issues/issues
 https://docs.github.com/en/rest/issues/comments
+
+## Minimum-permission token contract prepared, not activated
+
+The dormant GitHub App token factory now supports an explicit third purpose,
+`humanGoRead`, requesting ONLY `Issues:read` on repository ID 1282086207.
+Unit tests reject privilege escalation to Contents:read, Pull requests:write,
+Issues:write or Administration access. The `publish` and `reviewRead`
+tokens retain their existing isolated permission sets.
+
+**No live Issue API access has occurred.** The historical App installation
+may not have Issues:read yet; granting that permission requires independent
+security review and explicit operator approval in the existing GitHub App
+settings. Token construction alone is NOT HUMAN_GO verification, and this
+module remains unused by untrusted public CI and on the MSI.

@@ -9,7 +9,8 @@ const API='https://api.github.com';
 const TOKEN_URL=`${API}/app/installations/${INSTALLATION_ID}/access_tokens`;
 const PERMISSIONS=Object.freeze({
   publish:Object.freeze({pull_requests:'write'}),
-  reviewRead:Object.freeze({pull_requests:'read',contents:'read'})
+  reviewRead:Object.freeze({pull_requests:'read',contents:'read'}),
+  humanGoRead:Object.freeze({issues:'read'})
 });
 const MAX_RESPONSE=48*1024;
 
@@ -68,7 +69,8 @@ export function createReviewerBAppJwt({privateKeyPem,now=Date.now()}={}) {
  * repository ID and an explicitly requested, downscoped PURPOSE.
  * 'publish': Pull requests:write, no Contents access.
  * 'reviewRead': Pull requests:read + Contents:read for immutable compare diff.
- * No Issues:read is included; canonical HUMAN_GO needs separately approved scope.
+ * 'humanGoRead': Issues:read ONLY, pending explicit operator permission
+ * change. Never grants Issues:write or reuses the publish token.
  * Does not review/approve/merge PRs.
  * This function is NOT allowed inside untrusted PR CI or on the MSI.
  * A fetchImpl override exists only for synthetic tests.
