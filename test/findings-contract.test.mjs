@@ -80,5 +80,5 @@ denies('rejects path with a dot component',
   report({findings:[{...finding(),path:'src/./compute.mjs'}]}),
   'REVIEW_FINDING_INVALID');
 denies('rejects multiline control characters in findings',
-  report({findings:[{...finding(),message:'hello\\nworld'}]}),
+  report({findings:[{...finding(),message:'hello\nworld'}]}),
   'REVIEW_FINDING_INVALID');
