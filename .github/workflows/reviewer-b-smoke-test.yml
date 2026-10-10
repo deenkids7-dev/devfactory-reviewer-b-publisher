@@ -23,7 +23,7 @@ jobs:
           set -euo pipefail
 
           test "$RUNNER_ENVIRONMENT" = "github-hosted"
-          test "$GITHUB_REPOSITORY" = "devfactory-reviewer-service/devfactory-reviewer-b-publisher"
+          test "$GITHUB_REPOSITORY" = "devfactory-reviewer-trust/devfactory-reviewer-b-publisher"
 
           echo "GitHub-hosted runner confirmed"
           echo "Repository identity confirmed"
