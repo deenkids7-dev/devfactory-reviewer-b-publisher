@@ -11,6 +11,7 @@ const B64URL = /^[a-zA-Z0-9_-]+$/;
 const NONCE = /^[0-9a-f]{32,128}$/;
 const RUN = /^[A-Za-z0-9_:-]{8,180}$/;
 const PROVENANCE = /^[A-Za-z0-9_:/.-]{8,240}$/;
+const ISO_UTC = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/;
 
 function deny(code) { throw new Error(code); }
 function digest(buffer) { return createHash('sha256').update(buffer).digest('hex'); }
@@ -41,11 +42,13 @@ export function nativePayloadBytes(payload) {
       !RUN.test(payload.reviewer_run_id) ||
       !PROVENANCE.test(payload.provenance_ref) ||
       typeof payload.completed_at!=='string' ||
-      !Number.isFinite(Date.parse(payload.completed_at))) {
+      !ISO_UTC.test(payload.completed_at) ||
+      !Number.isFinite(Date.parse(payload.completed_at)) ||
+      new Date(Date.parse(payload.completed_at)).toISOString().replace('.000Z','Z')!==payload.completed_at) {
     deny('NATIVE_INVALID_PAYLOAD');
   }
   return Buffer.from(JSON.stringify(Object.fromEntries(
-    Object.entries(payload).sort(([a],[b])=>a.localeCompare(b,'en'))
+    Object.entries(payload).sort(([a],[b])=>a<b?-1:a>b?1:0)
   )),'utf8');
 }
 
