@@ -39,7 +39,7 @@ export function signNativeMarkerOnly({
     deny('NATIVE_SIGNER_FINGERPRINT_MISMATCH');
   if(spkiSha256===pinnedAppSpkiSha256)
     deny('NATIVE_SIGNER_REUSES_APP_JWT_KEY');
-  const canonical=nativePayloadBytes(payload);
+  // Only signed FAIL fixtures are permitted until external provenance + HUMAN_GO exist.\n  if(payload?.verdict!=='FAIL')deny('NATIVE_SIGNER_PASS_NOT_AUTHORIZED');\n  const canonical=nativePayloadBytes(payload);
   const signatureBase64Url=sign('RSA-SHA256',canonical,key).toString('base64url');
   const wire=formatNativeReviewFixture({
     payload,reportText,signatureBase64Url,
