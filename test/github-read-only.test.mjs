@@ -69,7 +69,7 @@ test('private token never appears in network exception',async()=>{
   const {fetchImpl}=fakeGitHub({abort:true});
   await assert.rejects(()=>readCurrentGitHubPrSnapshot({
     prNumber:898,installationToken:TOKEN,fetchImpl
-  }),e=>e.message==='GITHUB_READ_FAILED'&&!e.message.includes(TOKEN));
+  }),e=>e.message==='GITHUB_REQUEST_FAILED'&&!e.message.includes(TOKEN));
 });
 test('PR HEAD moving between reads is rejected',async()=>{
   const fake=fakeGitHub({after:{...metadata(),head:{sha:'c'.repeat(40)}}});
