@@ -103,7 +103,8 @@ function checkDiffCoverage(text, expectedCount) {
 
 function extractMetadata(document, requestedPr) {
   if (!isObject(document) || !isObject(document.head) ||
-      !isObject(document.base) || !isObject(document.base.repo)) {
+      !isObject(document.base) || !isObject(document.base.repo) ||
+      !isObject(document.head.repo)) {
     deny('INVALID_GITHUB_PR_METADATA');
   }
   if (!Number.isSafeInteger(requestedPr) || requestedPr < 1 ||
@@ -112,6 +113,8 @@ function extractMetadata(document, requestedPr) {
       document.base.ref !== 'master' ||
       document.base.repo.full_name !== REPO ||
       document.base.repo.id !== REPO_ID ||
+      document.head.repo.full_name !== REPO ||
+      document.head.repo.id !== REPO_ID ||
       !SHA40.test(document.head.sha) || !SHA40.test(document.base.sha) ||
       !Number.isSafeInteger(document.changed_files) ||
       document.changed_files < 1 || document.changed_files > MAX_CHANGED_FILES) {
