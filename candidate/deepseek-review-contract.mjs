@@ -19,7 +19,7 @@ function hasOnly(object, keys) {
     JSON.stringify(Object.keys(object).sort()) === JSON.stringify([...keys].sort());
 }
 function secretFreeSummary(plan, model, maxOutputTokens, worstCaseUsd) {
-  return Object.freeze({
+  return {
     provider:'DeepSeek', model, endpoint:API,
     repository:plan.exactScope.repository,
     prNumber:plan.exactScope.prNumber,
@@ -36,7 +36,7 @@ function secretFreeSummary(plan, model, maxOutputTokens, worstCaseUsd) {
     independentExecutionVerified:false,
     requestAuthorized:false,
     approvalAuthorized:false
-  });
+  };
 }
 /**
  * Prepare ONE model choice: never silently upgrade or route to another model.
@@ -128,7 +128,7 @@ export function prepareDeepSeekCandidate({
       value:()=> '[DeepSeekReviewCandidate: PRIVATE REQUEST REDACTED; NOT AUTHORIZED]'
     }
   });
-  return summary;
+  return Object.freeze(summary);
 }
 /**
  * Strict structural filter for an UNTRUSTED provider completion.
