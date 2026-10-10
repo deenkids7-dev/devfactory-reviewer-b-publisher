@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, generateKeyPairSync } from 'node:crypto';
 import { runFailOnlyStaticDiffAudit } from '../candidate/fail-only-static-audit.mjs';
-import {
-  prepareBoundedSemanticReview, normalizeUntrustedModelFindings
-} from '../candidate/semantic-review-request.mjs';
-import { prepareDeepSeekCandidate } from '../candidate/deepseek-review-contract.mjs';
+import { prepareBoundedSemanticReview }
+  from '../candidate/semantic-review-request.mjs';
+import { prepareDeepSeekCandidate, validateDeepSeekCandidateCompletion }
+  from '../candidate/deepseek-review-contract.mjs';
 import { combineReviewerFindings } from '../candidate/combine-findings.mjs';
 import { signAnalyzerAttestationFixture }
   from '../candidate/analyzer-attestation-sign.mjs';
@@ -35,15 +35,23 @@ function staged(isDangerous=false) {
   const staticResult=runFailOnlyStaticDiffAudit({diffBytes:diff,runId});
   const plan=prepareBoundedSemanticReview({snapshot:target,rawDiffBytes:diff});
   const modelCandidate=prepareDeepSeekCandidate({plan,inputTokenCeiling:10000});
-  const semantic=normalizeUntrustedModelFindings({
-    rawModelOutput:JSON.stringify({
-      summary:'Synthetic LLM found no additional issues',findings:[]
-    }),
-    runId,trustedChangedPaths:plan.changedPaths
+  // Simulated response only; no network call or real reviewer identity.
+  const semantic=validateDeepSeekCandidateCompletion({
+    response:{
+      model:'deepseek-flash',
+      choices:[{index:0,finish_reason:'stop',
+        message:{role:'assistant',content:JSON.stringify({
+          summary:'Synthetic LLM found no additional issues',findings:[]
+        })}}],
+      usage:{prompt_tokens:6000,completion_tokens:256}
+    },
+    expectedModel:'deepseek-flash',runId,
+    trustedChangedPaths:plan.changedPaths,
+    observedInputTokenCeiling:10000,observedOutputTokenCeiling:2048
   });
   const combined=combineReviewerFindings({
     staticReportBytes:staticResult.reportBytes,
-    semanticReportBytes:semantic.reportBytes,
+    semanticReportBytes:semantic.privateCanonicalReportBytes,
     changedPaths:plan.changedPaths
   });
   const signed=signAnalyzerAttestationFixture({
@@ -56,7 +64,7 @@ function staged(isDangerous=false) {
     issuedAt:'2026-10-10T08:00:00Z',
     expiresAt:'2026-10-10T08:10:00Z',now
   });
-  return {target,staticResult,modelCandidate,combined,signed,paths:plan.changedPaths};
+  return {target,staticResult,modelCandidate,semantic,combined,signed,paths:plan.changedPaths};
 }
 function validate(d) {
   return verifyReviewEvidence({
@@ -76,6 +84,9 @@ test('offline security blocker survives clean model output and signed attestatio
   assert.equal(d.combined.blockingFindings,1);
   assert.equal(d.signed.signedDisposition,'FAIL');
   assert.equal(d.modelCandidate.requestAuthorized,false);
+  assert.equal(d.semantic.approvalAuthorized,false);
+  assert.equal(d.semantic.provisionalState,'INCONCLUSIVE');
+
   const result=validate(d);
   assert.equal(result.provisionalState,'FAIL');
   assert.equal(result.signatureVerified,true);
