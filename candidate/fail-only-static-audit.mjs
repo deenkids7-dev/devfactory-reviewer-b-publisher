@@ -61,7 +61,8 @@ export function runFailOnlyStaticDiffAudit({diffBytes,runId}={}){
             fingerprint:hash(`${rule.id}| ${currentPath}:${newLine}|${added}`),
             severity:rule.severity,path:currentPath,line:newLine,
             message:rule.message,
-            evidence:added.slice(0,240)
+            // Never echo private source text into findings, logs or public artifacts.
+            evidence:`Static rule ${rule.id} matched newly added line ${newLine}`
           });
         }
       }
