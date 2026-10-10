@@ -89,6 +89,27 @@ a separately authorized, independently security-reviewed merge places
 it on protected `main` and an operator explicitly releases the held
 deployment. All PR CI remains secret-free.
 
+## Low-cost in-house semantic Reviewer B (candidate, no API usage)
+
+- `candidate/deepseek-review-contract.mjs`: deterministic review-request
+  format for the current `deepseek-flash` API model (optional manual
+  `deepseek-v4-pro` choice), no networking, keys, billing or private source
+  disclosure. No automatic model routing or retry manager.
+- Model findings are normalized by trusted code; model-authored fingerprints,
+  PASS decisions and approval claims are rejected.
+- Real model-usage ceilings and input-token context are mandatory before a
+  response can be accepted, but pricing/token accounting are not yet
+  independently proven. The code cannot authorize spending.
+- `test/end-to-end-offline-review.test.mjs`: exercises fake Git diffs,
+  fail-only static analysis, synthetic model findings, combination, Ed25519
+  signing and verification. A clean result is INCONCLUSIVE, never PASS.
+- `docs/DEEPSEEK-LOW-COST-OPERATIONS.md`: current pricing, privacy and
+  independent-runtime operator plan.
+
+**NO REAL MODEL CALL, EXTERNAL PRIVATE-CODE TRANSFER OR PAID RESOURCE IS
+ENABLED.** API credentials and actual independent execution remain blocked
+until distinct security reviews, operator consent and provenance proof.
+
 See `docs/PREKEY-READINESS.md` for the required manual gate, separate
 private-key roles, and outstanding provenance, model and publication work.
 Do not create or provision real keys until those gates are closed.

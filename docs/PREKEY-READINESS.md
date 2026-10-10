@@ -59,6 +59,10 @@ synthetic until the independently witnessed runtime is implemented.
 - [x] Fail-only static analysis; reports never contain raw added code lines.
 - [x] Model-output schema normalization: a "no findings" response is
       INCONCLUSIVE, never automatically PASS.
+- [x] DeepSeek Flash pure request/response budget and schema candidate,
+      synthetic model provenance, deterministic model-finding fingerprints
+      and full offline signing/test rehearsal. NO live API call.
+
 - [x] Ed25519 and RSA formatting/verification using synthetic keys.
 - [x] GitHub App JWT and downscoped installation-token request **simulation**.
 - [x] GitHub native reviews GET + duplicate reviewer protections (synthetic).
