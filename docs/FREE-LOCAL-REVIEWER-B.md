@@ -49,3 +49,14 @@ server is bound to loopback, not a public interface.
 The candidate now requests a fixed `num_ctx: 8192` and a restrictive JSON
 schema, but **tokenization and absence of input truncation are not yet
 independently proved**. Never interpret a zero-findings response as PASS.
+
+## No-secret GitHub-hosted public canary
+
+A dedicated experimental workflow on PR #2 can run the SMALL 1.5B model in
+a free standard public GitHub-hosted Ubuntu runner. It uses the same benchmark
+code on SYNTHETIC source only. This is NOT a security approval, is NOT connected
+to the private DevFactory repository, does not post PR reviews, and must never
+receive any credential or private PR diff. Ollama binary is pinned to an
+upstream GitHub release artifact SHA-256. A 1.5B model is NOT a suitable basis
+for automatic security approvals. GH-hosted runner resource availability,
+model registry uptime and execution success still need live verification.

@@ -61,13 +61,17 @@ async function boundedJson(response) {
  * Actually invokes a LOCAL model, but ONLY with synthetic public-safe samples.
  * Uses existing fail-closed review modules; NEVER grants independence or PASS.
  */
-export async function runSyntheticLocalOllamaBenchmark({fetchImpl=fetch}={}) {
+export async function runSyntheticLocalOllamaBenchmark({
+  fetchImpl=fetch,model='qwen2.5-coder:7b'
+}={}) {
   if(typeof fetchImpl!=='function')deny('OLLAMA_BENCHMARK_FETCH_MISSING');
   const cases=[];
   for(const fixture of FIXTURES){
     const bytes=diff(fixture.source);
     const plan=planFor(bytes);
-    const candidate=prepareOfflineOllamaCandidate({plan});
+    const candidate=prepareOfflineOllamaCandidate({
+      plan,model,maxOutputTokens:model==='qwen2.5-coder:1.5b'?512:2048
+    });
     const staticAudit=runFailOnlyStaticDiffAudit({diffBytes:bytes,runId:RUN});
     if((staticAudit.blockingFindings>0)!==fixture.knownStaticBlocker)
       deny('OLLAMA_BENCHMARK_STATIC_ORACLE_FAILED');
@@ -103,7 +107,7 @@ export async function runSyntheticLocalOllamaBenchmark({fetchImpl=fetch}={}) {
   }
   return Object.freeze({
     benchmark:'synthetic-local-ollama-v1',
-    testsCompleted:cases.length,model:'qwen2.5-coder:7b',
+    testsCompleted:cases.length,model,
     cases:Object.freeze(cases),
     independentReviewerProvenanceVerified:false,
     privateSourceReviewed:false,
@@ -113,7 +117,12 @@ export async function runSyntheticLocalOllamaBenchmark({fetchImpl=fetch}={}) {
 // This explicit, operator-run CLI only outputs aggregate synthetic metrics.
 if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href){
   try {
-    const summary=await runSyntheticLocalOllamaBenchmark();
+    if(process.argv.length>3 ||
+      (process.argv[2] && process.argv[2]!=='--small-synthetic'))
+      deny('OLLAMA_BENCHMARK_UNSUPPORTED_ARGUMENT');
+    const model=process.argv[2]==='--small-synthetic'?
+      'qwen2.5-coder:1.5b':'qwen2.5-coder:7b';
+    const summary=await runSyntheticLocalOllamaBenchmark({model});
     process.stdout.write(JSON.stringify(summary)+'\n');
   }catch{
     process.stderr.write('LOCAL_SYNTHETIC_BENCHMARK_BLOCKED\n');

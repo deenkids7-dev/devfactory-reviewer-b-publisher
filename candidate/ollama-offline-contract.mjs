@@ -5,7 +5,7 @@ import { normalizeUntrustedModelFindings } from './semantic-review-request.mjs';
 
 // Dormant, pure Ollama adapter. No network, no tokens, no inference and no POST.
 // Inspired by MIT-licensed The-PR-Agent/pr-agent, without copying its source.
-const MODELS=Object.freeze(['qwen2.5-coder:7b','qwen2.5-coder:14b']);
+const MODELS=Object.freeze(['qwen2.5-coder:1.5b','qwen2.5-coder:7b','qwen2.5-coder:14b']);
 const SHA40=/^[0-9a-f]{40}$/, HASH=/^[0-9a-f]{64}$/;
 const RUN=/^[A-Za-z0-9_:-]{8,180}$/;
 // Ollama supports strict JSON-schema structured output on /api/chat.

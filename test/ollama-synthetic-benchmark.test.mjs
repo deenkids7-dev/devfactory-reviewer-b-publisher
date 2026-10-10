@@ -69,3 +69,19 @@ test('local model unavailable fails closed without exposing request contents',as
  );
  assert.equal(f.calls.length,1);
 });
+
+test('optional small public synthetic model is pinned, not a release approval',async()=>{
+ const f=mock({model:'qwen2.5-coder:1.5b'});
+ const r=await runSyntheticLocalOllamaBenchmark({
+  fetchImpl:f.fetchImpl,model:'qwen2.5-coder:1.5b'
+ });
+ assert.equal(r.model,'qwen2.5-coder:1.5b');
+ assert.equal(r.approvalAuthorized,false);
+ assert.equal(r.independentReviewerProvenanceVerified,false);
+ assert.equal(f.calls.length,2);
+ for(const call of f.calls){
+  const req=JSON.parse(call.config.body);
+  assert.equal(req.model,'qwen2.5-coder:1.5b');
+  assert.equal(req.options.num_predict,512);
+ }
+});
