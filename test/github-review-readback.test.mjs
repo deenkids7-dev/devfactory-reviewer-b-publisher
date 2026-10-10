@@ -167,6 +167,19 @@ test('null review bodies are safe but never authorize approval; malformed bodies
   }
 });
 
+test('native GitHub submitted_at is restricted to a string or empty value',async()=>{
+  for(const submitted_at of [{epoch:1},['2026-10-10T12:00:00Z'],12,true,false]){
+    const fake=mock([[review(51,{submitted_at})]]);
+    await assert.rejects(()=>readNativeReviews(context(fake.fetchImpl)),
+      /REVIEWS_ITEM_UNTRUSTED/);
+  }
+  for(const submitted_at of [null,undefined]){
+    const fake=mock([[review(52,{state:'PENDING',submitted_at})]]);
+    const out=await readNativeReviews(context(fake.fetchImpl));
+    assert.equal(out.reviews[0].submitted_at,null);
+    assert.equal(out.approvalAuthorized,false);
+  }
+});
 test('cancels oversized GitHub review body stream before failing closed',async()=>{
  let cancelled=0;
  const fetchImpl=async target=>{
