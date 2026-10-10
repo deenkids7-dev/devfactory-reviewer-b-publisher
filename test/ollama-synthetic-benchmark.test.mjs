@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { runSyntheticLocalOllamaBenchmark,safeBenchmarkErrorCode }
+import { runSyntheticLocalOllamaBenchmark,safeBenchmarkErrorCode,evaluateSyntheticReviewQuality }
   from '../bench/ollama-synthetic-benchmark.mjs';
 
 const ENDPOINT='http://127.0.0.1:11434/api/chat';
@@ -150,4 +150,31 @@ test('model does not earn a detected-bug score for a backwards or generic explan
  assert.equal(negative.semanticOracleHit,false);
  assert.equal(r.modelQualityCertified,false);
  assert.equal(r.approvalAuthorized,false);
+});
+
+test('synthetic quality gate refuses false alerts and missed regressions',()=>{
+ const standard={
+  seededSemanticBugs:4,seededSemanticBugsDetected:4,
+  cleanFixtures:4,cleanFixtureFalseAlerts:0,cleanFixtureBlockingFalseAlerts:0
+ };
+ const ok=evaluateSyntheticReviewQuality(standard);
+ assert.equal(ok.syntheticQualityGatePassed,true);
+ assert.equal(ok.modelQualityCertified,false);
+ assert.equal(ok.approvalAuthorized,false);
+ const missed=evaluateSyntheticReviewQuality({...standard,seededSemanticBugsDetected:3});
+ assert.equal(missed.syntheticQualityGatePassed,false);
+ assert.ok(missed.blockers.includes('MISSED_SEEDED_SEMANTIC_DEFECT'));
+ const noisy=evaluateSyntheticReviewQuality({...standard,cleanFixtureFalseAlerts:2,
+  cleanFixtureBlockingFalseAlerts:1});
+ assert.equal(noisy.syntheticQualityGatePassed,false);
+ assert.ok(noisy.blockers.includes('FALSE_ALERT_ON_SAFE_CHANGE'));
+ assert.ok(noisy.blockers.includes('FALSE_BLOCKER_ON_SAFE_CHANGE'));
+ assert.throws(()=>evaluateSyntheticReviewQuality({...standard,
+  cleanFixtureBlockingFalseAlerts:1}),/OLLAMA_SYNTHETIC_QUALITY_METRICS_INVALID/);
+});
+test('hosted synthetic workflow cannot report PASS on poor inference quality',()=>{
+ const y=readFileSync(new URL('../.github/workflows/reviewer-b-ollama-synthetic-canary.yml',
+  import.meta.url),'utf8');
+ assert.match(y,/r\.syntheticQualityGatePassed!==true/);
+ assert.match(y,/MODEL_QUALITY_GATE_FAILED_NOT_PRODUCTION_READY/);
 });

@@ -64,6 +64,38 @@ export function safeBenchmarkErrorCode(error){
     /^(?:OLLAMA|REVIEW|SEMANTIC|STATIC|COMBINED)_[A-Z0-9_]{3,80}$/.test(message)?
     message:'UNCLASSIFIED';
 }
+/**
+ * Synthetic-only, deliberately STRICT readiness check. This never authorizes
+ * private-source processing, real review publication, model independence or
+ * a merge. No alert on safe diffs and all seeded bugs correctly described.
+ */
+export function evaluateSyntheticReviewQuality({
+  seededSemanticBugs,seededSemanticBugsDetected,cleanFixtures,
+  cleanFixtureFalseAlerts,cleanFixtureBlockingFalseAlerts
+}={}){
+  const fields=[seededSemanticBugs,seededSemanticBugsDetected,cleanFixtures,
+    cleanFixtureFalseAlerts,cleanFixtureBlockingFalseAlerts];
+  if(fields.some(n=>!Number.isSafeInteger(n)||n<0)||
+     seededSemanticBugs!==4||cleanFixtures!==4||
+     seededSemanticBugsDetected>seededSemanticBugs||
+     cleanFixtureFalseAlerts>cleanFixtures||
+     cleanFixtureBlockingFalseAlerts>cleanFixtureFalseAlerts)
+    deny('OLLAMA_SYNTHETIC_QUALITY_METRICS_INVALID');
+  const blockers=[];
+  if(seededSemanticBugsDetected!==seededSemanticBugs)
+    blockers.push('MISSED_SEEDED_SEMANTIC_DEFECT');
+  if(cleanFixtureFalseAlerts!==0)
+    blockers.push('FALSE_ALERT_ON_SAFE_CHANGE');
+  if(cleanFixtureBlockingFalseAlerts!==0)
+    blockers.push('FALSE_BLOCKER_ON_SAFE_CHANGE');
+  return Object.freeze({
+    syntheticQualityGatePassed:blockers.length===0,
+    blockers:Object.freeze(blockers),
+    modelQualityCertified:false,independentReviewerProvenanceVerified:false,
+    approvalAuthorized:false,publishEvent:null
+  });
+}
+
 function diff(fixture) {
   const path=fixture.path;
   return Buffer.from('diff --git a/'+path+' b/'+path+'\n'+
@@ -172,8 +204,17 @@ export async function runSyntheticLocalOllamaBenchmark({
   }
   const semanticBugCases=cases.filter(c=>c.seededSemanticBug);
   const cleanCases=cases.filter(c=>!c.seededStaticBlocker&&!c.seededSemanticBug);
+  const quality=evaluateSyntheticReviewQuality({
+    seededSemanticBugs:semanticBugCases.length,
+    seededSemanticBugsDetected:semanticBugCases.filter(c=>c.semanticOracleHit).length,
+    cleanFixtures:cleanCases.length,
+    cleanFixtureFalseAlerts:cleanCases.filter(c=>c.semanticFindingDetected).length,
+    cleanFixtureBlockingFalseAlerts:cleanCases.filter(c=>c.combinedBlockingCount>0).length
+  });
   return Object.freeze({
     benchmark:'synthetic-local-ollama-v1',
+    qualityGate:quality,
+    syntheticQualityGatePassed:quality.syntheticQualityGatePassed,
     testsCompleted:cases.length,model,
     seededSemanticBugs:semanticBugCases.length,
     seededSemanticBugsDetected:semanticBugCases.filter(c=>c.semanticOracleHit).length,

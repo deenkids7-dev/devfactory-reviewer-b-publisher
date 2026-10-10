@@ -231,3 +231,15 @@ provenance; `modelContextCompletenessVerified` remains `false` until an
 independently instrumented runner can verify the supplied input was used
 intact. Large PRs will require an independently reviewed deterministic
 chunking and coverage protocol before any production review.
+
+## Free-model quality gate before production (2026-10-10)
+
+Previous model benchmark jobs only checked that ten model responses existed,
+NOT that they correctly described every seeded bug with zero safe-case alerts.
+The opt-in synthetic CI now marks its model job FAIL if *any* of four seeded
+semantic defects lack a directionally correct finding or *any* of four safe
+changes elicits an alert. It also rejects invalid metric counts. This is
+intentionally stringent: a red benchmark is better than declaring an unsafe
+model ready. Even a fully green synthetic benchmark would not prove real-world
+model accuracy, independently authenticated execution, or authorized review.
+No private source enters this free CI; run only by explicit benchmark label.

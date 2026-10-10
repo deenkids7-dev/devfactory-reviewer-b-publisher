@@ -95,13 +95,19 @@ jobs:
           node --input-type=module -e '
             import { readFileSync } from "node:fs";
             const r=JSON.parse(readFileSync(process.argv[1],"utf8"));
+            if(r.syntheticQualityGatePassed===false)
+              throw Error("MODEL_QUALITY_GATE_FAILED_NOT_PRODUCTION_READY");
             if(r.benchmark!=="synthetic-local-ollama-v1" ||
               r.model!==process.argv[2] || r.testsCompleted!==10 ||
               r.seededSemanticBugs!==4 || r.cleanFixtures!==4 ||
               !Number.isSafeInteger(r.cleanFixtureBlockingFalseAlerts) ||
+              !Array.isArray(r.qualityGate?.blockers) ||
+              r.syntheticQualityGatePassed!==true ||
               r.approvalAuthorized!==false ||
               r.independentReviewerProvenanceVerified!==false ||
               r.privateSourceReviewed!==false ||
               !Array.isArray(r.cases) || r.cases.length!==10)process.exit(1);
             process.stdout.write("SYNTHETIC_MODEL_EXECUTION_VERIFIED_NOT_INDEPENDENT_REVIEW\n");
+            if(!r.syntheticQualityGatePassed)
+              throw Error("MODEL_QUALITY_GATE_FAILED_NOT_PRODUCTION_READY");
           ' "$RUNNER_TEMP/synthetic-report.json" "$BENCHMARK_MODEL"
