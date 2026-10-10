@@ -9,7 +9,7 @@ or emitted to public Actions logs.
 
 ## Verified / reported infrastructure
 
-- Independent organizational owner:
+- Organization-owned public publisher (not independent human ownership):
   `devfactory-reviewer-trust/devfactory-reviewer-b-publisher`.
 - `devfactory-reviewer-service`: authenticated writer/organization owner.
 - `deenkids7-dev`: organization Member, repository READ-only confirmed.
