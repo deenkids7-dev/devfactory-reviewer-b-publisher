@@ -78,3 +78,43 @@ test('rejects untrusted null metadata',()=>{
   assert.throws(()=>snapshot(fixture({metadataBefore:null})),
     e=>e.message==='INVALID_GITHUB_PR_METADATA');
 });
+
+test('rejects missing per-file hunk even if total hunk count matches file count',()=>{
+  const incomplete=Buffer.from(
+    'diff --git a/a.mjs b/a.mjs\n--- a/a.mjs\n+++ b/a.mjs\n'+
+    '@@ -1 +1 @@\n-a\n+b\n@@ -3 +3 @@\n-x\n+y\n'+
+    'diff --git a/b.mjs b/b.mjs\n--- a/b.mjs\n+++ b/b.mjs\n'
+  );
+  const m={...metadata(),changed_files:2};
+  assert.throws(()=>snapshot(fixture({
+    metadataBefore:m,metadataAfter:m,rawDiff:incomplete
+  })),e=>e.message==='GITHUB_DIFF_COVERAGE_UNVERIFIED');
+});
+test('rejects duplicate changed-file path and mismatched header path',()=>{
+  for(const raw of [
+    Buffer.from(diff.toString()+diff.toString()),
+    Buffer.from('diff --git a/a.mjs b/b.mjs\n'+
+      '--- a/a.mjs\n+++ b/b.mjs\n@@ -1 +1 @@\n-a\n+b\n'),
+    Buffer.from('diff --git a/a.mjs b/a.mjs\n'+
+      '--- a/a.mjs\n+++ b/other.mjs\n@@ -1 +1 @@\n-a\n+b\n')
+  ]){
+    const count=raw.equals(Buffer.from(diff.toString()+diff.toString()))?2:1;
+    const m={...metadata(),changed_files:count};
+    assert.throws(()=>snapshot(fixture({
+      metadataBefore:m,metadataAfter:m,rawDiff:raw
+    })),e=>e.message==='GITHUB_DIFF_COVERAGE_UNVERIFIED');
+  }
+});
+test('two complete text files are accepted with exact counted hunks',()=>{
+  const second=Buffer.from(
+    diff.toString()+
+    'diff --git a/other.mjs b/other.mjs\n'+
+    'index ab..cd 100644\n--- a/other.mjs\n+++ b/other.mjs\n'+
+    '@@ -1 +1 @@\n-old\n+new\n'
+  );
+  const m={...metadata(),changed_files:2};
+  const result=snapshot(fixture({
+    metadataBefore:m,metadataAfter:m,rawDiff:second
+  }));
+  assert.equal(result.diff_sha256,createHash('sha256').update(second).digest('hex'));
+});
