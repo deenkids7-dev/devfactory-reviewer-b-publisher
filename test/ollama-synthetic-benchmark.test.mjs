@@ -235,3 +235,23 @@ test('opt-in Qwen3-only benchmark selects only 8B model while preserving full co
  assert.match(y,/github\.event\.pull_request\.head\.repo\.full_name == github\.repository/);
  assert.match(y,/^\s*contents:\s*read\s*$/m);
 });
+
+test('30B model can be selected manually for fixed synthetic local benchmark only',async()=>{
+ const f=mock({model:'qwen3-coder:30b'});
+ const x=await runSyntheticLocalOllamaBenchmark({fetchImpl:f.fetchImpl,model:'qwen3-coder:30b'});
+ assert.equal(x.model,'qwen3-coder:30b');
+ assert.equal(x.testsCompleted,10);
+ assert.equal(x.approvalAuthorized,false);
+ assert.equal(x.modelQualityCertified,false);
+ assert.equal(x.independentReviewerProvenanceVerified,false);
+ assert.equal(f.calls.length,10);
+ for(const c of f.calls){
+  const req=JSON.parse(c.config.body);
+  assert.equal(req.model,'qwen3-coder:30b');
+  assert.equal(req.keep_alive,'5m');
+  assert.equal(c.url,ENDPOINT);
+ }
+ const workflow=readFileSync(new URL('../.github/workflows/reviewer-b-ollama-synthetic-canary.yml',import.meta.url),'utf8');
+ assert.doesNotMatch(workflow,/model:\s*qwen3-coder:30b/);
+ assert.doesNotMatch(workflow,/"model":"qwen3-coder:30b"/);
+});

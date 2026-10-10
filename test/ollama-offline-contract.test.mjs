@@ -223,3 +223,17 @@ test('Qwen3 reasoning candidate requests strictly bounded non-thinking JSON loca
  assert.equal(result.privateSourceProcessingAuthorized,false);
  assert.equal(result.approvalAuthorized,false);
 });
+
+test('Qwen3-Coder 30B is an explicit local-only model, never an approval',()=>{
+ const x=prepareOfflineOllamaCandidate({plan:plan(),model:'qwen3-coder:30b'});
+ const raw=JSON.parse(x.privateRequestJson);
+ assert.equal(raw.model,'qwen3-coder:30b');
+ assert.equal(raw.keep_alive,0);
+ assert.equal(raw.stream,false);
+ assert.equal(raw.options.num_ctx,8192);
+ assert.equal(raw.options.num_predict,2048);
+ assert.equal(x.approvalAuthorized,false);
+ assert.equal(x.modelExecuted,false);
+ assert.equal(x.independentReviewVerified,false);
+ assert.doesNotMatch(JSON.stringify(x),/SYNTHETIC_ONLY_PRIVATE_DIFF_EXAMPLE/);
+});
