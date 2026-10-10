@@ -187,3 +187,20 @@ test('pipeline audit detects curl and wget piped into six supported interpreters
  const safe=run(diff('src/program.mjs',['const value = 42;']));
  assert.equal(safe.provisionalState,'INCONCLUSIVE');
 });
+
+
+test('blank context in real Git format keeps security-finding line numbers exact',()=>{
+ const path='.github/workflows/blank-context.yml';
+ const valid='diff --git a/'+path+' b/'+path+'\n'+
+   '--- a/'+path+'\n+++ b/'+path+'\n'+
+   '@@ -1,3 +1,3 @@\n before\n \n-danger: old\n+permissions: write-all\n';
+ const result=run(valid);
+ assert.equal(result.provisionalState,'FAIL');
+ assert.equal(result.blockingFindings,1);
+ const findings=JSON.parse(result.reportBytes).findings;
+ assert.equal(findings[0].line,3);
+ assert.equal(result.approvalAuthorized,false);
+ // Removing the mandatory blank-context space makes a malformed diff.
+ const corrupted=valid.replace('\n \n','\n\n');
+ assert.throws(()=>run(corrupted),/STATIC_AUDIT_DIFF_STRUCTURE_INVALID/);
+});

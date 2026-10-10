@@ -66,3 +66,14 @@ test('CRLF unified diff preserves exact added-line positions without altering in
   diffBytes:Buffer.from(raw.toString().replace('\n','\r'))
  }),/DIFF_ANCHOR_/);
 });
+
+
+test('actual Git empty context line is a prefixed space, never bare blank',()=>{
+ const valid=hdr('src/blank.mjs')+
+  '@@ -1,3 +1,3 @@\n-old\n+new\n \n unchanged\n';
+ assert.deepEqual(parse(valid)['src/blank.mjs'],[1]);
+ // A text-trimming intermediary is untrusted: lost context prefixes are fatal.
+ const corrupted=valid.replace('\n \n','\n\n');
+ assert.notEqual(corrupted,valid);
+ assert.throws(()=>parse(corrupted),/DIFF_ANCHOR_HUNK_MISMATCH/);
+});
