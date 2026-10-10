@@ -29,7 +29,7 @@ const modelResponse=(content,overrides={})=>({
 });
 const empty=JSON.stringify({summary:'No findings, synthetic only.',findings:[]});
 const blocker=JSON.stringify({summary:'Synthetic blocker.',findings:[{
-  fingerprint:'c'.repeat(64),severity:'high',
+  severity:'high',
   path:'src/check.mjs',line:1,
   message:'Synthetic finding',evidence:'Synthetic fixture, no real defect'
 }]});
@@ -142,7 +142,7 @@ test('model-supplied PASS or unauthorized file path fails closed',()=>{
   });
   const wrongPath=JSON.stringify({
     summary:'wrong file',findings:[{
-      fingerprint:'d'.repeat(64),severity:'high',path:'secret/file.mjs',
+      severity:'high',path:'secret/file.mjs',
       line:1,message:'fake',evidence:'out of scope'
     }]
   });
@@ -166,4 +166,21 @@ test('no trusted tokenizer ceiling means STOP, even for a green model output',()
   assert.throws(()=>parseResponse(modelResponse(empty),{
     observedInputTokenCeiling:undefined
   }),e=>e.message==='MODEL_USAGE_BUDGET_CONTEXT_MISSING');
+});
+
+test('model must not supply its own fingerprint or source identity',()=>{
+  const fake=JSON.stringify({summary:'Claimed',findings:[{
+    fingerprint:'0'.repeat(64),severity:'high',
+    path:'src/check.mjs',line:1,message:'fake',evidence:'untrusted'
+  }]});
+  assert.throws(()=>parseResponse(modelResponse(fake)),
+    e=>e.message==='MODEL_FINDING_SCHEMA_INVALID');
+});
+test('malformed model findings cannot bypass deterministic fingerprints',()=>{
+  const fake=JSON.stringify({summary:'Claimed',findings:[{
+    severity:'high',path:'src/check.mjs',line:1,
+    message:'fake',evidence:'untrusted',approvalAuthorized:true
+  }]});
+  assert.throws(()=>parseResponse(modelResponse(fake)),
+    e=>e.message==='MODEL_FINDING_SCHEMA_INVALID');
 });

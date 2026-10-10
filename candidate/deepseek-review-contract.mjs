@@ -1,5 +1,6 @@
 import { inspect } from 'node:util';
 import { createHash } from 'node:crypto';
+import { canonicalJson } from '../src/canonical.mjs';
 import { normalizeUntrustedModelFindings } from './semantic-review-request.mjs';
 
 // DORMANT, PURE CONTRACT: no network access, no API key, no provider invocation.
@@ -96,7 +97,10 @@ export function prepareDeepSeekCandidate({
     max_tokens:maxOutputTokens,
     response_format:{type:'json_object'},
     messages:[
-      {role:'system',content:plan.systemInstructions},
+      {role:'system',content:plan.systemInstructions.replace(
+        'Each finding: fingerprint (64 lowercase hex), severity',
+        'Each finding: severity'
+      )+'\\nNever include a fingerprint: the trusted normalizer computes it.'},
       {role:'user',content:prompt}
     ]
   });
@@ -167,8 +171,31 @@ export function validateDeepSeekCandidateCompletion({
   if (response.usage.prompt_tokens>observedInputTokenCeiling ||
       response.usage.completion_tokens>observedOutputTokenCeiling ||
       cost>maxObservedPeakUsd) deny('MODEL_COMPLETION_BUDGET_EXCEEDED');
+  // Models cannot reliably generate collision-resistant SHA-256 fingerprints.
+  // Model output has NO fingerprint; derive stable fingerprints deterministically.
+  let raw;
+  try { raw=JSON.parse(response.choices[0].message.content); }
+  catch { deny('MODEL_JSON_INVALID'); }
+  if (!raw || typeof raw!=='object' || Array.isArray(raw) ||
+      JSON.stringify(Object.keys(raw).sort())!==JSON.stringify(['findings','summary']) ||
+      !Array.isArray(raw.findings) || raw.findings.length>50) {
+    deny('MODEL_FINDING_SCHEMA_INVALID');
+  }
+  const enhanced=[];
+  for (const finding of raw.findings) {
+    if (!finding || typeof finding!=='object' || Array.isArray(finding) ||
+        JSON.stringify(Object.keys(finding).sort())!==
+          JSON.stringify(['evidence','line','message','path','severity'])) {
+      deny('MODEL_FINDING_SCHEMA_INVALID');
+    }
+    const fingerprint=createHash('sha256')
+      .update('devfactory.review-finding.v1\0')
+      .update(canonicalJson(finding),'utf8')
+      .digest('hex');
+    enhanced.push({...finding,fingerprint});
+  }
   const result=normalizeUntrustedModelFindings({
-    rawModelOutput:response.choices[0].message.content,
+    rawModelOutput:canonicalJson({summary:raw.summary,findings:enhanced}),
     runId,trustedChangedPaths
   });
   return Object.freeze({
