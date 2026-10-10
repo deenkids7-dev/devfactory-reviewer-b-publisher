@@ -7,6 +7,7 @@ import { runReadOnlyReviewPreflight }
 const TOKEN='ghs_SYNTHETIC_ONLY_NOT_A_REAL_SECRET_123';
 const RUN='synthetic-readonly-898';
 const PATH='https://api.github.com/repos/deenkids7-dev/deenkids/pulls/898';
+const COMPARE='https://api.github.com/repos/deenkids7-dev/deenkids/compare/'+'b'.repeat(40)+'...'+'a'.repeat(40);
 const PRIVATE='SYNTHETIC_PRIVATE_CODE_LITERAL_NEVER_LOG_ME';
 const DIFF=Buffer.from(
   'diff --git a/.github/workflows/check.yml b/.github/workflows/check.yml\n'+
@@ -51,7 +52,9 @@ test('authenticated-style read gives only target metadata and redacted fail-only
     'application/vnd.github+json','application/vnd.github.diff',
     'application/vnd.github+json'
   ]);
-  assert.ok(fake.calls.every(c=>c.url===PATH&&c.method==='GET'));
+  assert.deepEqual(fake.calls.map(c=>c.url),[PATH,COMPARE,PATH]);
+  assert.ok(fake.calls.every(c=>c.method==='GET'));
+  assert.equal(fake.calls[1].accept,'application/vnd.github.diff');
   assert.equal(result.target.repository,'deenkids7-dev/deenkids');
   assert.equal(result.target.diffSha256,
     createHash('sha256').update(DIFF).digest('hex'));
