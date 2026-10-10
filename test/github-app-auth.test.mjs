@@ -93,6 +93,46 @@ test('token API errors never reveal private token or JWT',async()=>{
     fetchImpl:mock.fetchImpl,now,purpose:'publish'
   }),e=>e.message==='APP_AUTH_API_REQUEST_FAILED'&&!e.message.includes(TOKEN));
 });
+test('rejected oversized scoped-token response cancels stream without leaking credentials',async()=>{
+  const jwt=createReviewerBAppJwt({privateKeyPem:key,now});
+  let cancelled=false,lockedReleased=false,readCount=0;
+  const reader={
+    async read(){
+      readCount++;
+      return {done:false,value:new Uint8Array(48*1024+1)};
+    },
+    async cancel(){cancelled=true;},
+    releaseLock(){lockedReleased=true;}
+  };
+  const response={
+    status:201,redirected:false,url:API,
+    headers:new Headers({'content-type':'application/json'}),
+    body:{getReader:()=>reader}
+  };
+  await assert.rejects(()=>createScopedReviewerBInstallationToken({
+    appJwt:jwt,fetchImpl:async()=>response,now,purpose:'publish'
+  }),e=>e.message==='APP_AUTH_BAD_RESPONSE'&&!e.message.includes(jwt));
+  assert.equal(readCount,1);
+  assert.equal(cancelled,true);
+  assert.equal(lockedReleased,true);
+});
+test('scoped-token response cancellation failure cannot override fail-closed denial',async()=>{
+  const jwt=createReviewerBAppJwt({privateKeyPem:key,now});
+  let released=false;
+  const response={
+    status:201,redirected:false,url:API,
+    headers:new Headers({'content-type':'application/json'}),
+    body:{getReader:()=>({
+      async read(){return {done:false,value:new Uint8Array(48*1024+1)};},
+      async cancel(){throw new Error('transport cancel failure');},
+      releaseLock(){released=true;}
+    })}
+  };
+  await assert.rejects(()=>createScopedReviewerBInstallationToken({
+    appJwt:jwt,fetchImpl:async()=>response,now,purpose:'publish'
+  }),e=>e.message==='APP_AUTH_BAD_RESPONSE');
+  assert.equal(released,true);
+});
 test('GitHub API responses must come from exact installation endpoint',async()=>{
   for(const options of [
     {url:'https://example.test/token'},
