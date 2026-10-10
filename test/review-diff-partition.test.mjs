@@ -65,7 +65,8 @@ test('fail closed on malformed or binary diff without claiming partial coverage'
 
 test('lossless line-level spans cover an oversized file exactly, without implying model review',()=>{
  const big=Buffer.from(file('src/long.mjs','old()',
-  Array.from({length:150},(_,i)=>'changed_'+i).join('\n+')));
+  Array.from({length:150},(_,i)=>'changed_'+i).join('\n+'))
+  .replace('@@ -1 +1 @@','@@ -1 +1,150 @@'));
  assert.throws(()=>run(big,['src/long.mjs'],{maxChunkBytes:512}),
   /REVIEW_SHARDS_SINGLE_FILE_OVERSIZED/);
  const p=partitionLosslessDiffLines({
