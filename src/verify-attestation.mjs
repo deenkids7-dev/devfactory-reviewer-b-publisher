@@ -63,7 +63,7 @@ export function verifyAttestation({ envelope, reportBytes, trustedKeys, trustedT
   if (!HEX40.test(p.target.head_sha) || !HEX40.test(p.target.base_sha)) reject('INVALID_COMMIT_SHA');
   if (!HEX64.test(p.target.diff_sha256) || !HEX64.test(p.analysis.report_sha256)) reject('INVALID_DIGEST');
   if (p.target.repository !== 'deenkids7-dev/deenkids' ||
-      !Number.isSafeInteger(p.target.repository_id) || p.target.repository_id < 1 ||
+      p.target.repository_id !== 1282086207 ||
       !Number.isSafeInteger(p.target.pr_number) || p.target.pr_number < 1) reject('INVALID_PR_TARGET');
   if (typeof now !== 'number' || !Number.isFinite(now)) reject('INVALID_CLOCK');
   const issued = parseUtc(p.issued_at, 'INVALID_ISSUED_AT');
