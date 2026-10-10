@@ -106,10 +106,27 @@ deployment. All PR CI remains secret-free.
 - `docs/DEEPSEEK-LOW-COST-OPERATIONS.md`: current pricing, privacy and
   independent-runtime operator plan.
 
-**NO REAL MODEL CALL, EXTERNAL PRIVATE-CODE TRANSFER OR PAID RESOURCE IS
-ENABLED.** API credentials and actual independent execution remain blocked
+**Real OFFLINE Ollama inference HAS run on fixed public, synthetic inputs** in
+secret-free GitHub Actions. **NO model has reviewed private DevFactory code,
+no independent review or production Publisher is active, and NO external
+private-code transfer or paid provider is enabled.** API credentials and actual independent execution remain blocked
 until distinct security reviews, operator consent and provenance proof.
 
 See `docs/PREKEY-READINESS.md` for the required manual gate, separate
 private-key roles, and outstanding provenance, model and publication work.
 Do not create or provision real keys until those gates are closed.
+
+## Free independent-review development — 2026-10-10
+
+`candidate/ollama-offline-contract.mjs` defines a local inference adapter,
+strict JSON model findings, HEAD/BASE and SHA-256 binding, exact newly added
+line verification and a hard-coded fail-closed nonapproval result. Public
+GitHub-hosted canaries executed local Qwen 2.5 Coder 7B and 14B on ten
+synthetic cases, with zero model API charges. The 14B had fewer high-severity
+false positives, but neither model is qualified to approve real PRs. See
+`docs/FREE-LOCAL-REVIEWER-B.md` for measured outcomes and limitations.
+
+No production private source analysis, independent operator attestation,
+native GitHub review, model-issued PASS, or private PR merge is enabled.
+The public repository explicitly disables CodeRabbit automatic and draft
+reviews through `.coderabbit.yaml`, enforced by automated tests.

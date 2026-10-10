@@ -21,8 +21,10 @@ or emitted to public Actions logs.
   `deenkids7-dev` as sole required reviewer, prevent self-review ON,
   administrator bypass OFF, only protected branches.
   **No verified approval hold-and-release execution yet.**
-- Public test runners: NO production secrets, NO native reviews, NO model,
-  NO `workflow_run`, `pull_request_target` or privileged write grants.
+- Public test runners: NO production secrets, NO native reviews, NO
+  PRIVATE-source model inference, NO `workflow_run`, `pull_request_target`
+  or privileged write grants. Secret-free Ollama/Qwen inference on fixed
+  synthetic/public-only diff fixtures has been successfully exercised.
 - Candidate modules in `candidate/` are dormant; their tests use synthetic
   GitHub responses and ephemeral keys only.
 
@@ -81,8 +83,9 @@ synthetic until the independently witnessed runtime is implemented.
 - [ ] Validate GitHub environment hold-and-release on protected `main`
       **using a zero-secret, zero-diff workflow** (cannot simply rely on
       the Settings screenshot).
-- [ ] Choose an actual independent semantic reviewer; validate reviewer
-      quality, runtime identity/provenance and full isolation from MSI.
+- [ ] Establish an actual independently accountable semantic reviewer;
+      public synthetic Qwen 7B/14B calls already ran, but quality, external
+      runtime identity/provenance and private-source isolation are UNPROVEN.
 - [ ] Choose a provider cost cap, or offline inference engine on a hosted
       runner, with explicit approval before any charges.
 - [ ] Implement a separately verified external provenance witness bound to

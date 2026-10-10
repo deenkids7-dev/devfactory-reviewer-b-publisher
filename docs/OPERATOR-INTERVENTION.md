@@ -9,7 +9,9 @@ prototype uses synthetic keys and fake diff fixtures only.
 - Hosted GitHub runner, separate account and protected Publisher `main`.
 - Secret-free CI executes code at immutable PR HEAD (rejects fork HEADs).
 - Exact identity fields: `deenkids7-dev/deenkids`, repository ID 1282086207,
-  SHA-1 HEAD/BASE and diff/report SHA-256; no GitHub live-read client yet.
+  SHA-1 HEAD/BASE and diff/report SHA-256; a dormant authenticated read-only
+  GitHub transport is implemented and synthetically tested, but has NOT read
+  the private repo under a newly approved App Contents:Read token.
 - Canonical Ed25519 claim verification, anti-malleability and test replay check.
 - Bounded canonical findings/report correlation; no LLM PASS => approval.
 - RSA native review **wire format only** compatible with draft DevFactory
@@ -74,3 +76,14 @@ Publisher; reviewer evidence is synthetic.
 The public Publisher repository can use GitHub-hosted Actions on the free
 tier, but external AI inference may incur usage fees. Do not sign up for or
 activate provider billing without explicit operator budget approval.
+
+## Updated free local engine status — 2026-10-10
+
+The 7B and 14B local Ollama models were actually run with hard-coded synthetic
+diffs on PUBLIC GitHub-hosted runners without paid model APIs. This does not
+contradict the lack of an independently authorized PRIVATE-code reviewer.
+The signed evidence pipeline, GitHub App token purposes, and live-read
+transport remain dormant/prototype. No keys, source transfer or publisher
+permissions have been provisioned. Repo-level CodeRabbit automatic reviews
+have been explicitly disabled, but a third-party billing account, if any,
+must be controlled independently in that provider's own settings.

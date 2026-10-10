@@ -72,7 +72,8 @@ credentials, full private diffs, private Issue/LOT content.
    immediately before write, bot reviews deduplicated. A future publisher
    must serialize per PR, persist an authoritative single-use nonce and
    confirm assigned GitHub review ID after POST.
-10. **Model quality**: static matching cannot establish PASS. No provider
+10. **Model quality**: static matching cannot establish PASS. Public
+   synthetic Ollama/Qwen runs exist; no authorized PRIVATE-code reviewer
    engine or independent witness is installed. A model-generated clean
    report is only INCONCLUSIVE in the current candidate. Real review
    quality, model deployment and credential separation need further audit.
@@ -94,8 +95,9 @@ clearance; request a NEW external review after code stabilizes.
 ## Known blockers and limitations (not PASS)
 
 - No independent security review that covers the CURRENT PR #2 HEAD.
-- No actual external analyzer service, isolated model provider or
-  authenticated independent execution provenance witness.
+- Public synthetic Ollama inference has run, but there is still NO
+  authorized independent PRIVATE-code analyzer, isolated trusted production
+  reviewer, or authenticated independent execution provenance witness.
 - No live privileged Publisher, approved publish policy or GitHub review
   POST; no native GitHub review has been published.
 - No access to canonical private Issues through a separately scoped
