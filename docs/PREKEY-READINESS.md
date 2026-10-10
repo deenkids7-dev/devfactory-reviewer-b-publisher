@@ -77,6 +77,10 @@ synthetic until the independently witnessed runtime is implemented.
       runner, with explicit approval before any charges.
 - [ ] Implement a separately verified external provenance witness bound to
       exact PR/HEAD/BASE/report/GitHub review ID.
+- [ ] Independently approve minimum GitHub App Issues:Read (if used) for
+      canonical Issue/LOT metadata; present App has Metadata Read and Pull
+      requests Read/Write only. Do not permit Issues Write.
+      See `docs/HUMAN-GO-INTEGRATION-BOUNDARY.md`.
 - [ ] Integrate with existing canonical DevFactory HUMAN_GO mechanism;
       secrets and destructive DB operations remain special human-only gates.
 - [ ] Implement a protected publication workflow from independently reviewed
