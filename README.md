@@ -66,3 +66,29 @@ public Actions, untrusted pull request jobs, or conversation messages.
 
 This PR changes only the independent Publisher repository. It does not touch
 the private deenkids repository or any of its blocked PRs.
+
+
+## Current development branch — NOT a live reviewer (October 2026)
+
+Additional `candidate/` modules on draft PR #2 cover simulated
+read-only private-PR API transport, constrained App JWT issuance, limited
+installation-token scope, signed model findings, native RSA marker signing,
+offline fail-only scanning, bounded native review readback, and a
+nonpublishing preflight. All privileged and independent-execution code is
+**dormant**, uses only synthetic tests and provides no approval path.
+
+The candidate static audit does not echo raw added source text; private
+review plans redact JSON serialization and Node debug inspection. None of
+these safeguards permits sending private source to a model without explicit
+authorization and a separate, evaluated trust domain.
+
+A manual-only, no-secret environment probe is staged in
+`.github/workflows/reviewer-b-environment-hold-probe.yml`. It will
+**not** run from the branch or certify environment protection until
+a separately authorized, independently security-reviewed merge places
+it on protected `main` and an operator explicitly releases the held
+deployment. All PR CI remains secret-free.
+
+See `docs/PREKEY-READINESS.md` for the required manual gate, separate
+private-key roles, and outstanding provenance, model and publication work.
+Do not create or provision real keys until those gates are closed.
