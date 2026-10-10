@@ -17,49 +17,87 @@ const SAFE_PATH=/^(?!\/)(?!.*(?:^|\/)\.{1,2}(?:\/|$))[A-Za-z0-9_.-]+(?:\/[A-Za-z
  * quoted paths or hunkless files are deliberately BLOCKED, not accepted.
  */
 function checkDiffCoverage(text, expectedCount) {
-  let file=null, count=0;
+  let file=null, count=0, oldRemaining=0, newRemaining=0, inHunk=false;
   const seen=new Set();
-  function finish() {
+  function finishHunk() {
+    if(inHunk && (oldRemaining!==0 || newRemaining!==0))
+      deny('GITHUB_DIFF_HUNK_LENGTH_MISMATCH');
+    inHunk=false;
+  }
+  function finishFile() {
     if(!file) return;
+    finishHunk();
     if(!file.oldHeader || !file.newHeader || !file.hunkSeen)
       deny('GITHUB_DIFF_COVERAGE_UNVERIFIED');
   }
   for(const line of text.split('\n')) {
     if(line.startsWith('diff --git ')) {
-      finish();
+      finishFile();
       const m=line.match(/^diff --git a\/(\S+) b\/(\S+)$/);
       if(!m || m[1]!==m[2] || !SAFE_PATH.test(m[1]) || seen.has(m[1]))
         deny('GITHUB_DIFF_COVERAGE_UNVERIFIED');
       seen.add(m[1]); count++;
       file={path:m[1],oldHeader:false,newHeader:false,hunkSeen:false};
+      oldRemaining=0;newRemaining=0;inHunk=false;
       continue;
     }
     if(!file) {
-      if(line.trim()!=='') deny('GITHUB_DIFF_COVERAGE_UNVERIFIED');
+      if(line!=='') deny('GITHUB_DIFF_COVERAGE_UNVERIFIED');
       continue;
     }
-    if(!file.hunkSeen && line.startsWith('--- ')) {
+    if(line.startsWith('@@ ')) {
+      finishHunk();
+      if(!file.oldHeader || !file.newHeader)
+        deny('GITHUB_DIFF_COVERAGE_UNVERIFIED');
+      const m=line.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(?:.*)$/);
+      if(!m) deny('GITHUB_DIFF_COVERAGE_UNVERIFIED');
+      const oldStart=Number(m[1]), newStart=Number(m[3]);
+      oldRemaining=m[2]===undefined?1:Number(m[2]);
+      newRemaining=m[4]===undefined?1:Number(m[4]);
+      if(![oldStart,newStart,oldRemaining,newRemaining].every(Number.isSafeInteger) ||
+        oldRemaining>100000 || newRemaining>100000 ||
+        (oldRemaining===0 && newRemaining===0)) {
+        deny('GITHUB_DIFF_COVERAGE_UNVERIFIED');
+      }
+      file.hunkSeen=true;inHunk=true;
+      continue;
+    }
+    if(inHunk) {
+      if(line.startsWith('\\ No newline at end of file')) continue;
+      if(line==='') {
+        // Only the final split after the terminating newline is valid.
+        // A bare blank line in a hunk is not an encoded diff line.
+        if(oldRemaining===0 && newRemaining===0)continue;
+        deny('GITHUB_DIFF_HUNK_LENGTH_MISMATCH');
+      }
+      const prefix=line[0];
+      if(prefix===' ') {oldRemaining--;newRemaining--;}
+      else if(prefix==='-') oldRemaining--;
+      else if(prefix==='+') newRemaining--;
+      else deny('GITHUB_DIFF_HUNK_LENGTH_MISMATCH');
+      if(oldRemaining<0 || newRemaining<0)
+        deny('GITHUB_DIFF_HUNK_LENGTH_MISMATCH');
+      continue;
+    }
+    if(line.startsWith('--- ')) {
       if(file.oldHeader || (line!=='--- a/'+file.path && line!=='--- /dev/null'))
         deny('GITHUB_DIFF_COVERAGE_UNVERIFIED');
       file.oldHeader=true;
       continue;
     }
-    if(!file.hunkSeen && line.startsWith('+++ ')) {
+    if(line.startsWith('+++ ')) {
       if(!file.oldHeader || file.newHeader ||
          (line!=='+++ b/'+file.path && line!=='+++ /dev/null'))
         deny('GITHUB_DIFF_COVERAGE_UNVERIFIED');
       file.newHeader=true;
       continue;
     }
-    if(line.startsWith('@@ ')) {
-      if(!file.oldHeader || !file.newHeader ||
-         !/^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@/.test(line))
-        deny('GITHUB_DIFF_COVERAGE_UNVERIFIED');
-      file.hunkSeen=true;
-      continue;
-    }
+    // Git's metadata header occurs only before ---/+++ in a file.
+    if(!file.oldHeader &&
+      /^(?:index |new file mode |deleted file mode |old mode |new mode )/.test(line)) continue;
+    if(line!=='')deny('GITHUB_DIFF_COVERAGE_UNVERIFIED');
   }
-  finish();
+  finishFile();
   if(count!==expectedCount) deny('GITHUB_DIFF_COVERAGE_UNVERIFIED');
 }
 
