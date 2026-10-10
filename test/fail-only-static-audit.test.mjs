@@ -53,3 +53,14 @@ test('unreviewable source is never silently accepted',()=>{
     assert.throws(()=>run(value),/STATIC_AUDIT_(?:INPUT_INVALID|ENCODING_UNSUPPORTED|SCOPE_UNVERIFIED)/);
   }
 });
+
+test('static report must not echo private added source line',()=>{
+  const secret='SYNTHETIC_PRIVATE_TOKEN_DO_NOT_LOG_987654321';
+  const result=run(diff('.github/workflows/private.yml',[
+    'permissions: write-all  # '+secret
+  ]));
+  assert.equal(result.provisionalState,'FAIL');
+  assert.ok(!result.reportBytes.toString('utf8').includes(secret));
+  const report=JSON.parse(result.reportBytes.toString('utf8'));
+  assert.equal(report.findings[0].evidence,'Static rule workflow-write-all matched newly added line 1');
+});
