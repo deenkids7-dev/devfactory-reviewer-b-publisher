@@ -71,7 +71,7 @@ CHANGES_REQUESTED for FAIL, and verifies report digest/independent execution.
 - [ ] Publisher receives secrets only inside a protected job on trusted main,
       with an independent security review of every workflow change.
 - [ ] Single-use nonce verified atomically against authoritative record.
-      Github's already-existing review identity may provide the record;
+      GitHub's already-existing review identity may provide the record;
       never invent a second DevFactory State Ledger.
 - [ ] Re-fetch current GitHub HEAD before any write; if changed => STOP.
 - [ ] After native review publication, validate the GitHub-assigned review ID,
@@ -88,9 +88,10 @@ review to that assigned ID using trusted evidence, without treating any
 claim in review body as proof. A local callback that always returns true
 is forbidden.
 
-The protected Publisher environment currently has only one possible
-approving user, the same account that can author its workflows. Its manual
-approval is an operator control, not independent security approval.
+The Publisher repository writer is `devfactory-reviewer-service`;
+`deenkids7-dev` is a read-only member and designated deployment approver.
+The same human controls both accounts, so this provides operator account
+separation, **not** an independent security reviewer or provenance witness.
 Do not introduce production secrets there until this trust boundary is
 reviewed and strengthened.
 
