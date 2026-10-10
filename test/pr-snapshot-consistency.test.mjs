@@ -8,7 +8,7 @@ const b = 'b'.repeat(40);
 const diff = Buffer.from('diff --git a/file.mjs b/file.mjs\nindex 0000000..1111111 100644\n--- a/file.mjs\n+++ b/file.mjs\n@@ -1 +1 @@\n-before\n+after\n');
 const metadata = () => ({
   number:898,state:'open',merged_at:null,draft:false,changed_files:1,
-  head:{sha:h},base:{sha:b,ref:'master',repo:{
+  head:{sha:h,repo:{full_name:'deenkids7-dev/deenkids',id:1282086207}},base:{sha:b,ref:'master',repo:{
     full_name:'deenkids7-dev/deenkids',id:1282086207
   }}
 });
@@ -28,7 +28,7 @@ test('hashes exact stable synthetic diff; does NOT attest GitHub provenance',()=
   assert.ok(Object.isFrozen(actual));
 });
 rejects('rejects moved HEAD', {
-  metadataAfter:{...metadata(),head:{sha:'c'.repeat(40)}}
+  metadataAfter:{...metadata(),head:{...metadata().head,sha:'c'.repeat(40)}}
 },'GITHUB_PR_CHANGED_DURING_READ');
 rejects('rejects moved BASE', {
   metadataAfter:{...metadata(),base:{...metadata().base,sha:'c'.repeat(40)}}
