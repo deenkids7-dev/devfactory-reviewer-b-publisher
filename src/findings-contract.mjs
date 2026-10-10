@@ -2,7 +2,7 @@
 // GitHub access, no producer keys and no approval decision.
 const MAX_REPORT_BYTES = 64 * 1024;
 const MAX_FINDINGS = 50;
-const PATH = /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/;
+const PATH = /^(?!\/)(?!.*(?:^|\/)\.{1,2}(?:\/|$))[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/;
 const RUN_ID = /^[A-Za-z0-9_:-]{8,180}$/;
 const HASH = /^[0-9a-f]{64}$/;
 const SEVERITIES = new Set(['critical','high','medium','low','informational']);
@@ -14,7 +14,7 @@ function fields(obj, expected) {
 }
 function text(value, min, max) {
   return typeof value === 'string' && value.length>=min &&
-    value.length<=max && !/[\x00-\x08\x0e-\x1f]/.test(value);
+    value.length<=max && !/[\x00-\x1f\x7f]/.test(value);
 }
 
 /**
