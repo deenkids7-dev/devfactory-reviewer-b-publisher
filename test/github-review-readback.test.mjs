@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { inspect } from 'node:util';
 import { readNativeReviews } from '../candidate/github-review-readback.mjs';
 
 const TOKEN='ghs_SYNTHETIC_ONLY_NOT_REAL_TOKEN';
@@ -135,4 +136,18 @@ test('caller-provided expected HEAD must match observed GitHub HEAD',async()=>{
   await assert.rejects(()=>readNativeReviews(context(fake.fetchImpl)),
     /REVIEWS_HEAD_CHANGED_OR_UNVERIFIED/);
   assert.deepEqual(fake.calls.map(x=>x.target),[META_URL]);
+});
+
+test('read-only native review body does not leak into JSON, spread or Node inspection',async()=>{
+ const secret='SYNTHETIC_PRIVATE_NATIVE_REVIEW_FINDING_BODY_987';
+ const fake=mock([[review(10,{body:secret})]]);
+ const result=await readNativeReviews(context(fake.fetchImpl));
+ assert.equal(result.reviews[0].body,secret);
+ assert.equal(result.reviews.length,1);
+ for(const serialized of [JSON.stringify(result),JSON.stringify({...result}),inspect(result)])
+  assert.ok(!serialized.includes(secret));
+ assert.match(JSON.stringify(result),/REDACTED_PRIVATE_REVIEWS/);
+ assert.equal(Object.keys(result).includes('reviews'),false);
+ assert.equal(result.approvalAuthorized,false);
+ assert.equal(result.independentReviewVerified,false);
 });

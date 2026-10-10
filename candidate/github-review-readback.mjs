@@ -1,3 +1,4 @@
+import { inspect } from 'node:util';
 // Read-only native GitHub review observation. No approval or review POST.
 const REPO='deenkids7-dev/deenkids';
 const PREFIX=`https://api.github.com/repos/${REPO}/pulls/`;
@@ -138,12 +139,25 @@ export async function readNativeReviews({
       const afterHead=await observedHead({prNumber,installationToken,fetchImpl});
       if(afterHead!==beforeHead || afterHead!==expectedHeadSha)
         deny('REVIEWS_HEAD_CHANGED_OR_UNVERIFIED');
-      return Object.freeze({
-        reviews:Object.freeze(result),
+      // Review bodies can include PRIVATE repository findings and locations.
+      // Preserve explicit access for the protected signature consumer only.
+      const hiddenReviews=Object.freeze(result);
+      const safe={
         targetHeadSha:afterHead,
         // No inference about signer provenance or release authority.
         independentReviewVerified:false,approvalAuthorized:false
+      };
+      Object.defineProperties(safe,{
+        reviews:{enumerable:false,configurable:false,
+          get:()=>hiddenReviews},
+        toJSON:{enumerable:false,configurable:false,
+          value:()=>({...Object.fromEntries(Object.entries(safe)),
+            reviews:'[REDACTED_PRIVATE_REVIEWS]'})},
+        [inspect.custom]:{enumerable:false,configurable:false,
+          value:()=> '[ReadNativeReviews: PRIVATE REVIEW BODIES REDACTED]'
+        }
       });
+      return Object.freeze(safe);
     }
   }
   // A full 3rd page is at least 300 reviews; fail closed rather than truncate.
