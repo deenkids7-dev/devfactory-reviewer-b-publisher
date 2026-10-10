@@ -24,7 +24,10 @@ const RULES=Object.freeze([
     // Conservative trigger. A write scope can occur at job-level, where it
     // overrides a safe root permissions block. False positives remain FAIL,
     // never a silent PASS; independent review decides final authorization.
-    pattern:/^\s*(?:actions|attestations|checks|contents|deployments|discussions|id-token|issues|models|packages|pages|pull-requests|repository-projects|security-events|statuses)\s*:\s*(?:(["'])write\1|write)\s*(?:#.*)?$/,
+    // Recognize block YAML and inline flow mappings such as
+    // permissions: { contents: write, actions: 'write' }.
+    // Conservative matches remain FAIL, never permission to publish.
+    pattern:/\b(?:actions|attestations|checks|contents|deployments|discussions|id-token|issues|models|packages|pages|pull-requests|repository-projects|security-events|statuses)\s*:\s*(?:(["'])write\1|write)(?=\s*[,}#]|\s*$)/,
     message:'Workflow newly requests a GitHub token write permission'})
 ]);
 function deny(code){throw Error(code);}

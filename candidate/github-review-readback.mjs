@@ -11,16 +11,20 @@ function deny(code){throw new Error(code);}
 async function readBounded(body,maxBytes=MAX_PAGE_BYTES){
   if(!body?.getReader)deny('REVIEWS_UNREADABLE_BODY');
   const reader=body.getReader();let size=0;const items=[];
+  let completed=false;
   try{
     for(;;){
       const {done,value}=await reader.read();
-      if(done)break;
+      if(done){completed=true;break;}
       if(!(value instanceof Uint8Array))deny('REVIEWS_INVALID_CHUNK');
       size+=value.length;
       if(size>maxBytes)deny('REVIEWS_OVERSIZED_PAGE');
       items.push(Buffer.from(value));
     }
-  }finally{reader.releaseLock();}
+  }finally{
+    if(!completed){try{await reader.cancel();}catch{/* fail closed */}}
+    reader.releaseLock();
+  }
   return Buffer.concat(items,size);
 }
 async function observedHead({prNumber,installationToken,fetchImpl}) {

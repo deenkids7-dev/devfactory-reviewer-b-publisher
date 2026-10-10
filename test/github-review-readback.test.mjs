@@ -166,3 +166,38 @@ test('null review bodies are safe but never authorize approval; malformed bodies
       /REVIEWS_ITEM_UNTRUSTED/);
   }
 });
+
+test('cancels oversized GitHub review body stream before failing closed',async()=>{
+ let cancelled=0;
+ const fetchImpl=async target=>{
+   if(target===META_URL)return response(target,meta());
+   return {
+    url:target,status:200,redirected:false,
+    headers:new Headers({'content-type':'application/json'}),
+    body:new ReadableStream({
+      start(c){c.enqueue(new Uint8Array(1024*1024+1));},
+      cancel(){cancelled++;}
+    })
+   };
+ };
+ await assert.rejects(()=>readNativeReviews(context(fetchImpl)),
+  e=>e.message==='REVIEWS_GITHUB_MALFORMED_JSON');
+ assert.equal(cancelled,1);
+});
+test('cancels malformed review chunks without overriding rejection',async()=>{
+ let cancelled=0;
+ const fetchImpl=async target=>{
+   if(target===META_URL)return response(target,meta());
+   return {
+    url:target,status:200,redirected:false,
+    headers:new Headers({'content-type':'application/json'}),
+    body:new ReadableStream({
+      start(c){c.enqueue('NOT_BYTES');},
+      cancel(){cancelled++;}
+    })
+   };
+ };
+ await assert.rejects(()=>readNativeReviews(context(fetchImpl)),
+  e=>e.message==='REVIEWS_GITHUB_MALFORMED_JSON');
+ assert.equal(cancelled,1);
+});

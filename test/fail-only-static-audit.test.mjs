@@ -139,3 +139,37 @@ test('CRLF workflow diff is still scanned without changing actual byte hash',()=
  assert.equal(result.blockingFindings,1);
  assert.ok(raw.equals(before));
 });
+
+test('flow-style YAML permissions with write scopes are always blocking',()=>{
+ const cases=[
+  'permissions: { contents: write }',
+  "permissions: { contents: 'write', actions: read }",
+  'permissions: { actions: "write", contents: read }',
+  'permissions: { id-token: write, pull-requests: read }',
+  'permissions: { security-events: write }',
+  '    permissions: { contents: write }'
+ ];
+ for(const line of cases){
+  const r=run(diff('.github/workflows/inline.yml',[line]));
+  assert.equal(r.provisionalState,'FAIL',line);
+  assert.equal(r.blockingFindings,1,line);
+  assert.equal(r.approvalAuthorized,false);
+ }
+ const safe=run(diff('.github/workflows/inline.yml',[
+  'permissions: { contents: read, actions: read }'
+ ]));
+ assert.equal(safe.provisionalState,'INCONCLUSIVE');
+ assert.equal(safe.approvalAuthorized,false);
+});
+test('flow-style rule preserves exact source line and never exports source bytes',()=>{
+ const secret='SYNTHETIC_PRIVATE_FLOW_SECRET';
+ const output=run(diff('.github/workflows/synthetic.yml',[
+   'name: synthetic','permissions: { contents: write } # '+secret
+ ]));
+ const raw=output.reportBytes.toString('utf8');
+ const x=JSON.parse(raw).findings;
+ assert.equal(x.length,1);
+ assert.equal(x[0].line,2);
+ assert.equal(x[0].severity,'high');
+ assert.ok(!raw.includes(secret));
+});
