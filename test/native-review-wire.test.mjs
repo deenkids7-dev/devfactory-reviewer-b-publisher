@@ -87,3 +87,13 @@ reject('reject nonzero invalid timestamp',()=>fixture({completed_at:'not-a-date'
   'NATIVE_INVALID_PAYLOAD');
 reject('reject unreviewed state field',()=>fixture({verdict:'BLOCKED'}),
   'NATIVE_INVALID_PAYLOAD');
+
+for(const bad of ['1','Oct 10 2026','2026-10-10T08:00:00+00:00','2026-10-10T08:00:00.000Z','2026-02-30T08:00:00Z', '2026-10-10T08:00:00Z'.padEnd(20000,'!')]){
+  reject('reject noncanonical native UTC timestamp '+bad.slice(0,24),()=>fixture({completed_at:bad}),
+    'NATIVE_INVALID_PAYLOAD');
+}
+test('native payload signing bytes use deterministic ASCII key ordering',()=>{
+  const obj=payload();
+  const encoded=nativePayloadBytes(obj).toString('utf8');
+  assert.deepEqual(Object.keys(JSON.parse(encoded)),Object.keys(obj).sort());
+});
