@@ -92,7 +92,9 @@ export function formatNativeReviewFixture({
   const reviewBody='<!-- devfactory-reviewer-b-native:v1:'+envelope+' -->\n'+reportText;
   if (reviewBody.length>120000) deny('NATIVE_REVIEW_BODY_TOO_LARGE');
   return Object.freeze({
-    reviewBody, requestedState:payload.verdict==='PASS'?'APPROVED':'CHANGES_REQUESTED',
+    reviewBody, dispositionClaimedBySigner:payload.verdict,
+    // A formatter must never decide the event to send to GitHub.
+    publishEvent:null,
     cryptographicIntegrityVerified:true,
     reviewIndependenceVerified:false,
     approvalAuthorized:false
