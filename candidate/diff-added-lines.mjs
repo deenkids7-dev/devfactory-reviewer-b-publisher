@@ -11,6 +11,7 @@ export function deriveAddedLinesFromDiff({diffBytes}={}){
   const entries=Object.create(null);
   let file=null,oldLeft=0,newLeft=0,newLine=0,inHunk=false;
   let oldHeader=false,newHeader=false,hasHunk=false;
+  let previousOldEnd=-1,previousNewEnd=-1,previousHunk=false;
   function finishHunk(){
     if(inHunk&&(oldLeft!==0||newLeft!==0))deny('DIFF_ANCHOR_HUNK_MISMATCH');
     inHunk=false;
@@ -29,6 +30,7 @@ export function deriveAddedLinesFromDiff({diffBytes}={}){
       file=m[1];entries[file]=[];
       oldLeft=0;newLeft=0;newLine=0;
       inHunk=false;oldHeader=false;newHeader=false;hasHunk=false;
+      previousOldEnd=-1;previousNewEnd=-1;previousHunk=false;
       continue;
     }
     if(!file){if(line==='')continue;deny('DIFF_ANCHOR_FILE_INCOMPLETE');}
@@ -43,6 +45,19 @@ export function deriveAddedLinesFromDiff({diffBytes}={}){
       if(![oldLeft,newLeft,newLine].every(Number.isSafeInteger)||
         oldLeft<0||newLeft<0||newLine<0||oldLeft>100000||newLeft>100000||
         oldLeft+newLeft===0)deny('DIFF_ANCHOR_HUNK_MISMATCH');
+      const oldStart=Number(m[1]);
+      if(!Number.isSafeInteger(oldStart)||
+         (oldLeft>0&&oldStart===0)||
+         (newLeft>0&&newLine===0)||
+         (previousHunk&&(oldStart<previousOldEnd||
+           newLine<previousNewEnd)))
+        deny('DIFF_ANCHOR_HUNK_ORDER_INVALID');
+      previousOldEnd=oldStart+oldLeft;
+      previousNewEnd=newLine+newLeft;
+      if(!Number.isSafeInteger(previousOldEnd)||
+         !Number.isSafeInteger(previousNewEnd))
+        deny('DIFF_ANCHOR_HUNK_ORDER_INVALID');
+      previousHunk=true;
       inHunk=true;hasHunk=true;
       continue;
     }

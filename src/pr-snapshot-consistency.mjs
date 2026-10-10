@@ -18,6 +18,7 @@ const SAFE_PATH=/^(?!\/)(?!.*(?:^|\/)\.{1,2}(?:\/|$))[A-Za-z0-9_.-]+(?:\/[A-Za-z
  */
 function checkDiffCoverage(text, expectedCount) {
   let file=null, count=0, oldRemaining=0, newRemaining=0, inHunk=false;
+  let previousOldEnd=-1,previousNewEnd=-1,previousHunk=false;
   const seen=new Set();
   function finishHunk() {
     if(inHunk && (oldRemaining!==0 || newRemaining!==0))
@@ -39,6 +40,7 @@ function checkDiffCoverage(text, expectedCount) {
       seen.add(m[1]); count++;
       file={path:m[1],oldHeader:false,newHeader:false,hunkSeen:false};
       oldRemaining=0;newRemaining=0;inHunk=false;
+      previousOldEnd=-1;previousNewEnd=-1;previousHunk=false;
       continue;
     }
     if(!file) {
@@ -59,6 +61,19 @@ function checkDiffCoverage(text, expectedCount) {
         (oldRemaining===0 && newRemaining===0)) {
         deny('GITHUB_DIFF_COVERAGE_UNVERIFIED');
       }
+      // Fail closed on overlapping/nonmonotonic hunk source coordinates:
+      // otherwise a forged diff can cite changed lines more than once.
+      if((oldRemaining>0&&oldStart===0)||
+         (newRemaining>0&&newStart===0)||
+         (previousHunk&&(oldStart<previousOldEnd||
+           newStart<previousNewEnd)))
+        deny('GITHUB_DIFF_HUNK_ORDER_INVALID');
+      previousOldEnd=oldStart+oldRemaining;
+      previousNewEnd=newStart+newRemaining;
+      if(!Number.isSafeInteger(previousOldEnd)||
+         !Number.isSafeInteger(previousNewEnd))
+        deny('GITHUB_DIFF_HUNK_ORDER_INVALID');
+      previousHunk=true;
       file.hunkSeen=true;inHunk=true;
       continue;
     }

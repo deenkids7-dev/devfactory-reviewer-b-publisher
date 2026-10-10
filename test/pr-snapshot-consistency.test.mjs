@@ -156,3 +156,22 @@ test('forked or missing head repository cannot impersonate internal DevFactory c
       /(?:INVALID_GITHUB_PR_METADATA|GITHUB_PR_NOT_ELIGIBLE)/);
   }
 });
+
+test('immutable Git diff metadata must reject overlapping and nonmonotonic hunks',()=>{
+ const before='diff --git a/demo.mjs b/demo.mjs\n--- a/demo.mjs\n+++ b/demo.mjs\n';
+ const examples=[
+  '@@ -1 +1 @@\n-old\n+new\n@@ -1 +1 @@\n-again\n+again\n',
+  '@@ -10 +10 @@\n-old\n+new\n@@ -2 +2 @@\n-old\n+new\n',
+  '@@ -0 +1 @@\n-old\n+new\n',
+  '@@ -1 +0 @@\n-old\n+new\n'
+ ];
+ for(const caseText of examples)
+  assert.throws(()=>snapshot(fixture({rawDiff:Buffer.from(before+caseText)})),
+    /GITHUB_DIFF_HUNK_ORDER_INVALID/);
+});
+test('allows new-file and deletion-only zero-span origin where Git format requires it',()=>{
+ for(const raw of [
+  'diff --git a/demo.mjs b/demo.mjs\nnew file mode 100644\n--- /dev/null\n+++ b/demo.mjs\n@@ -0,0 +1 @@\n+new\n',
+  'diff --git a/demo.mjs b/demo.mjs\ndeleted file mode 100644\n--- a/demo.mjs\n+++ /dev/null\n@@ -1 +0,0 @@\n-old\n'
+ ])assert.doesNotThrow(()=>snapshot(fixture({rawDiff:Buffer.from(raw)})));
+});

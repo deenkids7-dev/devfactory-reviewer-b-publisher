@@ -34,3 +34,23 @@ test('reject invalid UTF-8 or binary input',()=>{
  assert.throws(()=>deriveAddedLinesFromDiff({diffBytes:Buffer.from([255,0,7])}),
   /DIFF_ANCHOR_/);
 });
+
+test('line-anchor parser rejects overlapping or decreasing hunk coordinates',()=>{
+ const h=hdr('src/overlap.mjs');
+ for(const caseText of [
+  '@@ -1 +1 @@\n-old\n+new\n@@ -1 +1 @@\n-old2\n+new2\n',
+  '@@ -9 +9 @@\n-a\n+b\n@@ -2 +2 @@\n-a\n+b\n',
+  '@@ -0 +1 @@\n-old\n+new\n',
+  '@@ -1 +0 @@\n-old\n+new\n'
+ ])assert.throws(()=>parse(h+caseText),/DIFF_ANCHOR_HUNK_ORDER_INVALID/);
+});
+test('zero-span new/deleted-file coordinates remain supported',()=>{
+ const add=parse('diff --git a/new.mjs b/new.mjs\n'+
+  'new file mode 100644\n--- /dev/null\n+++ b/new.mjs\n'+
+  '@@ -0,0 +1 @@\n+new\n');
+ assert.deepEqual(add['new.mjs'],[1]);
+ const del=parse('diff --git a/old.mjs b/old.mjs\n'+
+  'deleted file mode 100644\n--- a/old.mjs\n+++ /dev/null\n'+
+  '@@ -1 +0,0 @@\n-old\n');
+ assert.deepEqual(del['old.mjs'],[]);
+});
