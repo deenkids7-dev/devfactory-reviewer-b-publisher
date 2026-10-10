@@ -18,7 +18,7 @@ test('prototype has no privileged runtime entrypoint or secret access',()=>{
     assert.doesNotMatch(text,/\b(?:Octokit|createAppAuth|createTokenAuth)\s*\(/);
     assert.doesNotMatch(text,/\b(?:PRIVATE_KEY|APP_TOKEN|GITHUB_TOKEN|GH_TOKEN)\b\s*=/);
     assert.doesNotMatch(text,/\bhttps?:\/\/api\.github\.com\/repos\/.*\/reviews\b/);
-    assert.doesNotMatch(text,/\b(?:import|export)\s*\(\s*[^)]/);
+    assert.doesNotMatch(text,/\bimport\s*\(/);
     assert.doesNotMatch(text,/from\s*['"](?:node:(?:child_process|https|http|net|tls)|@octokit|axios)/);
   }
 });
