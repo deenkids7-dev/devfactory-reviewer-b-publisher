@@ -1,5 +1,6 @@
 // Reviewer output structure validation only. No AI provider call, no
 // GitHub access, no producer keys and no approval decision.
+import { canonicalJson } from './canonical.mjs';
 const MAX_REPORT_BYTES = 64 * 1024;
 const MAX_FINDINGS = 50;
 const PATH = /^(?!\/)(?!.*(?:^|\/)\.{1,2}(?:\/|$))[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/;
@@ -35,6 +36,11 @@ export function validateReviewerFindings({reportBytes,changedPaths}) {
   if (!Buffer.from(raw,'utf8').equals(reportBytes)) deny('REVIEW_INVALID_UTF8');
   let value;
   try { value=JSON.parse(raw); } catch { deny('REVIEW_INVALID_JSON'); }
+  // Prevent ambiguous signer/consumer interpretations (duplicate keys,
+  // reordered keys, noncanonical JSON, malicious object keys).
+  let normalized;
+  try { normalized=canonicalJson(value); } catch { deny('REVIEW_NONCANONICAL_JSON'); }
+  if (normalized!==raw) deny('REVIEW_NONCANONICAL_JSON');
   if (!fields(value,['schema','run_id','summary','findings']) ||
       value.schema!=='devfactory.reviewer-b.findings.v1' ||
       !RUN_ID.test(value.run_id) ||
