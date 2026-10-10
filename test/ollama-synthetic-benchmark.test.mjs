@@ -28,7 +28,7 @@ function mock(options={}){
  };
  return {fetchImpl,calls};
 }
-test('free local benchmark runs two FIXED synthetic examples without GitHub or secrets',async()=>{
+test('free local benchmark runs four FIXED synthetic examples without GitHub or secrets',async()=>{
  const f=mock();
  const result=await runSyntheticLocalOllamaBenchmark({fetchImpl:f.fetchImpl});
  assert.equal(f.calls.length,4);
@@ -49,7 +49,7 @@ test('free local benchmark runs two FIXED synthetic examples without GitHub or s
   assert.doesNotMatch(call.config.body,/PRIVATE KEY|GITHUB_TOKEN|ghp_/);
   const request=JSON.parse(call.config.body);
   assert.equal(request.model,'qwen2.5-coder:7b');
-  assert.match(request.messages[1].content,/synthetic.yml/);
+  assert.match(request.messages[1].content,/synthetic\.yml|auth-synthetic\.mjs/);
  }
 });
 test('no remote endpoints, redirects, wrong model or failed HTTP are accepted',async()=>{
