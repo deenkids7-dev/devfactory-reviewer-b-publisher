@@ -58,7 +58,7 @@ export function partitionBoundedGitDiff({
   if(!Buffer.from(text,'utf8').equals(rawDiffBytes)||text.includes('\0')||
     /^(?:Binary files |GIT binary patch)/m.test(text))
     deny('REVIEW_SHARDS_ENCODING_UNSUPPORTED');
-  const boundaries=[...text.matchAll(/^diff --git a\/(\S+) b\/(\S+)$/gm)];
+  const boundaries=[...text.matchAll(/^diff --git a\/(\S+) b\/(\S+)\r?$/gm)];
   if(boundaries.length!==trustedChangedPaths.length||
     boundaries[0]?.index!==0)deny('REVIEW_SHARDS_FILE_COVERAGE_INVALID');
   const shards=[],whole=[],currentPaths=[];
@@ -161,7 +161,7 @@ export function partitionLosslessDiffLines({
   if(!Buffer.from(text,'utf8').equals(rawDiffBytes)||text.includes('\0')||
     /^(?:Binary files |GIT binary patch)/m.test(text))
     deny('REVIEW_SPANS_ENCODING_UNSUPPORTED');
-  const boundaries=[...text.matchAll(/^diff --git a\/(\S+) b\/(\S+)$/gm)];
+  const boundaries=[...text.matchAll(/^diff --git a\/(\S+) b\/(\S+)\r?$/gm)];
   if(boundaries.length!==trustedChangedPaths.length||
      boundaries[0]?.index!==0)
     deny('REVIEW_SPANS_FILE_COVERAGE_INVALID');

@@ -215,3 +215,30 @@ test('private model findings stay out of logs, copies and JSON serialization',()
   assert.ok(r.privateCanonicalReportBytes.toString().includes(sensitive),
     'caller cannot mutate privately held canonical report by altering a copy');
 });
+
+test('model formatting whitespace normalizes before stable fingerprint generation',()=>{
+ const formatted=JSON.stringify({summary:'Synthetic\n  summary \t safely',findings:[{
+   severity:'high',path:'src/check.mjs',line:1,
+   message:'  Missing\n validation \t of input  ',
+   evidence:'Before:\r\n unchecked\tvalue  '
+ }]});
+ const completion=parseResponse(modelResponse(formatted));
+ assert.equal(completion.provisionalState,'FAIL');
+ const report=JSON.parse(completion.privateCanonicalReportBytes.toString('utf8'));
+ assert.equal(report.summary,'Synthetic summary safely');
+ assert.equal(report.findings[0].message,'Missing validation of input');
+ assert.equal(report.findings[0].evidence,'Before: unchecked value');
+ const fp=report.findings[0].fingerprint;
+ assert.match(fp,/^[a-f0-9]{64}$/);
+ assert.equal(parseResponse(modelResponse(formatted)).privateCanonicalReportBytes.toString(),
+   completion.privateCanonicalReportBytes.toString());
+ assert.equal(completion.approvalAuthorized,false);
+});
+test('unsupported model control characters still fail closed',()=>{
+ const bad=JSON.stringify({summary:'safe',findings:[{
+  severity:'high',path:'src/check.mjs',line:1,
+  message:'contains\u0000unexpected control',
+  evidence:'Synthetic reason'
+ }]});
+ assert.throws(()=>parseResponse(modelResponse(bad)),/REVIEW_FINDING_INVALID|UNSUPPORTED_CANONICAL_VALUE/);
+});

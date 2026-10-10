@@ -175,3 +175,11 @@ test('allows new-file and deletion-only zero-span origin where Git format requir
   'diff --git a/demo.mjs b/demo.mjs\ndeleted file mode 100644\n--- a/demo.mjs\n+++ /dev/null\n@@ -1 +0,0 @@\n-old\n'
  ])assert.doesNotThrow(()=>snapshot(fixture({rawDiff:Buffer.from(raw)})));
 });
+
+test('CRLF diff is parsed without modifying immutable original diff digest',()=>{
+ const raw=Buffer.from(diff.toString('utf8').replace(/\n/g,'\r\n'));
+ const expected=createHash('sha256').update(raw).digest('hex');
+ const actual=snapshot(fixture({rawDiff:raw}));
+ assert.equal(actual.diff_sha256,expected);
+ assert.notEqual(actual.diff_sha256,createHash('sha256').update(diff).digest('hex'));
+});

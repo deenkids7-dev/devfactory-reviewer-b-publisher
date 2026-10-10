@@ -118,3 +118,24 @@ test('well-formed multi-file and two-hunk input preserves exact finding line att
  assert.equal(out.provisionalState,'FAIL');
  assert.equal(out.approvalAuthorized,false);
 });
+
+test('quoted YAML workflow write permissions remain detectable',()=>{
+ for(const added of [
+  "permissions: 'write-all'",'permissions: "write-all"',
+  "    contents: 'write'","    pull-requests: \"write\"",
+  "    id-token: 'write'  # comment"
+ ]){
+  const r=run(diff('.github/workflows/quoted.yml',[added]));
+  assert.equal(r.provisionalState,'FAIL',added);
+  assert.equal(r.blockingFindings,1,added);
+  assert.equal(r.approvalAuthorized,false);
+ }
+});
+test('CRLF workflow diff is still scanned without changing actual byte hash',()=>{
+ const raw=Buffer.from(diff('.github/workflows/win.yml',['permissions: "write-all"']).replace(/\n/g,'\r\n'));
+ const before=Buffer.from(raw);
+ const result=runFailOnlyStaticDiffAudit({diffBytes:raw,runId});
+ assert.equal(result.provisionalState,'FAIL');
+ assert.equal(result.blockingFindings,1);
+ assert.ok(raw.equals(before));
+});

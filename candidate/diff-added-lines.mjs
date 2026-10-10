@@ -5,9 +5,12 @@ function deny(code){throw Error(code);}
 export function deriveAddedLinesFromDiff({diffBytes}={}){
   if(!Buffer.isBuffer(diffBytes)||diffBytes.length<16||
     diffBytes.length>128*1024)deny('DIFF_ANCHOR_INPUT_UNTRUSTED');
-  const source=diffBytes.toString('utf8');
-  if(!Buffer.from(source,'utf8').equals(diffBytes)||/\x00/.test(source))
+  const rawSource=diffBytes.toString('utf8');
+  if(!Buffer.from(rawSource,'utf8').equals(diffBytes)||/\x00/.test(rawSource))
     deny('DIFF_ANCHOR_ENCODING_INVALID');
+  // Parse CRLF safely without modifying the authenticated source bytes.
+  const source=rawSource.replace(/\r\n/g,'\n');
+  if(source.includes('\r'))deny('DIFF_ANCHOR_ENCODING_INVALID');
   const entries=Object.create(null);
   let file=null,oldLeft=0,newLeft=0,newLine=0,inHunk=false;
   let oldHeader=false,newHeader=false,hasHunk=false;

@@ -181,6 +181,10 @@ export function validateDeepSeekCandidateCompletion({
       !Array.isArray(raw.findings) || raw.findings.length>50) {
     deny('MODEL_FINDING_SCHEMA_INVALID');
   }
+  // Flatten harmless model formatting before hashing so the fingerprint
+  // matches precisely the validated finding. Do not strip other controls.
+  const normalizeText=value=>typeof value==='string'?
+    value.replace(/[ \t\r\n]+/g,' ').trim():value;
   const enhanced=[];
   for (const finding of raw.findings) {
     if (!finding || typeof finding!=='object' || Array.isArray(finding) ||
@@ -188,14 +192,17 @@ export function validateDeepSeekCandidateCompletion({
           JSON.stringify(['evidence','line','message','path','severity'])) {
       deny('MODEL_FINDING_SCHEMA_INVALID');
     }
+    const normalized={...finding,
+      message:normalizeText(finding.message),
+      evidence:normalizeText(finding.evidence)};
     const fingerprint=createHash('sha256')
       .update('devfactory.review-finding.v1\0')
-      .update(canonicalJson(finding),'utf8')
+      .update(canonicalJson(normalized),'utf8')
       .digest('hex');
-    enhanced.push({...finding,fingerprint});
+    enhanced.push({...normalized,fingerprint});
   }
   const result=normalizeUntrustedModelFindings({
-    rawModelOutput:canonicalJson({summary:raw.summary,findings:enhanced}),
+    rawModelOutput:canonicalJson({summary:normalizeText(raw.summary),findings:enhanced}),
     runId,trustedChangedPaths
   });
   const safe=({

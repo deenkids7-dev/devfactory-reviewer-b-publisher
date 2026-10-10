@@ -54,3 +54,15 @@ test('zero-span new/deleted-file coordinates remain supported',()=>{
   '@@ -1 +0,0 @@\n-old\n');
  assert.deepEqual(del['old.mjs'],[]);
 });
+
+test('CRLF unified diff preserves exact added-line positions without altering input bytes',()=>{
+ const raw=Buffer.from(hdr('src/windows.mjs')+'@@ -1 +1 @@\n-before\n+after\n');
+ const crlf=Buffer.from(raw.toString('utf8').replace(/\n/g,'\r\n'));
+ const before=Buffer.from(crlf);
+ const anchors=deriveAddedLinesFromDiff({diffBytes:crlf});
+ assert.deepEqual(anchors['src/windows.mjs'],[1]);
+ assert.ok(crlf.equals(before));
+ assert.throws(()=>deriveAddedLinesFromDiff({
+  diffBytes:Buffer.from(raw.toString().replace('\n','\r'))
+ }),/DIFF_ANCHOR_/);
+});

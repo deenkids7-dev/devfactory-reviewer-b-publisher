@@ -13,7 +13,7 @@ const RULES=Object.freeze([
     message:'Untrusted pull_request_target workflow trigger newly introduced'}),
   Object.freeze({id:'workflow-write-all',severity:'high',
     pathOnly:/^\.github\/workflows\/.*\.ya?ml$/,
-    pattern:/^\s*permissions\s*:\s*write-all\s*(?:#.*)?$/,
+    pattern:/^\s*permissions\s*:\s*(?:(["'])write-all\1|write-all)\s*(?:#.*)?$/,
     message:'Broad write-all workflow permissions newly introduced'}),
   Object.freeze({id:'workflow-untrusted-shell',severity:'high',
     pathOnly:/^\.github\/workflows\/.*\.ya?ml$/,
@@ -24,7 +24,7 @@ const RULES=Object.freeze([
     // Conservative trigger. A write scope can occur at job-level, where it
     // overrides a safe root permissions block. False positives remain FAIL,
     // never a silent PASS; independent review decides final authorization.
-    pattern:/^\s*(?:actions|attestations|checks|contents|deployments|discussions|id-token|issues|models|packages|pages|pull-requests|repository-projects|security-events|statuses)\s*:\s*write\s*(?:#.*)?$/,
+    pattern:/^\s*(?:actions|attestations|checks|contents|deployments|discussions|id-token|issues|models|packages|pages|pull-requests|repository-projects|security-events|statuses)\s*:\s*(?:(["'])write\1|write)\s*(?:#.*)?$/,
     message:'Workflow newly requests a GitHub token write permission'})
 ]);
 function deny(code){throw Error(code);}
@@ -42,9 +42,12 @@ export function runFailOnlyStaticDiffAudit({diffBytes,runId}={}){
   if(!Buffer.isBuffer(diffBytes)||diffBytes.length<16||
      diffBytes.length>128*1024||!RUN.test(runId))
     deny('STATIC_AUDIT_INPUT_INVALID');
-  const text=diffBytes.toString('utf8');
-  if(!Buffer.from(text,'utf8').equals(diffBytes)||
-     /\x00/.test(text))deny('STATIC_AUDIT_ENCODING_UNSUPPORTED');
+  const rawText=diffBytes.toString('utf8');
+  if(!Buffer.from(rawText,'utf8').equals(diffBytes)||
+     /\x00/.test(rawText))deny('STATIC_AUDIT_ENCODING_UNSUPPORTED');
+  // Compare against the original bytes elsewhere; this is parser-only text.
+  const text=rawText.replace(/\r\n/g,'\n');
+  if(text.includes('\r'))deny('STATIC_AUDIT_ENCODING_UNSUPPORTED');
   let currentPath=null,newLine=null;const paths=[],findings=[];
   for(const line of text.split('\n')){
     if(line.startsWith('diff --git ')){

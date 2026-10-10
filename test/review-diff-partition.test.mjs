@@ -121,3 +121,16 @@ test('lossless span mode rejects stale SHA and missing paths',()=>{
   trustedChangedPaths:paths.slice(1)
  }),/REVIEW_SPANS_FILE_COVERAGE_INVALID/);
 });
+
+test('CRLF diff sharding and spans preserve original SHA and every byte',()=>{
+ const raw=Buffer.from(paths.map((p,i)=>file(p,'before'+i,'after'+i)).join('').replace(/\n/g,'\r\n'));
+ const partition=run(raw,paths,{maxChunkBytes:512});
+ assert.equal(partition.wholeDiffSha256,hash(raw));
+ assert.equal(partition.coverageComplete,true);
+ assert.ok(Buffer.concat(partition.chunks.map(x=>x.privateDiffBytes)).equals(raw));
+ const spans=partitionLosslessDiffLines({rawDiffBytes:raw,
+  trustedDiffSha256:hash(raw),trustedChangedPaths:paths,maxSpanBytes:512});
+ assert.ok(Buffer.concat(spans.spans.map(x=>x.privateSliceBytes)).equals(raw));
+ assert.equal(spans.approvalAuthorized,false);
+ assert.equal(spans.semanticReviewCoverageVerified,false);
+});

@@ -169,7 +169,8 @@ export function deriveConsistentPrSnapshot({
       /^(?:GIT binary patch|Binary files )/m.test(text)) {
     deny('GITHUB_DIFF_ENCODING_OR_BINARY_UNSUPPORTED');
   }
-  checkDiffCoverage(text, before.changed_files);
+  // Normalize only the parser view; bind the SHA-256 to original GitHub bytes.
+  checkDiffCoverage(text.replace(/\r\n/g,'\n'), before.changed_files);
   return Object.freeze({
     repository:before.repository, repository_id:before.repository_id,
     pr_number:before.pr_number, head_sha:before.head_sha,
