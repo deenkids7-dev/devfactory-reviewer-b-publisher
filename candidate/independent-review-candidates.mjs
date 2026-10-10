@@ -46,7 +46,7 @@ export function assessIndependentReviewCandidates({
   const candidates=[...last.entries()].filter(([_,x])=>
     x.state==='APPROVED'&&x.head===expectedHeadSha)
     .map(([login,x])=>Object.freeze({login,reviewId:x.id,headSha:x.head}))
-    .sort((a,b)=>a.login.localeCompare(b.login,'en'));
+    .sort((a,b)=>a.login<b.login?-1:a.login>b.login?1:0);
   return Object.freeze({
     repository:REPO,prNumber,headSha:expectedHeadSha,
     externalAccountApprovalCandidates:Object.freeze(candidates),

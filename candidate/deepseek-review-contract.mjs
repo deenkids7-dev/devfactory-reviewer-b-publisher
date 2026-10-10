@@ -100,7 +100,7 @@ export function prepareDeepSeekCandidate({
       {role:'system',content:plan.systemInstructions.replace(
         'Each finding: fingerprint (64 lowercase hex), severity',
         'Each finding: severity'
-      )+'\\nNever include a fingerprint: the trusted normalizer computes it.'},
+      )+'\nNever include a fingerprint: the trusted normalizer computes it.'},
       {role:'user',content:prompt}
     ]
   });

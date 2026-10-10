@@ -255,3 +255,17 @@ test('30B model can be selected manually for fixed synthetic local benchmark onl
  assert.doesNotMatch(workflow,/model:\s*qwen3-coder:30b/);
  assert.doesNotMatch(workflow,/"model":"qwen3-coder:30b"/);
 });
+
+test('synthetic gate cannot pass on caller-forged zero-case metrics',()=>{
+ for(const fake of [
+  {seededSemanticBugs:0,seededSemanticBugsDetected:0,cleanFixtures:0,
+   cleanFixtureFalseAlerts:0,cleanFixtureBlockingFalseAlerts:0},
+  {seededSemanticBugs:4,seededSemanticBugsDetected:4,cleanFixtures:0,
+   cleanFixtureFalseAlerts:0,cleanFixtureBlockingFalseAlerts:0},
+  {seededSemanticBugs:0,seededSemanticBugsDetected:0,cleanFixtures:4,
+   cleanFixtureFalseAlerts:0,cleanFixtureBlockingFalseAlerts:0}
+ ]){
+  assert.throws(()=>evaluateSyntheticReviewQuality(fake),
+   e=>e.message==='OLLAMA_SYNTHETIC_QUALITY_METRICS_INVALID');
+ }
+});

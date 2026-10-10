@@ -67,3 +67,15 @@ test('a plain GitHub comment or forged reviewer input never counts',()=>{
   ...rev('external-security-reviewer'),id:0
  }])),/REVIEW_CANDIDATES_GITHUB_FORMAT_INVALID/);
 });
+
+test('external candidate login order is bytewise and never grants security approval',()=>{
+ const logins=['reviewer-z','Reviewer-A','reviewer-a'];
+ const input=logins.map((x,i)=>rev(x,head,'APPROVED',500+i));
+ const result=assessIndependentReviewCandidates(parameters(input,{
+  eligibleReviewerLogins:logins
+ }));
+ assert.deepEqual(result.externalAccountApprovalCandidates.map(x=>x.login),
+  ['Reviewer-A','reviewer-a','reviewer-z']);
+ assert.equal(result.securityReviewVerified,false);
+ assert.equal(result.approvalAuthorized,false);
+});

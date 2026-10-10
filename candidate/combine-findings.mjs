@@ -44,7 +44,7 @@ export function combineReviewerFindings({
   }
   const combined=[...fingerprints.values()]
     .map(value=>JSON.parse(value))
-    .sort((x,y)=>x.fingerprint.localeCompare(y.fingerprint,'en'));
+    .sort((x,y)=>x.fingerprint<y.fingerprint?-1:x.fingerprint>y.fingerprint?1:0);
   if(combined.length>50)deny('COMBINED_REVIEW_TOO_MANY_FINDINGS');
   const joined=[
     'Static security audit: '+a.value.summary,

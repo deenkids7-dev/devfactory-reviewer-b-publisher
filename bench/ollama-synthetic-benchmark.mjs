@@ -75,8 +75,14 @@ export function evaluateSyntheticReviewQuality({
 }={}){
   const fields=[seededSemanticBugs,seededSemanticBugsDetected,cleanFixtures,
     cleanFixtureFalseAlerts,cleanFixtureBlockingFalseAlerts];
-  if(fields.some(n=>!Number.isSafeInteger(n)||n<0)||
-     seededSemanticBugs!==4||cleanFixtures!==4||
+  // Expected counts come from the immutable, locally defined benchmark cases,
+  // not from provider-reported metrics or a caller-supplied expectation.
+  const expectedSemantic=FIXTURES.filter(f=>f.knownSemanticBug).length;
+  const expectedClean=FIXTURES.filter(f=>
+    !f.knownStaticBlocker&&!f.knownSemanticBug).length;
+  if(expectedSemantic<1||expectedClean<1||
+     fields.some(n=>!Number.isSafeInteger(n)||n<0)||
+     seededSemanticBugs!==expectedSemantic||cleanFixtures!==expectedClean||
      seededSemanticBugsDetected>seededSemanticBugs||
      cleanFixtureFalseAlerts>cleanFixtures||
      cleanFixtureBlockingFalseAlerts>cleanFixtureFalseAlerts)

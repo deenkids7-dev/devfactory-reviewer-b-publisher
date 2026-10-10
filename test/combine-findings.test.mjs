@@ -117,3 +117,11 @@ test('Semgrep duplicate fingerprints must match or be refused',()=>{
    semgrepReportBytes:make([{...item('a'),message:'different'}])}),
   /COMBINED_REVIEW_FINDING_CONFLICT/);
 });
+
+test('fingerprint ordering is bytewise and does not require locale data',()=>{
+ const items=['f','a','0','9'].map(x=>item(x));
+ const result=call([items[0],items[2]],[items[1],items[3]]);
+ assert.deepEqual(JSON.parse(result.reportBytes).findings.map(x=>x.fingerprint),
+  ['0','9','a','f'].map(x=>x.repeat(64)));
+ assert.equal(result.approvalAuthorized,false);
+});

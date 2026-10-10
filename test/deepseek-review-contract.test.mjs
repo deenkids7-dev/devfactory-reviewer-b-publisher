@@ -242,3 +242,11 @@ test('unsupported model control characters still fail closed',()=>{
  }]});
  assert.throws(()=>parseResponse(modelResponse(bad)),/REVIEW_FINDING_INVALID|UNSUPPORTED_CANONICAL_VALUE/);
 });
+
+test('DeepSeek system instructions contain real line break, not escaped literal',()=>{
+ const request=prepareDeepSeekCandidate({plan:plan(),inputTokenCeiling:10000});
+ const content=JSON.parse(request.privateRequestJson).messages[0].content;
+ assert.ok(content.includes('\nNever include a fingerprint:'));
+ assert.ok(!content.includes('\\nNever include a fingerprint:'));
+ assert.equal(request.approvalAuthorized,false);
+});
