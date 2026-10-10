@@ -23,6 +23,25 @@ anti-replay protection. A trustedTarget supplied by a test is not a live GitHub
 attestation. A claimed PASS is not independently verified quality or permission
 to approve. This repository has not yet implemented these missing controls.
 
+## Additional fail-closed prototype components
+
+- `src/strict-envelope.mjs`: parses only canonical UTF-8 signed bytes,
+  rejecting ambiguous JSON, duplicate keys and oversized reports.
+- `src/pr-snapshot-consistency.mjs`: checks consistency of **supplied**
+  PR metadata before/after supplied text-only diff bytes. It has NO
+  authenticated GitHub transport, so it cannot establish live provenance.
+- `src/native-review-wire.mjs`: verifies a *detached* RSA-SHA256 signature
+  and formats a synthetic native-review marker compatible with the existing
+  adapter planned in DevFactory PR #900. It DOES NOT sign, publish, select
+  APPROVE/REQUEST_CHANGES or authorize an action. `publishEvent` is always
+  `null`.
+- `docs/NATIVE-REVIEW-COMPATIBILITY.md`: documents the two distinct signing
+  layers (independent analyzer vs native Publisher), their exact trust
+  boundaries and the unmapped provenance requirements.
+
+All positive RSA/Ed25519 tests use **ephemeral synthetic keys**. These keys,
+mock PR data and fixture PASS claims are not production evidence.
+
 ## Reproduce locally
 
 Node.js 20+ with no external packages or secrets:
