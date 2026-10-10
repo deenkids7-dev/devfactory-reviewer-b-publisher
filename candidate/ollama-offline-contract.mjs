@@ -86,6 +86,12 @@ export function prepareOfflineOllamaCandidate({
     '\nDiff snippets are not full files: omitted surrounding code and configuration may already exist.'+
     '\nBefore reporting, name a concrete failing input, runtime path, or security bypass introduced by the change.'+
     '\nTrace the actual result of guards and comparisons; do not mistake defensive null handling for an authorization bypass.'+
+    '\nFor each suspected bug, contrast one specific input: what BEFORE returns/throws and what AFTER returns/throws.'+
+    '\nIf both behaviors are equivalent for that input, it is NOT an introduced regression: omit the finding.'+
+    '\nFor boolean guards and equality/inequality, evaluate both matching and nonmatching values, then name which was incorrectly accepted or rejected.'+
+    '\nFor threshold comparisons, test a boundary input admitted AFTER but rejected BEFORE; do not reverse the direction of the change.'+
+    '\nTreat reduced GitHub permissions, additional null guards, defensive clamps and immutable objects as safe by default absent explicit failing requirements in this diff.'+
+    '\nMissing context is not evidence of failure; never invent callers, invariants, or runtime mutations to justify a warning.'+
     '\nIf no reproducible regression is supported by the diff, return an empty findings array.';
   const input=JSON.stringify({
     repository:plan.exactScope.repository,pr_number:plan.exactScope.prNumber,

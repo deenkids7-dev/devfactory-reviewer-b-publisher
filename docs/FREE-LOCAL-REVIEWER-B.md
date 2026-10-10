@@ -350,3 +350,15 @@ Do not weaken the benchmark or grant any secrets/approval privileges merely
 because the static/unit tests passed. A qualified external reviewer, isolated
 execution provenance, repository-minimum GitHub App scopes, canonical
 HUMAN_GO, and model quality improvements remain required.
+
+## Counterfactual prompt revision — guarded quality experiment
+
+The local Ollama candidate now requests a **before/after concrete-input
+counterexample** for every proposed semantic finding. It also requires
+truth-table reasoning for equality guards, comparison-boundary examples,
+and explicit refusal to invent missing call paths when a change strengthens
+null handling, token scopes, bounds or immutability. This is a general review
+instruction, not a fixture-specific allowlist. It does not remove raw model
+findings, relax strict zero-false-alert benchmarks, generate human approval,
+or prove model reliability. Any quality improvement must be established by
+subsequent real synthetic-only inference at the exact revised HEAD.

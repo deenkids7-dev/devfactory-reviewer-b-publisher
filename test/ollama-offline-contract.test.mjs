@@ -47,6 +47,10 @@ test('build local Ollama JSON request, never authorize or publish',()=>{
  assert.equal(input.messages.length,2);
  assert.match(input.messages[0].content,/Diff snippets are not full files/);
  assert.match(input.messages[0].content,/concrete failing input/);
+ assert.match(input.messages[0].content,/BEFORE returns\/throws and what AFTER returns\/throws/);
+ assert.match(input.messages[0].content,/both matching and nonmatching values/);
+ assert.match(input.messages[0].content,/do not reverse the direction/);
+ assert.match(input.messages[0].content,/never invent callers, invariants/);
  assert.match(input.messages[1].content,/SYNTHETIC_ONLY_PRIVATE/);
  assert.equal(result.approvalAuthorized,false);
  assert.equal(result.independentReviewVerified,false);
