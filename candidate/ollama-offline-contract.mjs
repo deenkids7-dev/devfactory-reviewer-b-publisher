@@ -8,6 +8,25 @@ import { normalizeUntrustedModelFindings } from './semantic-review-request.mjs';
 const MODELS=Object.freeze(['qwen2.5-coder:7b','qwen2.5-coder:14b']);
 const SHA40=/^[0-9a-f]{40}$/, HASH=/^[0-9a-f]{64}$/;
 const RUN=/^[A-Za-z0-9_:-]{8,180}$/;
+// Ollama supports strict JSON-schema structured output on /api/chat.
+const FINDINGS_FORMAT=Object.freeze({
+  type:'object',additionalProperties:false,
+  required:['summary','findings'],
+  properties:{
+    summary:{type:'string',maxLength:2000},
+    findings:{type:'array',maxItems:50,items:{
+      type:'object',additionalProperties:false,
+      required:['severity','path','line','message','evidence'],
+      properties:{
+        severity:{type:'string',enum:['critical','high','medium','low','informational']},
+        path:{type:'string',maxLength:300},
+        line:{type:'integer',minimum:1},
+        message:{type:'string',maxLength:500},
+        evidence:{type:'string',maxLength:1000}
+      }
+    }}
+  }
+});
 function deny(c){throw Error(c);}
 function exact(x,keys){return x&&typeof x==='object'&&!Array.isArray(x)&&
   JSON.stringify(Object.keys(x).sort())===JSON.stringify([...keys].sort());}
@@ -49,8 +68,8 @@ export function prepareOfflineOllamaCandidate({
     changed_paths:plan.changedPaths,untrusted_unified_diff:plan.privateDiffText
   });
   const privateRequest=JSON.stringify({
-    model,stream:false,format:'json',keep_alive:0,
-    options:{temperature:0,num_predict:maxOutputTokens},
+    model,stream:false,format:FINDINGS_FORMAT,keep_alive:0,
+    options:{temperature:0,num_ctx:8192,num_predict:maxOutputTokens},
     messages:[{role:'system',content:system},{role:'user',content:input}]
   });
   const result=({
@@ -59,6 +78,7 @@ export function prepareOfflineOllamaCandidate({
     headSha:plan.exactScope.headSha,baseSha:plan.exactScope.baseSha,
     diffSha256:plan.exactScope.diffSha256,
     changedFiles:plan.changedPaths.length,maxOutputTokens,
+    modelContextCompletenessVerified:false,
     modelExecuted:false,independentReviewVerified:false,
     privateSourceProcessingAuthorized:false,approvalAuthorized:false,
     publishEvent:null
@@ -124,7 +144,8 @@ export function validateOfflineOllamaCompletion({
     provisionalState:checked.provisionalState,findingCount:checked.findingCount,
     reportedPromptTokens:response.prompt_eval_count,
     reportedCompletionTokens:response.eval_count,
-    modelProvenanceVerified:false,independentReviewVerified:false,
+    modelProvenanceVerified:false,modelContextCompletenessVerified:false,
+    independentReviewVerified:false,
     approvalAuthorized:false,publishEvent:null
   };
   Object.defineProperties(safe,{

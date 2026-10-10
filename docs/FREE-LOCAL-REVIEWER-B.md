@@ -35,3 +35,17 @@ NEVER load the private DevFactory diff, keys, reports, or privileged credentials
    allow the Publisher to post one authentic native GitHub review.
 
 This code cannot grant PASS, APPROVED, HUMAN_GO, publish, spend, or merge.
+
+## Manual, zero-secret synthetic benchmark
+
+On an isolated testing computer where Ollama is already installed, first
+run `ollama pull qwen2.5-coder:7b`; then run `npm run benchmark:local-synthetic`
+from this repository. This invokes ONLY two hardcoded synthetic diffs over
+`http://127.0.0.1:11434/api/chat`. No private GitHub code, token, file,
+secret or network model provider is loaded. The sample must NOT be used to
+claim independent review or model quality certification. Verify the Ollama
+server is bound to loopback, not a public interface.
+
+The candidate now requests a fixed `num_ctx: 8192` and a restrictive JSON
+schema, but **tokenization and absence of input truncation are not yet
+independently proved**. Never interpret a zero-findings response as PASS.

@@ -33,7 +33,11 @@ test('build local Ollama JSON request, never authorize or publish',()=>{
  const input=JSON.parse(result.privateRequestJson);
  assert.equal(input.model,'qwen2.5-coder:7b');
  assert.equal(input.stream,false);
- assert.equal(input.format,'json');
+ assert.equal(input.format.type,'object');
+ assert.equal(input.format.additionalProperties,false);
+ assert.deepEqual(input.format.required,['summary','findings']);
+ assert.equal(input.format.properties.findings.items.additionalProperties,false);
+ assert.equal(input.options.num_ctx,8192);
  assert.equal(input.options.temperature,0);
  assert.equal(input.options.num_predict,2048);
  assert.equal(input.messages.length,2);
