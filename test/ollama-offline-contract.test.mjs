@@ -206,3 +206,16 @@ test('completion cannot overrun the actual 8192-token context window',()=>{
  assert.equal(accepted.modelContextCompletenessVerified,false);
  assert.equal(accepted.approvalAuthorized,false);
 });
+
+test('Qwen3 reasoning candidate requests strictly bounded non-thinking JSON locally',()=>{
+ const result=prepareOfflineOllamaCandidate({plan:plan(),model:'qwen3:8b'});
+ const request=JSON.parse(result.privateRequestJson);
+ assert.equal(request.model,'qwen3:8b');
+ assert.equal(request.think,false);
+ assert.equal(request.stream,false);
+ assert.equal(request.keep_alive,0);
+ assert.equal(request.options.num_ctx,8192);
+ assert.equal(result.modelExecuted,false);
+ assert.equal(result.privateSourceProcessingAuthorized,false);
+ assert.equal(result.approvalAuthorized,false);
+});

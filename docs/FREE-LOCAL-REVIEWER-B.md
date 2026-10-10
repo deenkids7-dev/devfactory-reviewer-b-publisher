@@ -283,3 +283,14 @@ execution provenance or permission to post GitHub reviews.
 Verdict: neither 7B nor 14B is production-ready as an independent automatic
 Reviewer B. Both remain research/advisory candidates, without model API fees
 and without exposure to PRIVATE DevFactory source.
+
+## Third free model candidate: Qwen3 8B (evaluation only)
+
+Added an opt-in **synthetic-only** `qwen3:8b` Ollama canary. Ollama's
+`think:false` keeps the constrained JSON response format within the strict
+8,192-token context, and the fixed ten-case quality gate rejects false alerts
+and missed semantic bugs. This is **not** a claim that Qwen3 is more accurate
+than Qwen 2.5 Coder or that it will pass. No private data, cloud model, paid
+API, signing credentials or privileged publication are used. Qwen3 Coder 30B
+quantized is about 19 GB and does not fit the standard 16-GB test runner; it
+is not activated by this change.

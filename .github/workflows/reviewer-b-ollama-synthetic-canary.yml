@@ -27,6 +27,8 @@ jobs:
             cli_arg: ''
           - model: qwen2.5-coder:14b
             cli_arg: '--large-synthetic'
+          - model: qwen3:8b
+            cli_arg: '--qwen3-synthetic'
     steps:
       - name: Checkout exact PUBLIC PR HEAD without third-party actions
         shell: bash
@@ -81,13 +83,15 @@ jobs:
           curl --fail --silent --noproxy '*' \
             "http://127.0.0.1:11434/api/tags" > /dev/null
           case "$BENCHMARK_MODEL" in
-            'qwen2.5-coder:7b'|'qwen2.5-coder:14b') ;;
+            'qwen2.5-coder:7b'|'qwen2.5-coder:14b'|'qwen3:8b') ;;
             *) exit 1 ;;
           esac
           ollama pull "$BENCHMARK_MODEL" > /dev/null
           cd source
           if [[ "$BENCHMARK_ARG" == '--large-synthetic' ]]; then
             node bench/ollama-synthetic-benchmark.mjs --large-synthetic | tee "$RUNNER_TEMP/synthetic-report.json"
+          elif [[ "$BENCHMARK_ARG" == '--qwen3-synthetic' ]]; then
+            node bench/ollama-synthetic-benchmark.mjs --qwen3-synthetic | tee "$RUNNER_TEMP/synthetic-report.json"
           else
             test -z "$BENCHMARK_ARG"
             node bench/ollama-synthetic-benchmark.mjs | tee "$RUNNER_TEMP/synthetic-report.json"

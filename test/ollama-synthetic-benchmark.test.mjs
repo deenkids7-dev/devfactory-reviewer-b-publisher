@@ -193,3 +193,31 @@ test('directional oracle recognizes authorization-check-bypassed without a vague
  assert.equal(r.syntheticQualityGatePassed,false);
  assert.equal(r.approvalAuthorized,false);
 });
+
+test('third free Qwen3 8B candidate is strictly local and cannot bypass review quality',async()=>{
+ const f=mock({model:'qwen3:8b'});
+ const result=await runSyntheticLocalOllamaBenchmark({
+  fetchImpl:f.fetchImpl,model:'qwen3:8b'
+ });
+ assert.equal(result.model,'qwen3:8b');
+ assert.equal(result.testsCompleted,10);
+ assert.equal(result.modelQualityCertified,false);
+ assert.equal(result.approvalAuthorized,false);
+ assert.equal(result.independentReviewerProvenanceVerified,false);
+ for(const c of f.calls){
+  const request=JSON.parse(c.config.body);
+  assert.equal(request.model,'qwen3:8b');
+  assert.equal(request.think,false);
+  assert.equal(request.keep_alive,'5m');
+  assert.equal(request.options.num_ctx,8192);
+  assert.equal(c.url,ENDPOINT);
+ }
+});
+test('opt-in Qwen3 CI must run only synthetic cases with no privileged permissions',()=>{
+ const y=readFileSync(new URL('../.github/workflows/reviewer-b-ollama-synthetic-canary.yml',
+  import.meta.url),'utf8');
+ assert.match(y,/model: qwen3:8b/);
+ assert.match(y,/cli_arg: '--qwen3-synthetic'/);
+ assert.match(y,/contains\(github\.event\.pull_request\.labels\.\*\.name, 'reviewer-b-benchmark'\)/);
+ assert.doesNotMatch(y,/security-events:\s*write|secrets\./);
+});

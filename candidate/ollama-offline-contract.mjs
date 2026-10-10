@@ -7,7 +7,7 @@ import { normalizeUntrustedModelFindings,prepareBoundedSemanticReview }
 
 // Dormant, pure Ollama adapter. No network, no tokens, no inference and no POST.
 // Inspired by MIT-licensed The-PR-Agent/pr-agent, without copying its source.
-const MODELS=Object.freeze(['qwen2.5-coder:1.5b','qwen2.5-coder:7b','qwen2.5-coder:14b']);
+const MODELS=Object.freeze(['qwen2.5-coder:1.5b','qwen2.5-coder:7b','qwen2.5-coder:14b','qwen3:8b']);
 const SHA40=/^[0-9a-f]{40}$/, HASH=/^[0-9a-f]{64}$/;
 const RUN=/^[A-Za-z0-9_:-]{8,180}$/;
 // Ollama supports strict JSON-schema structured output on /api/chat.
@@ -94,6 +94,7 @@ export function prepareOfflineOllamaCandidate({
   });
   const privateRequest=JSON.stringify({
     model,stream:false,format:reviewSchema,keep_alive:0,
+    ...(model==='qwen3:8b'?{think:false}:{}),
     options:{temperature:0,num_ctx:8192,num_predict:maxOutputTokens},
     messages:[{role:'system',content:system},{role:'user',content:input}]
   });
