@@ -94,6 +94,12 @@ export function verifyAttestation({ envelope, reportBytes, trustedKeys, trustedT
   try {
     const key = createPublicKey(keyRecord.publicKeyPem);
     if (key.asymmetricKeyType !== 'ed25519') reject('UNTRUSTED_KEY_TYPE');
+    if (!keyRecord.spkiSha256 || !HEX64.test(keyRecord.spkiSha256)) {
+      reject('UNPINNED_SIGNING_KEY');
+    }
+    const actualFingerprint = createHash('sha256')
+      .update(key.export({ format:'der', type:'spki' })).digest('hex');
+    sameHash(keyRecord.spkiSha256, actualFingerprint, 'SIGNING_KEY_FINGERPRINT_MISMATCH');
     valid = verifySignature(null, Buffer.from(canonicalJson(p), 'utf8'), key, rawSignature);
   } catch (e) {
     if (e.message === 'UNTRUSTED_KEY_TYPE') throw e;
