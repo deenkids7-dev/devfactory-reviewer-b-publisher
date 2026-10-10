@@ -127,3 +127,18 @@ test('private diff review plan redacts accidental JSON and debug inspection',()=
   assert.ok(!JSON.stringify(structuredClone(plan)).includes('SYNTHETIC_PRIVATE_LITERAL_NEVER_PRINT'));
   assert.ok(Object.isFrozen(plan));
 });
+
+test('untrusted semantic report never leaks private messages in JSON or inspect',()=>{
+ const secret='SYNTHETIC_SECRET_SEMANTIC_MESSAGE';
+ const value=normalizeUntrustedModelFindings({
+  rawModelOutput:JSON.stringify({summary:secret,findings:[]}),
+  runId,trustedChangedPaths:['src/a.mjs']
+ });
+ assert.ok(value.reportBytes.toString().includes(secret));
+ assert.doesNotMatch(JSON.stringify(value),/SYNTHETIC_SECRET_SEMANTIC_MESSAGE/);
+ assert.doesNotMatch(JSON.stringify({...value}),/SYNTHETIC_SECRET_SEMANTIC_MESSAGE/);
+ assert.doesNotMatch(inspect(value),/SYNTHETIC_SECRET_SEMANTIC_MESSAGE/);
+ assert.match(JSON.stringify(value),/REDACTED_PRIVATE_REPORT/);
+ const copy=value.reportBytes;copy.fill(0);
+ assert.ok(value.reportBytes.toString().includes(secret));
+});

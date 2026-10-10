@@ -123,11 +123,21 @@ export function normalizeUntrustedModelFindings({
   const findings=validateReviewerFindings({
     reportBytes,changedPaths:trustedChangedPaths
   });
-  return Object.freeze({
-    reportBytes,
+  // Untrusted model findings contain PRIVATE paths and explanations.
+  const privateReport=Buffer.from(reportBytes);
+  const safe={
     provisionalState:findings.provisionalState,
     findingCount:findings.parsedFindingCount,
-    approvalAuthorized:false,
-    reviewerIndependenceVerified:false
+    approvalAuthorized:false,reviewerIndependenceVerified:false
+  };
+  Object.defineProperties(safe,{
+    reportBytes:{enumerable:false,configurable:false,
+      get:()=>Buffer.from(privateReport)},
+    toJSON:{enumerable:false,configurable:false,
+      value:()=>({...Object.fromEntries(Object.entries(safe)),
+        reportBytes:'[REDACTED_PRIVATE_REPORT]'})},
+    [inspect.custom]:{enumerable:false,configurable:false,
+      value:()=> '[ModelFindings: PRIVATE REPORT REDACTED]'}
   });
+  return Object.freeze(safe);
 }
