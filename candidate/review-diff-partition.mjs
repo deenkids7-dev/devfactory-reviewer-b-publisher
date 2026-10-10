@@ -117,3 +117,113 @@ export function partitionBoundedGitDiff({
   });
   return Object.freeze(result);
 }
+
+/**
+ * An alternative, lossless TEXT SPAN partition for files larger than a
+ * context-sized shard. Spans are NOT standalone Git diffs and may begin
+ * mid-hunk: no semantic model call or approval may consume them directly.
+ */
+function safeTextSpan(bytes,path,fileNumber,byteStart,lineStart,lineEndExclusive){
+  const data=Buffer.from(bytes);
+  const result={
+    path,fileNumber,byteStart,byteEndExclusive:byteStart+data.length,
+    lineStart,lineEndExclusive,
+    spanSha256:digest(data),byteCount:data.length,
+    inferenceExecuted:false,approvalAuthorized:false
+  };
+  Object.defineProperties(result,{
+    privateSliceBytes:{enumerable:false,configurable:false,
+      get:()=>Buffer.from(data)},
+    toJSON:{enumerable:false,configurable:false,
+      value:()=>({...Object.fromEntries(Object.entries(result)),
+        privateSliceBytes:'[REDACTED]'})},
+    [inspect.custom]:{enumerable:false,configurable:false,
+      value:()=> '[LosslessGitDiffSpan: PRIVATE BYTES REDACTED; NOT A REVIEW]'}
+  });
+  return Object.freeze(result);
+}
+export function partitionLosslessDiffLines({
+  rawDiffBytes,trustedDiffSha256,trustedChangedPaths,
+  maxSpanBytes=3072
+}={}){
+  if(!Buffer.isBuffer(rawDiffBytes)||rawDiffBytes.length<16||
+    rawDiffBytes.length>2*1024*1024||
+    !SHA256.test(trustedDiffSha256)||
+    digest(rawDiffBytes)!==trustedDiffSha256||
+    !Array.isArray(trustedChangedPaths)||trustedChangedPaths.length<1||
+    trustedChangedPaths.length>100||
+    new Set(trustedChangedPaths).size!==trustedChangedPaths.length||
+    trustedChangedPaths.some(p=>typeof p!=='string'||!PATH.test(p))||
+    !Number.isSafeInteger(maxSpanBytes)||maxSpanBytes<512||
+    maxSpanBytes>8192)
+    deny('REVIEW_SPANS_SCOPE_UNVERIFIED');
+  const text=rawDiffBytes.toString('utf8');
+  if(!Buffer.from(text,'utf8').equals(rawDiffBytes)||text.includes('\0')||
+    /^(?:Binary files |GIT binary patch)/m.test(text))
+    deny('REVIEW_SPANS_ENCODING_UNSUPPORTED');
+  const boundaries=[...text.matchAll(/^diff --git a\/(\S+) b\/(\S+)$/gm)];
+  if(boundaries.length!==trustedChangedPaths.length||
+     boundaries[0]?.index!==0)
+    deny('REVIEW_SPANS_FILE_COVERAGE_INVALID');
+  const spans=[];let absoluteByte=0,absoluteLine=1;
+  for(let fileIndex=0;fileIndex<boundaries.length;fileIndex++){
+    const m=boundaries[fileIndex],path=m[1];
+    if(path!==trustedChangedPaths[fileIndex]||m[2]!==path)
+      deny('REVIEW_SPANS_FILE_COVERAGE_INVALID');
+    const end=boundaries[fileIndex+1]?.index??text.length;
+    const wholeFile=Buffer.from(text.slice(m.index,end),'utf8');
+    const anchors=deriveAddedLinesFromDiff({diffBytes:wholeFile});
+    if(Object.keys(anchors).length!==1||!Object.hasOwn(anchors,path))
+      deny('REVIEW_SPANS_FILE_COVERAGE_INVALID');
+    const lines=text.slice(m.index,end).match(/[^\n]*\n|[^\n]+$/g)||[];
+    let parts=[],partSize=0,startByte=absoluteByte,startLine=absoluteLine;
+    function flush(){
+      if(!parts.length)return;
+      spans.push(safeTextSpan(Buffer.concat(parts,partSize),path,
+        fileIndex,startByte,startLine,absoluteLine));
+      parts=[];partSize=0;
+      startByte=absoluteByte;startLine=absoluteLine;
+    }
+    for(const line of lines){
+      const bytes=Buffer.from(line,'utf8');
+      if(bytes.length>maxSpanBytes)
+        deny('REVIEW_SPANS_SINGLE_LINE_OVERSIZED');
+      if(partSize+bytes.length>maxSpanBytes)flush();
+      if(!parts.length){startByte=absoluteByte;startLine=absoluteLine;}
+      parts.push(bytes);partSize+=bytes.length;
+      absoluteByte+=bytes.length;absoluteLine++;
+      if(spans.length>1024)deny('REVIEW_SPANS_TOO_MANY');
+    }
+    flush();
+  }
+  if(!spans.length||spans.length>1024||absoluteByte!==rawDiffBytes.length)
+    deny('REVIEW_SPANS_RECONSTRUCTION_FAILED');
+  for(let i=0;i<spans.length;i++){
+    if(spans[i].byteStart!==(i?spans[i-1].byteEndExclusive:0)||
+      spans[i].byteEndExclusive>rawDiffBytes.length)
+      deny('REVIEW_SPANS_RECONSTRUCTION_FAILED');
+  }
+  const reconstructed=Buffer.concat(spans.map(s=>s.privateSliceBytes));
+  if(!reconstructed.equals(rawDiffBytes)||
+    digest(reconstructed)!==trustedDiffSha256)
+    deny('REVIEW_SPANS_RECONSTRUCTION_FAILED');
+  const result={
+    wholeDiffSha256:trustedDiffSha256,
+    changedFileCount:trustedChangedPaths.length,
+    spanCount:spans.length,
+    spans:Object.freeze(spans),
+    byteCoverageComplete:true,
+    semanticReviewCoverageVerified:false,
+    inferenceExecuted:false,
+    independentReviewVerified:false,
+    approvalAuthorized:false,publishEvent:null
+  };
+  Object.defineProperties(result,{
+    toJSON:{enumerable:false,configurable:false,
+      value:()=>({...Object.fromEntries(Object.entries(result)),
+        spans:result.spans.map(x=>x.toJSON())})},
+    [inspect.custom]:{enumerable:false,configurable:false,
+      value:()=> '[LosslessGitDiffSpans: PRIVATE CONTENT REDACTED; NO REVIEW]'}
+  });
+  return Object.freeze(result);
+}

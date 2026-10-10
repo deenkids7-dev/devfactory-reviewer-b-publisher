@@ -24,3 +24,20 @@ A future protected pipeline must independently attest the full parent
 HEAD/BASE, each part's digest, the content coverage and the ultimate report
 before any signed result can be treated as genuine. Oversized single files
 will require an audited hunk-level protocol rather than a silent fallback.
+
+## Experimental line-level lossless slicing
+
+The same module also provides partitionLosslessDiffLines for files that do
+not fit into a single 3,072-byte model request. It segments only at complete
+UTF-8 lines, tracks original file identities, byte offsets, line offsets
+and SHA-256 fingerprints, validates the entire original diff structure, and
+reconstructs every original byte exactly. An oversized single line remains
+BLOCKED, never silently truncated.
+
+**CRITICAL:** these are contiguous TEXT SPANS, not valid standalone Git diffs.
+They may begin in the middle of a Git hunk and lack full code context.
+byteCoverageComplete does NOT mean semanticReviewCoverageVerified.
+No existing model inference, normalizer, signed reviewer attestation or
+Publisher is allowed to treat them as reviewed. A separate audited context
+and line mapping, complete signed coverage contract, and independent witness
+are mandatory future work before any actual multi-span semantic review.

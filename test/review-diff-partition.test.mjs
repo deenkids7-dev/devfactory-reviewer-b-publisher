@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { inspect } from 'node:util';
-import { partitionBoundedGitDiff } from '../candidate/review-diff-partition.mjs';
+import { partitionBoundedGitDiff,partitionLosslessDiffLines } from '../candidate/review-diff-partition.mjs';
 
 const hash=v=>createHash('sha256').update(v).digest('hex');
 function file(path,before='old()',after='new()'){
@@ -61,4 +61,62 @@ test('fail closed on malformed or binary diff without claiming partial coverage'
  assert.throws(()=>run(broken,['src/a.mjs']),/DIFF_ANCHOR_(?:HUNK_MISMATCH|FILE_INCOMPLETE)/);
  const binary=Buffer.from([255,0,4,13,255,0,19,255,255,255,255,255,255,255,255,255]);
  assert.throws(()=>run(binary,['src/a.mjs']),/REVIEW_SHARDS_ENCODING_UNSUPPORTED/);
+});
+
+test('lossless line-level spans cover an oversized file exactly, without implying model review',()=>{
+ const big=Buffer.from(file('src/long.mjs','old()',
+  Array.from({length:150},(_,i)=>'changed_'+i).join('\n+')));
+ assert.throws(()=>run(big,['src/long.mjs'],{maxChunkBytes:512}),
+  /REVIEW_SHARDS_SINGLE_FILE_OVERSIZED/);
+ const p=partitionLosslessDiffLines({
+  rawDiffBytes:big,trustedDiffSha256:hash(big),
+  trustedChangedPaths:['src/long.mjs'],maxSpanBytes:512
+ });
+ assert.ok(p.spanCount>1);
+ assert.ok(p.spans.every(x=>x.byteCount<=512));
+ assert.deepEqual([...new Set(p.spans.map(x=>x.path))],['src/long.mjs']);
+ assert.ok(Buffer.concat(p.spans.map(x=>x.privateSliceBytes)).equals(big));
+ assert.equal(p.byteCoverageComplete,true);
+ assert.equal(p.semanticReviewCoverageVerified,false);
+ assert.equal(p.approvalAuthorized,false);
+ assert.equal(p.inferenceExecuted,false);
+});
+test('lossless span offsets have no gaps or overlaps across several files',()=>{
+ const x=partitionLosslessDiffLines({
+  rawDiffBytes:diff,trustedDiffSha256:hash(diff),
+  trustedChangedPaths:paths,maxSpanBytes:512
+ });
+ assert.ok(x.spanCount>=1);
+ assert.equal(x.spans[0].byteStart,0);
+ assert.equal(x.spans.at(-1).byteEndExclusive,diff.length);
+ for(let i=1;i<x.spanCount;i++)
+  assert.equal(x.spans[i].byteStart,x.spans[i-1].byteEndExclusive);
+});
+test('lossless span mode refuses any single line over its maximum context',()=>{
+ const huge=Buffer.from(file('src/huge.mjs','old()', 'x'.repeat(4000)));
+ assert.throws(()=>partitionLosslessDiffLines({
+  rawDiffBytes:huge,trustedDiffSha256:hash(huge),
+  trustedChangedPaths:['src/huge.mjs'],maxSpanBytes:1024
+ }),/REVIEW_SPANS_SINGLE_LINE_OVERSIZED/);
+});
+test('lossless spans redact source from JSON, object spread and inspect',()=>{
+ const secret='SYNTHETIC_NEVER_PRIVATE_SPAN';
+ const raw=Buffer.from(file('src/a.mjs','old()',secret));
+ const o=partitionLosslessDiffLines({rawDiffBytes:raw,
+  trustedDiffSha256:hash(raw),trustedChangedPaths:['src/a.mjs']});
+ assert.ok(o.spans[0].privateSliceBytes.toString().includes(secret));
+ assert.doesNotMatch(JSON.stringify(o),/SYNTHETIC_NEVER_PRIVATE_SPAN/);
+ assert.doesNotMatch(JSON.stringify({...o}),/SYNTHETIC_NEVER_PRIVATE_SPAN/);
+ assert.doesNotMatch(inspect(o),/SYNTHETIC_NEVER_PRIVATE_SPAN/);
+ assert.ok(!Object.keys(o.spans[0]).includes('privateSliceBytes'));
+});
+test('lossless span mode rejects stale SHA and missing paths',()=>{
+ assert.throws(()=>partitionLosslessDiffLines({
+  rawDiffBytes:diff,trustedDiffSha256:'0'.repeat(64),
+  trustedChangedPaths:paths
+ }),/REVIEW_SPANS_SCOPE_UNVERIFIED/);
+ assert.throws(()=>partitionLosslessDiffLines({
+  rawDiffBytes:diff,trustedDiffSha256:hash(diff),
+  trustedChangedPaths:paths.slice(1)
+ }),/REVIEW_SPANS_FILE_COVERAGE_INVALID/);
 });
