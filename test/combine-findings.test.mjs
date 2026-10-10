@@ -86,3 +86,34 @@ test('combined private findings cannot escape via JSON or object inspection',()=
  assert.ok(result.reportBytes.toString('utf8').includes(secret));
  assert.equal(result.approvalAuthorized,false);
 });
+
+test('third offline Semgrep stage adds blockers without new approval path',()=>{
+ const c=call([],[],{
+   requireSemgrepCE:true,
+   semgrepReportBytes:make([item('d')],'Local Semgrep rule matched')
+ });
+ assert.equal(c.provisionalState,'FAIL');
+ assert.equal(c.blockingFindings,1);
+ assert.equal(c.findingCount,1);
+ assert.equal(c.semgrepReportIncluded,true);
+ assert.equal(c.approvalAuthorized,false);
+ assert.equal(c.independentReviewVerified,false);
+ assert.ok(JSON.parse(c.reportBytes).summary.includes('Offline Semgrep CE'));
+});
+test('Semgrep cannot vanish silently or mix a different reviewer run',()=>{
+ assert.throws(()=>call([],[],{requireSemgrepCE:true}),
+  /COMBINED_SEMGREP_STAGE_UNVERIFIED/);
+ assert.throws(()=>call([],[],{semgrepReportBytes:make([])}),
+  /COMBINED_SEMGREP_STAGE_UNVERIFIED/);
+ assert.throws(()=>call([],[],{requireSemgrepCE:true,
+  semgrepReportBytes:make([],'LOCAL SCAN','other-run')}),
+  /COMBINED_REVIEW_RUN_MISMATCH/);
+});
+test('Semgrep duplicate fingerprints must match or be refused',()=>{
+ const okay=call([item('a')],[],{requireSemgrepCE:true,
+   semgrepReportBytes:make([item('a')])});
+ assert.equal(okay.findingCount,1);
+ assert.throws(()=>call([item('a')],[],{requireSemgrepCE:true,
+   semgrepReportBytes:make([{...item('a'),message:'different'}])}),
+  /COMBINED_REVIEW_FINDING_CONFLICT/);
+});

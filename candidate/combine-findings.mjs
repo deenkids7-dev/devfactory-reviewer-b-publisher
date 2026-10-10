@@ -19,14 +19,23 @@ function parseReport(bytes,changedPaths){
  * scheduler, decision authority, GitHub writer, or signed provenance ledger.
  */
 export function combineReviewerFindings({
-  staticReportBytes,semanticReportBytes,changedPaths
+  staticReportBytes,semanticReportBytes,
+  semgrepReportBytes,requireSemgrepCE=false,changedPaths
 }={}){
   const a=parseReport(staticReportBytes,changedPaths);
   const b=parseReport(semanticReportBytes,changedPaths);
+  // Opt-in is explicit: missing third report may not silently erase alerts.
+  if(typeof requireSemgrepCE!=='boolean'||
+     (semgrepReportBytes!==undefined)!==requireSemgrepCE)
+    deny('COMBINED_SEMGREP_STAGE_UNVERIFIED');
+  const c=requireSemgrepCE?
+    parseReport(semgrepReportBytes,changedPaths):null;
+  if(c && (c.value.run_id!==a.value.run_id))
+    deny('COMBINED_REVIEW_RUN_MISMATCH');
   if(a.value.run_id!==b.value.run_id)
     deny('COMBINED_REVIEW_RUN_MISMATCH');
   const fingerprints=new Map();
-  for(const finding of [...a.value.findings,...b.value.findings]){
+  for(const finding of [...a.value.findings,...b.value.findings,...(c?.value.findings||[])]){
     const seen=fingerprints.get(finding.fingerprint);
     const canonical=canonicalJson(finding);
     if(seen!==undefined && seen!==canonical)
@@ -39,7 +48,8 @@ export function combineReviewerFindings({
   if(combined.length>50)deny('COMBINED_REVIEW_TOO_MANY_FINDINGS');
   const joined=[
     'Static security audit: '+a.value.summary,
-    'Independent semantic analysis claim: '+b.value.summary
+    'Independent semantic analysis claim: '+b.value.summary,
+    ...(c?['Offline Semgrep CE scan claim: '+c.value.summary]:[])
   ].join(' | ');
   if(joined.length>2000)deny('COMBINED_REVIEW_SUMMARY_TOO_LONG');
   const reportBytes=Buffer.from(canonicalJson({
@@ -55,6 +65,7 @@ export function combineReviewerFindings({
     provisionalState:result.provisionalState,
     blockingFindings:result.blockingFindingCount,
     findingCount:result.parsedFindingCount,
+    semgrepReportIncluded:!!c,
     // Even zero findings can never automatically authorize approval.
     independentReviewVerified:false,
     approvalAuthorized:false,
