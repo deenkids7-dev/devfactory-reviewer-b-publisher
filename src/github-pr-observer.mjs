@@ -42,12 +42,12 @@ export async function observePrSnapshot({ prNumber, request }) {
     deny('INVALID_GITHUB_REQUEST_CONTRACT');
   }
   const url = URL_PREFIX + String(prNumber);
-  async function retrieve(accept, maxBytes) {
+  async function retrieve(accept, maxBytes, requestUrl=url) {
     let r;
     try {
-      r = await request(Object.freeze({url, method:'GET', accept, maxBytes}));
+      r = await request(Object.freeze({url:requestUrl, method:'GET', accept, maxBytes}));
     } catch { deny('GITHUB_REQUEST_FAILED'); }
-    return checkResult(r, url, accept, maxBytes);
+    return checkResult(r, requestUrl, accept, maxBytes);
   }
   const beforeResponse=await retrieve('application/vnd.github+json',512*1024);
   const before=parseMetadata(beforeResponse,url);
@@ -58,11 +58,7 @@ export async function observePrSnapshot({ prNumber, request }) {
      typeof base!=='string'||!SHA40.test(base))
     deny('GITHUB_PR_COMMIT_IDENTITY_INVALID');
   const compareUrl='https://api.github.com/repos/deenkids7-dev/deenkids/compare/'+base+'...'+sha;
-  const diffResponse=await request(Object.freeze({
-    url:compareUrl, method:'GET',
-    accept:'application/vnd.github.diff',maxBytes:2*1024*1024
-  }));
-  checkResult(diffResponse,compareUrl,'application/vnd.github.diff',2*1024*1024);
+  const diffResponse=await retrieve('application/vnd.github.diff',2*1024*1024,compareUrl);
   if (typeof diffResponse.contentType !== 'string' ||
       !DIFF_CONTENT_TYPE.test(diffResponse.contentType)) deny('GITHUB_DIFF_MEDIA_TYPE');
   const afterResponse=await retrieve('application/vnd.github+json',512*1024);
