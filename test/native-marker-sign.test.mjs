@@ -17,7 +17,7 @@ const payload=()=>({
   head_sha:'a'.repeat(40),installation_id:169674558,
   nonce:'f'.repeat(32),pr_number:898,provenance_ref:'synthetic:fixture-898',
   report_sha256:sha(reportText),repository:'deenkids7-dev/deenkids',
-  reviewer_run_id:'synthetic-run-898',verdict:'PASS'
+  reviewer_run_id:'synthetic-run-898',verdict:'FAIL'
 });
 const args=(overrides={})=>({
   payload:payload(),reportText,nativeSignerPrivateKeyPem:nativePem,
@@ -31,7 +31,7 @@ test('separate RSA marker signature never publishes a review',()=>{
   assert.equal(result.approvalAuthorized,false);
   assert.equal(result.reviewIndependenceVerified,false);
   assert.equal(result.signerSpkiSha256,nativeFingerprint);
-  assert.equal(result.dispositionClaimedBySigner,'PASS');
+  assert.equal(result.dispositionClaimedBySigner,'FAIL');
   assert.match(result.reviewBody,/^<!-- devfactory-reviewer-b-native:v1:/);
   assert.ok(!result.reviewBody.includes('PRIVATE KEY'));
 });
@@ -70,4 +70,9 @@ test('native RSA signature binds exact report bytes',()=>{
   assert.throws(()=>signNativeMarkerOnly(args({
     reportText:'changed text'
   })),/NATIVE_REPORT_MISMATCH/);
+});
+
+test('PASS is unconditionally refused before native RSA signing',()=>{
+  assert.throws(()=>signNativeMarkerOnly(args({payload:{...payload(),verdict:'PASS'}})),
+    /NATIVE_SIGNER_PASS_NOT_AUTHORIZED/);
 });
