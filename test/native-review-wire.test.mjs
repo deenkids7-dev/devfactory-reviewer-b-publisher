@@ -36,7 +36,8 @@ test('exact native RSA fixture structure but NEVER independent/authorized',()=>{
   assert.equal(rendered.cryptographicIntegrityVerified,true);
   assert.equal(rendered.reviewIndependenceVerified,false);
   assert.equal(rendered.approvalAuthorized,false);
-  assert.equal(rendered.requestedState,'APPROVED');
+  assert.equal(rendered.publishEvent,null);
+  assert.equal(rendered.dispositionClaimedBySigner,'PASS');
   const marker=rendered.reviewBody.match(/^<!-- devfactory-reviewer-b-native:v1:([A-Za-z0-9_-]+) -->\n/);
   assert.ok(marker);
   const encoded=JSON.parse(Buffer.from(marker[1],'base64url').toString('utf8'));
@@ -44,9 +45,10 @@ test('exact native RSA fixture structure but NEVER independent/authorized',()=>{
   assert.equal(encoded.signature,fixture().signatureBase64Url);
   assert.equal(rendered.reviewBody.slice(marker[0].length),reportText);
 });
-test('FAIL wire requests changes rather than approval',()=>{
+test('FAIL wire also has no publication authority',()=>{
   const result=formatNativeReviewFixture(fixture({verdict:'FAIL'}));
-  assert.equal(result.requestedState,'CHANGES_REQUESTED');
+  assert.equal(result.publishEvent,null);
+  assert.equal(result.dispositionClaimedBySigner,'FAIL');
   assert.equal(result.approvalAuthorized,false);
 });
 reject('reject altered signed payload',()=>{
