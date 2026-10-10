@@ -74,7 +74,7 @@ export function createReviewerBAppJwt({privateKeyPem,now=Date.now()}={}) {
  * A fetchImpl override exists only for synthetic tests.
  */
 export async function createScopedReviewerBInstallationToken({
-  appJwt,fetchImpl=fetch,now=Date.now(),purpose='publish'
+  appJwt,fetchImpl=fetch,now=Date.now(),purpose
 }={}) {
   if(typeof appJwt!=='string'||!/^[-_A-Za-z0-9]+\.[-_A-Za-z0-9]+\.[-_A-Za-z0-9]+$/.test(appJwt)||
      appJwt.length>6000||!Number.isFinite(now)||typeof fetchImpl!=='function'||

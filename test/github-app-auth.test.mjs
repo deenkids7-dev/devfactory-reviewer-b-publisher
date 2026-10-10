@@ -68,7 +68,7 @@ test('scoped token request restricts exact installation and repository ID',async
   const mock=fakeTransport();
   const jwt=createReviewerBAppJwt({privateKeyPem:key,now});
   const result=await createScopedReviewerBInstallationToken({
-    appJwt:jwt,fetchImpl:mock.fetchImpl,now
+    appJwt:jwt,fetchImpl:mock.fetchImpl,now,purpose:'publish'
   });
   assert.equal(result.repositoryId,1282086207);
   assert.equal(result.installationId,169674558);
@@ -89,7 +89,7 @@ test('token API errors never reveal private token or JWT',async()=>{
   const mock=fakeTransport({error:true});
   await assert.rejects(()=>createScopedReviewerBInstallationToken({
     appJwt:createReviewerBAppJwt({privateKeyPem:key,now}),
-    fetchImpl:mock.fetchImpl,now
+    fetchImpl:mock.fetchImpl,now,purpose:'publish'
   }),e=>e.message==='APP_AUTH_API_REQUEST_FAILED'&&!e.message.includes(TOKEN));
 });
 test('GitHub API responses must come from exact installation endpoint',async()=>{
@@ -100,7 +100,7 @@ test('GitHub API responses must come from exact installation endpoint',async()=>
     const mock=fakeTransport(options);
     await assert.rejects(()=>createScopedReviewerBInstallationToken({
       appJwt:createReviewerBAppJwt({privateKeyPem:key,now}),
-      fetchImpl:mock.fetchImpl,now
+      fetchImpl:mock.fetchImpl,now,purpose:'publish'
     }),/APP_AUTH_API_RESPONSE_REJECTED/);
   }
 });
@@ -119,14 +119,23 @@ test('installation tokens cannot silently expand repository or permissions',asyn
     const mock=fakeTransport({body});
     await assert.rejects(()=>createScopedReviewerBInstallationToken({
       appJwt:createReviewerBAppJwt({privateKeyPem:key,now}),
-      fetchImpl:mock.fetchImpl,now
+      fetchImpl:mock.fetchImpl,now,purpose:'publish'
     }),/APP_AUTH_INSTALLATION_SCOPE_UNVERIFIED/);
   }
 });
 test('missing JWT never calls the network',async()=>{
   const mock=fakeTransport();
   await assert.rejects(()=>createScopedReviewerBInstallationToken({
-    appJwt:'',fetchImpl:mock.fetchImpl,now
+    appJwt:'',fetchImpl:mock.fetchImpl,now,purpose:'publish'
+  }),/APP_AUTH_INVALID_REQUEST/);
+  assert.equal(mock.calls.length,0);
+});
+
+test('omitting token purpose cannot mint a write-scoped GitHub installation token',async()=>{
+  const mock=fakeTransport();
+  const jwt=createReviewerBAppJwt({privateKeyPem:key,now});
+  await assert.rejects(()=>createScopedReviewerBInstallationToken({
+    appJwt:jwt,fetchImpl:mock.fetchImpl,now
   }),/APP_AUTH_INVALID_REQUEST/);
   assert.equal(mock.calls.length,0);
 });
