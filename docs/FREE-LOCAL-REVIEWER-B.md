@@ -171,3 +171,34 @@ rejected / invalid tokens accepted. The model's report remains untrusted data,
 and this still is only a small heuristic benchmark, NOT independent model
 quality certification. This corrects overly generous historical 7B recall
 figures without rewriting or erasing past logs.
+
+## Verified Qwen 7B vs 14B ten-case synthetic comparison (2026-10-10)
+
+GitHub Actions reference: https://github.com/devfactory-reviewer-trust/devfactory-reviewer-b-publisher/actions/runs/38060206403
+
+| Real public synthetic model result | Qwen 7B | Qwen 14B |
+|---|---:|---:|
+| Model completions generated | 10/10 | 10/10 |
+| Seeded semantic bug cases with an alert | 4/4 | 4/4 |
+| Safe cases with a false alert | 4/4 | 3/4 |
+| Safe cases with HIGH/CRITICAL false alert | 3/4 | 0/4 |
+| Approved for independent publishing | NO | NO |
+
+These historic figures show finding presence, NOT four independently verified
+correct diagnoses. The old permissive keyword oracle incorrectly credited
+directionally wrong/inconclusive explanations on negative-amount validation.
+The later stricter directional oracle corrects this in new runs, not old logs.
+
+The historical Actions run concluded FAILURE due to a stale final assertion
+expecting a four-case array despite producing a ten-case report. The assertion
+was corrected at 1bd35d3bdf990164f1b25e5f50f030022e0da294. Do not
+reinterpret the historical failure as a model inference failure, or the
+produced model output as a production review PASS.
+
+Qwen 14B is the better synthetic advisory candidate on severity, but it still
+raises speculative concerns and cannot authorize merges or certify independent
+analysis. Actual private PR review needs independently security-reviewed
+protected execution, minimally scoped App permissions, trustworthy independent
+provenance, replay protection, and canonical HUMAN_GO. See PREKEY-READINESS.md.
+No private source, protected keys, paid API, production native review or
+privileged merge was used during these synthetic experiments.
