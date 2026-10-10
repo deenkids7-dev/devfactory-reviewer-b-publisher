@@ -102,6 +102,6 @@ jobs:
               r.approvalAuthorized!==false ||
               r.independentReviewerProvenanceVerified!==false ||
               r.privateSourceReviewed!==false ||
-              !Array.isArray(r.cases) || r.cases.length!==4)process.exit(1);
+              !Array.isArray(r.cases) || r.cases.length!==10)process.exit(1);
             process.stdout.write("SYNTHETIC_MODEL_EXECUTION_VERIFIED_NOT_INDEPENDENT_REVIEW\n");
           ' "$RUNNER_TEMP/synthetic-report.json" "$BENCHMARK_MODEL"

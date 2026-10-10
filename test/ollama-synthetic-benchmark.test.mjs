@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { runSyntheticLocalOllamaBenchmark,safeBenchmarkErrorCode }
   from '../bench/ollama-synthetic-benchmark.mjs';
 
@@ -118,4 +119,12 @@ test('14B synthetic selection stays bounded, identity-pinned and nonauthorizing'
  for(const call of f.calls){
    assert.equal(JSON.parse(call.config.body).model,'qwen2.5-coder:14b');
  }
+});
+
+test('hosted synthetic gate checks ten cases rather than a stale four-case count',()=>{
+ const workflow=readFileSync(new URL('../.github/workflows/reviewer-b-ollama-synthetic-canary.yml',
+   import.meta.url),'utf8');
+ assert.match(workflow,/r\.testsCompleted!==10/);
+ assert.match(workflow,/r\.cases\.length!==10/);
+ assert.doesNotMatch(workflow,/r\.cases\.length!==4/);
 });
