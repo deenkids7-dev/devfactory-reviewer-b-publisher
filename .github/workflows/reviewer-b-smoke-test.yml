@@ -1,0 +1,31 @@
+
+name: Reviewer B - Runner Smoke Test
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-test:
+    name: Verify independent runner
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Verify execution environment
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test "$RUNNER_ENVIRONMENT" = "github-hosted"
+          test "$GITHUB_REPOSITORY" = "devfactory-reviewer-service/devfactory-reviewer-b-publisher"
+
+          echo "GitHub-hosted runner confirmed"
+          echo "Repository identity confirmed"
+          echo "No secrets or private keys required"
+          echo "Reviewer B infrastructure smoke test PASS"
