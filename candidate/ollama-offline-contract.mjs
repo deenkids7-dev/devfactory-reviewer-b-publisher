@@ -97,6 +97,15 @@ export function prepareOfflineOllamaCandidate({
     options:{temperature:0,num_ctx:8192,num_predict:maxOutputTokens},
     messages:[{role:'system',content:system},{role:'user',content:input}]
   });
+  // Safety first: Ollama may silently truncate prompts exceeding num_ctx.
+  // Count the FULL UTF-8 request, even schema/control JSON bytes, as a
+  // pessimistic upper bound on tokenizer input. Reserve all requested output
+  // tokens plus 512 tokens for chat framing, and FAIL CLOSED if over budget.
+  // This does not claim independent full-context proof at inference time.
+  const conservativeInputBytes=Buffer.byteLength(privateRequest,'utf8');
+  const remainingContext=8192-maxOutputTokens-512;
+  if(remainingContext<1||conservativeInputBytes>remainingContext)
+    deny('OLLAMA_CONTEXT_CAPACITY_UNVERIFIED');
   const result=({
     provider:'local-ollama-no-api-fee',model,
     repository:plan.exactScope.repository,prNumber:plan.exactScope.prNumber,

@@ -215,3 +215,19 @@ subscription, change the service-side GitHub installation, or retroactively
 erase old comments. Do not invoke CodeRabbit manually, on its CLI or via
 `@coderabbitai` without a separately verified cost-free entitlement and
 operator consent. Model-only advisory signals remain INCONCLUSIVE, not PASS.
+
+## Fail-closed inference-context size cap
+
+The generic diff plan can represent up to 128 KiB, but the local Ollama
+candidate is configured with `num_ctx=8192`. Accepting such a large plan
+would risk model-side silent truncation. The adapter now rejects a request if
+the **entire serialized request**, measured conservatively in UTF-8 bytes,
+plus the full requested generation limit and a 512-token framing reserve
+exceeds 8,192. This is intentionally stricter than usual BPE tokenization.
+No silent truncation, fallback, chunking or PASS is permitted.
+
+This conservative admission check is not proof of actual model context
+provenance; `modelContextCompletenessVerified` remains `false` until an
+independently instrumented runner can verify the supplied input was used
+intact. Large PRs will require an independently reviewed deterministic
+chunking and coverage protocol before any production review.
