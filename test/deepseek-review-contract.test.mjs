@@ -37,6 +37,7 @@ function parseResponse(response, more={}) {
   return validateDeepSeekCandidateCompletion({
     response,expectedModel:'deepseek-flash',
     runId:'synthetic-run-898',trustedChangedPaths:['src/check.mjs'],
+    observedInputTokenCeiling:10000,observedOutputTokenCeiling:2048,
     ...more
   });
 }
@@ -147,4 +148,22 @@ test('model-supplied PASS or unauthorized file path fails closed',()=>{
   });
   assert.throws(()=>parseResponse(modelResponse(withPass)),/SEMANTIC_MODEL_FIELDS_INVALID/);
   assert.throws(()=>parseResponse(modelResponse(wrongPath)),/REVIEW_FINDING_INVALID/);
+});
+
+test('declared usage caps and indicative spending ceiling are enforced',()=>{
+  for(const usage of [
+    {prompt_tokens:10001,completion_tokens:1200},
+    {prompt_tokens:8000,completion_tokens:2049}
+  ]){
+    assert.throws(()=>parseResponse(modelResponse(empty,{usage})),
+      e=>e.message==='MODEL_COMPLETION_BUDGET_EXCEEDED');
+  }
+  assert.throws(()=>parseResponse(modelResponse(empty),{
+    maxObservedPeakUsd:0.0001
+  }),e=>e.message==='MODEL_COMPLETION_BUDGET_EXCEEDED');
+});
+test('no trusted tokenizer ceiling means STOP, even for a green model output',()=>{
+  assert.throws(()=>parseResponse(modelResponse(empty),{
+    observedInputTokenCeiling:undefined
+  }),e=>e.message==='MODEL_USAGE_BUDGET_CONTEXT_MISSING');
 });

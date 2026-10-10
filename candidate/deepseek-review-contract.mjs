@@ -132,8 +132,18 @@ export function prepareDeepSeekCandidate({
  * Report bytes may include private findings; caller MUST NOT log them.
  */
 export function validateDeepSeekCandidateCompletion({
-  response,expectedModel,runId,trustedChangedPaths
+  response,expectedModel,runId,trustedChangedPaths,
+  observedInputTokenCeiling,observedOutputTokenCeiling,maxObservedPeakUsd=0.10
 }={}) {
+  if (!Number.isSafeInteger(observedInputTokenCeiling) ||
+      observedInputTokenCeiling<1 || observedInputTokenCeiling>200000 ||
+      !Number.isSafeInteger(observedOutputTokenCeiling) ||
+      observedOutputTokenCeiling<128 || observedOutputTokenCeiling>4096 ||
+      typeof maxObservedPeakUsd!=='number' ||
+      !Number.isFinite(maxObservedPeakUsd) ||
+      maxObservedPeakUsd<=0 || maxObservedPeakUsd>1) {
+    deny('MODEL_USAGE_BUDGET_CONTEXT_MISSING');
+  }
   if (!Object.hasOwn(PRICES_PEAK_USD_PER_MILLION,expectedModel) ||
       !RUN.test(runId) ||
       !response || typeof response!=='object' || Array.isArray(response) ||
@@ -151,6 +161,12 @@ export function validateDeepSeekCandidateCompletion({
       response.usage.completion_tokens<1) {
     deny('MODEL_COMPLETION_INCOMPLETE_OR_UNTRUSTED');
   }
+  const rates=PRICES_PEAK_USD_PER_MILLION[expectedModel];
+  const cost=(response.usage.prompt_tokens*rates.input+
+    response.usage.completion_tokens*rates.output)/1_000_000;
+  if (response.usage.prompt_tokens>observedInputTokenCeiling ||
+      response.usage.completion_tokens>observedOutputTokenCeiling ||
+      cost>maxObservedPeakUsd) deny('MODEL_COMPLETION_BUDGET_EXCEEDED');
   const result=normalizeUntrustedModelFindings({
     rawModelOutput:response.choices[0].message.content,
     runId,trustedChangedPaths
@@ -160,6 +176,7 @@ export function validateDeepSeekCandidateCompletion({
     findingCount:result.findingCount,
     reportedInputTokens:response.usage.prompt_tokens,
     reportedOutputTokens:response.usage.completion_tokens,
+    indicativeObservedPeakCostUsd:Number(cost.toFixed(7)),
     // Still no durable spend-accounting or real independent execution proof.
     providerUsageVerified:false,
     reviewerIndependenceVerified:false,
