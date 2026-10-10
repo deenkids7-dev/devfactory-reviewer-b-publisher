@@ -15,6 +15,7 @@ const trustedTarget = Object.freeze({
 });
 const trustedKeys = new Map([['FIXTURE_ONLY', {
   publicKeyPem: publicKey.export({ format: 'pem', type: 'spki' }),
+  spkiSha256: sha256(publicKey.export({format:'der',type:'spki'})),
   issuer: 'synthetic-fixture', reviewerId: 'synthetic-reviewer'
 }]]);
 function signed() {
