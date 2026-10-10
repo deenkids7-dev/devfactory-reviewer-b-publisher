@@ -3,9 +3,11 @@ const REPO='deenkids7-dev/deenkids';
 const PREFIX=`https://api.github.com/repos/${REPO}/pulls/`;
 const MAX_PAGE_BYTES=1024*1024;
 const MAX_REVIEWS=250;
+const REPO_ID=1282086207;
+const METADATA_MAX=512*1024;
 const SHA40=/^[0-9a-f]{40}$/;
 function deny(code){throw new Error(code);}
-async function readBounded(body){
+async function readBounded(body,maxBytes=MAX_PAGE_BYTES){
   if(!body?.getReader)deny('REVIEWS_UNREADABLE_BODY');
   const reader=body.getReader();let size=0;const items=[];
   try{
@@ -14,12 +16,50 @@ async function readBounded(body){
       if(done)break;
       if(!(value instanceof Uint8Array))deny('REVIEWS_INVALID_CHUNK');
       size+=value.length;
-      if(size>MAX_PAGE_BYTES)deny('REVIEWS_OVERSIZED_PAGE');
+      if(size>maxBytes)deny('REVIEWS_OVERSIZED_PAGE');
       items.push(Buffer.from(value));
     }
   }finally{reader.releaseLock();}
   return Buffer.concat(items,size);
 }
+async function observedHead({prNumber,installationToken,fetchImpl}) {
+  const url=`${PREFIX}${prNumber}`;
+  let response;
+  try {
+    response=await fetchImpl(url,{
+      method:'GET',redirect:'error',cache:'no-store',
+      signal:AbortSignal.timeout(15000),
+      headers:{
+        Authorization:`Bearer ${installationToken}`,
+        Accept:'application/vnd.github+json',
+        'X-GitHub-Api-Version':'2022-11-28',
+        'User-Agent':'devfactory-native-review-readback'
+      }
+    });
+  }catch{deny('REVIEWS_HEAD_READ_FAILED');}
+  if(response?.url!==url||response?.status!==200||
+     response?.redirected!==false||
+     !/^application\/(?:vnd\.github\+)?json(?:\s*;|$)/i.test(
+       response.headers?.get('content-type')||''))deny('REVIEWS_HEAD_UNTRUSTED');
+  const headerSize=response.headers?.get('content-length');
+  if(headerSize && (!/^\d+$/.test(headerSize) || Number(headerSize)>METADATA_MAX))
+    deny('REVIEWS_HEAD_OVERSIZED');
+  let pr;
+  try {
+    const bytes=await readBounded(response.body,METADATA_MAX);
+    const raw=bytes.toString('utf8');
+    if(!Buffer.from(raw,'utf8').equals(bytes))deny('INVALID_ENCODING');
+    pr=JSON.parse(raw);
+  }catch{deny('REVIEWS_HEAD_INVALID_JSON');}
+  if(pr?.number!==prNumber||pr?.state!=='open'||pr?.merged_at!==null||
+     pr?.head?.repo?.id!==REPO_ID||pr?.head?.repo?.full_name!==REPO||
+     pr?.base?.repo?.id!==REPO_ID||pr?.base?.repo?.full_name!==REPO||
+     typeof pr.head.sha!=='string'||!SHA40.test(pr.head.sha)) {
+    deny('REVIEWS_HEAD_UNTRUSTED');
+  }
+  return pr.head.sha;
+}
+
 /**
  * Reviews must come from the separately authenticated GitHub App installation,
  * not from the PR body. This only reads and structurally bounds responses.
@@ -35,6 +75,8 @@ export async function readNativeReviews({
      installationToken.length>2000||
      /[^A-Za-z0-9_\-.]/.test(installationToken)||
      typeof fetchImpl!=='function')deny('REVIEWS_INVALID_REQUEST');
+  const beforeHead=await observedHead({prNumber,installationToken,fetchImpl});
+  if(beforeHead!==expectedHeadSha)deny('REVIEWS_HEAD_CHANGED_OR_UNVERIFIED');
   const result=[];const seen=new Set();
   for(let page=1;page<=3;page++){
     const url=`${PREFIX}${prNumber}/reviews?per_page=100&page=${page}`;
@@ -93,9 +135,12 @@ export async function readNativeReviews({
       if(result.length>MAX_REVIEWS)deny('REVIEWS_TOO_MANY');
     }
     if(pageData.length<100){
+      const afterHead=await observedHead({prNumber,installationToken,fetchImpl});
+      if(afterHead!==beforeHead || afterHead!==expectedHeadSha)
+        deny('REVIEWS_HEAD_CHANGED_OR_UNVERIFIED');
       return Object.freeze({
         reviews:Object.freeze(result),
-        targetHeadSha:expectedHeadSha,
+        targetHeadSha:afterHead,
         // No inference about signer provenance or release authority.
         independentReviewVerified:false,approvalAuthorized:false
       });
