@@ -69,3 +69,16 @@ denies('rejects empty summary',report({summary:''}),'REVIEW_INVALID_FIELDS');
 denies('rejects duplicate report fields with unapproved key',
   Buffer.from(canonicalJson({...payload(),auth:'verified'})),
   'REVIEW_INVALID_FIELDS');
+
+denies('rejects pretty-printed noncanonical report JSON',
+  Buffer.from(JSON.stringify(payload(),null,2)),
+  'REVIEW_NONCANONICAL_JSON');
+denies('rejects duplicate keys in signed report JSON',
+  Buffer.from('{"schema":"devfactory.reviewer-b.findings.v1","schema":"devfactory.reviewer-b.findings.v1"}'),
+  'REVIEW_NONCANONICAL_JSON');
+denies('rejects path with a dot component',
+  report({findings:[{...finding(),path:'src/./compute.mjs'}]}),
+  'REVIEW_FINDING_INVALID');
+denies('rejects multiline control characters in findings',
+  report({findings:[{...finding(),message:'hello\\nworld'}]}),
+  'REVIEW_FINDING_INVALID');
