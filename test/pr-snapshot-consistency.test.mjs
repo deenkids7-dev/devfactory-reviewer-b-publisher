@@ -118,3 +118,27 @@ test('two complete text files are accepted with exact counted hunks',()=>{
   }));
   assert.equal(result.diff_sha256,createHash('sha256').update(second).digest('hex'));
 });
+
+test('rejects silently truncated hunk even with valid headers and file count',()=>{
+  for(const patch of [
+    '@@ -1,2 +1,2 @@\n-before\n+after\n',
+    '@@ -1,1 +1,2 @@\n-before\n+after\n',
+    '@@ -1,1 +1,1 @@\n-before\n+after\n+unexpected\n',
+    '@@ -1,1 +1,1 @@\n-before\n',
+    '@@ -1,1 +1,1 @@\n+after\n',
+  ]) {
+    const raw=Buffer.from(
+      'diff --git a/demo.mjs b/demo.mjs\n--- a/demo.mjs\n+++ b/demo.mjs\n'+patch);
+    assert.throws(()=>snapshot(fixture({rawDiff:raw})),
+      /GITHUB_DIFF_HUNK_LENGTH_MISMATCH/);
+  }
+});
+test('permits counted context/deletion/addition lines within complete hunks',()=>{
+  const raw=Buffer.from(
+    'diff --git a/demo.mjs b/demo.mjs\nindex abc..def 100644\n'+
+    '--- a/demo.mjs\n+++ b/demo.mjs\n@@ -1,3 +1,3 @@ render\n'+
+    ' context\n-old\n+new\n context2\n'
+  );
+  const result=snapshot(fixture({rawDiff:raw}));
+  assert.equal(result.diff_sha256,createHash('sha256').update(raw).digest('hex'));
+});
