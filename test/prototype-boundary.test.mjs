@@ -28,6 +28,18 @@ test('no workflow has access to private App secrets, write token or privileged t
   assert.ok(files.length>=2);
   for(const filename of files){
     const contents=readFileSync(path.join(workflows,filename),'utf8');
+    if(filename==='reviewer-b-environment-hold-probe.yml'){
+      // This one workflow is intentionally deployed to the protected
+      // environment AFTER independent review on protected main. No secret,
+      // PR trigger, token, checkout or network access is permitted.
+      assert.match(contents,/permissions:\s*\{\s*\}/);
+      assert.match(contents,/workflow_dispatch\s*:/);
+      assert.match(contents,/environment:\s*reviewer-b-publish/);
+      assert.doesNotMatch(contents,/\b(?:pull_request|pull_request_target|workflow_run|workflow_call|push|schedule)\s*:/);
+      assert.doesNotMatch(contents,/(?:secrets\.|github\.token|GITHUB_TOKEN|GH_TOKEN|\bcurl\b|\bwget\b|\bcheckout\b|\bfetch\b)/);
+      assert.doesNotMatch(contents,/\b(?:id-token|pull-requests|contents)\s*:\s*write\b/);
+      continue;
+    }
     assert.match(contents,/permissions:\s*\n\s*contents:\s*read\b/);
     assert.doesNotMatch(contents,/\bpull_request_target\s*:/);
     assert.doesNotMatch(contents,/\bworkflow_run\s*:/);
