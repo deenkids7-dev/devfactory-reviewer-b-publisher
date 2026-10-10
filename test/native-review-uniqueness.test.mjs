@@ -50,11 +50,14 @@ test('review on stale HEAD does not count as the current HEAD',()=>{
   ]));
   assert.equal(result.blocked,false);
 });
-test('wrong bot login is not accepted as native reviewer',()=>{
-  const result=assessNativeReviewUniqueness(context([
-    review(9,340237276,'impostor[bot]')
-  ]));
-  assert.equal(result.blocked,false);
+test('conflicting reviewer bot ID or login fails closed',()=>{
+  for(const reviewItem of [
+    review(9,340237276,'impostor[bot]'),
+    review(10,1234,'devfactory-reviewer-b[bot]')
+  ]){
+    assert.throws(()=>assessNativeReviewUniqueness(context([reviewItem])),
+      /REVIEW_BOT_IDENTITY_CONFLICT/);
+  }
 });
 test('duplicate GitHub review IDs fail closed',()=>{
   assert.throws(()=>assessNativeReviewUniqueness(context([review(5),review(5)])),
