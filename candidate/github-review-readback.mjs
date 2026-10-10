@@ -123,6 +123,8 @@ export async function readNativeReviews({
          typeof review.commit_id!=='string'||!SHA40.test(review.commit_id)||
          (review.body!==null&&typeof review.body!=='string')||
          (typeof review.body==='string'&&review.body.length>120000)||
+         (review.submitted_at!==undefined&&review.submitted_at!==null&&
+          typeof review.submitted_at!=='string')||
          review.pull_request_url!==`https://api.github.com/repos/${REPO}/pulls/${prNumber}`){
         deny('REVIEWS_ITEM_UNTRUSTED');
       }
