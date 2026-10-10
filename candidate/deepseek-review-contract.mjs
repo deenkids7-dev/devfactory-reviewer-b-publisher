@@ -2,7 +2,7 @@ import { inspect } from 'node:util';
 import { createHash } from 'node:crypto';
 import { normalizeUntrustedModelFindings } from './semantic-review-request.mjs';
 
-// DORMANT, PURE CONTRACT: no fetch(), no API key, no provider invocation.
+// DORMANT, PURE CONTRACT: no network access, no API key, no provider invocation.
 // Only a reviewed private worker may transmit the request after independent
 // private-source clearance and provider-budget authorization.
 const API = 'https://api.deepseek.com/chat/completions';
@@ -14,10 +14,6 @@ const SHA = /^[0-9a-f]{40}$/;
 const HASH = /^[0-9a-f]{64}$/;
 const RUN = /^[A-Za-z0-9_:-]{8,180}$/;
 function deny(code) { throw Error(code); }
-function hasOnly(object, keys) {
-  return object !== null && typeof object === 'object' && !Array.isArray(object) &&
-    JSON.stringify(Object.keys(object).sort()) === JSON.stringify([...keys].sort());
-}
 function secretFreeSummary(plan, model, maxOutputTokens, worstCaseUsd) {
   return {
     provider:'DeepSeek', model, endpoint:API,
