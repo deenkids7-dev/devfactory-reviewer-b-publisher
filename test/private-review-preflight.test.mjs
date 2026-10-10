@@ -18,7 +18,7 @@ const DIFF=Buffer.from(
 );
 const meta=()=>({
   number:898,state:'open',merged_at:null,draft:false,changed_files:1,
-  head:{sha:'a'.repeat(40)},base:{sha:'b'.repeat(40),ref:'master',
+  head:{sha:'a'.repeat(40),repo:{full_name:'deenkids7-dev/deenkids',id:1282086207}},base:{sha:'b'.repeat(40),ref:'master',
     repo:{full_name:'deenkids7-dev/deenkids',id:1282086207}}
 });
 function streamResponse(url,bytes,type){
@@ -80,7 +80,7 @@ test('no static matches yields INCONCLUSIVE not PASS',async()=>{
   assert.equal(result.approvalAuthorized,false);
 });
 test('a changed HEAD between metadata reads prevents findings emission',async()=>{
-  const fake=service({after:{...meta(),head:{sha:'c'.repeat(40)}}});
+  const fake=service({after:{...meta(),head:{...meta().head,sha:'c'.repeat(40)}}});
   await assert.rejects(()=>runReadOnlyReviewPreflight({
     prNumber:898,runId:RUN,installationToken:TOKEN,fetchImpl:fake.fetchImpl
   }),/GITHUB_PR_CHANGED_DURING_READ/);
