@@ -16,6 +16,7 @@ const target = {
 };
 const trustedKeys = new Map([['TEST_ONLY_NEVER_PRODUCTION', {
   publicKeyPem: publicKey.export({type:'spki', format:'pem'}),
+  spkiSha256: createHash('sha256').update(publicKey.export({type:'spki',format:'der'})).digest('hex'),
   issuer:'fixture-isolated-signer', reviewerId:'fixture-reviewer'
 }]]);
 function signedFixture(custom = {}, signer = privateKey) {
