@@ -130,7 +130,7 @@ test('model validator categorizes invalid line, multiline text and duplicates wi
  const encode=findings=>completion(JSON.stringify({summary:'fixture',findings}));
  assert.throws(()=>parse(encode([{...item,line:0}])),
   /OLLAMA_FINDING_LINE_INVALID/);
- assert.throws(()=>parse(encode([{...item,message:'newline\\nnot allowed'}])),
+ assert.throws(()=>parse(encode([{...item,message:'newline\nnot allowed'}])),
   /OLLAMA_FINDING_TEXT_INVALID/);
  assert.throws(()=>parse(encode([item,item])),
   /OLLAMA_FINDING_DUPLICATE/);
