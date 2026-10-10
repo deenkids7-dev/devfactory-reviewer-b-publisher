@@ -24,13 +24,20 @@ export function signAnalyzerAttestationFixture({
   keyId,ed25519PrivateKeyPem,pinnedEd25519SpkiSha256,
   nonce,issuedAt,expiresAt,now=Date.now()
 }={}){
+  // Date.parse alone is not sufficient: invalid dates can yield NaN or be
+  // normalized (e.g. February 30). Require canonical UTC seconds roundtrips.
+  const issued=typeof issuedAt==='string'&&ISO.test(issuedAt)?
+    Date.parse(issuedAt):NaN;
+  const expires=typeof expiresAt==='string'&&ISO.test(expiresAt)?
+    Date.parse(expiresAt):NaN;
   if(!Buffer.isBuffer(reportBytes)||!ID.test(runId)||!ID.test(issuer)||
      !ID.test(reviewerId)||!ID.test(keyId)||!UUID.test(nonce)||
-     typeof issuedAt!=='string'||!ISO.test(issuedAt)||
-     typeof expiresAt!=='string'||!ISO.test(expiresAt)||
-     !Number.isFinite(now)||Date.parse(expiresAt)<=now||
-     Date.parse(issuedAt)>now+60000||
-     Date.parse(expiresAt)-Date.parse(issuedAt)>15*60000||
+     !Number.isFinite(now)||!Number.isFinite(issued)||
+     !Number.isFinite(expires)||
+     new Date(issued).toISOString().replace('.000Z','Z')!==issuedAt||
+     new Date(expires).toISOString().replace('.000Z','Z')!==expiresAt||
+     expires<=now||expires<=issued||issued>now+60000||
+     expires-issued>15*60000||
      typeof ed25519PrivateKeyPem!=='string'||
      ed25519PrivateKeyPem.length<100||ed25519PrivateKeyPem.length>16000||
      typeof pinnedEd25519SpkiSha256!=='string'||

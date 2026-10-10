@@ -88,3 +88,29 @@ test('tampered unsigned report cannot be signed',()=>{
     reportBytes:Buffer.from('noncanonical invalid')
   })),/REVIEW_INVALID_JSON/);
 });
+
+test('rejects non-calendar UTC dates even when their ISO shape looks valid',()=>{
+  const now=Date.parse('2026-03-01T12:00:30Z');
+  for(const overrides of [
+    {issuedAt:'2026-02-30T12:00:00Z',expiresAt:'2026-03-01T12:10:00Z'},
+    {issuedAt:'2026-02-29T12:00:00Z',expiresAt:'2026-03-01T12:10:00Z'},
+    {issuedAt:'2026-13-01T12:00:00Z',expiresAt:'2026-03-01T12:10:00Z'},
+    {issuedAt:'2026-03-01T12:00:00Z',expiresAt:'2026-13-01T12:10:00Z'},
+    {issuedAt:'2026-03-01T12:00:00Z',expiresAt:'2026-03-32T12:10:00Z'},
+    {issuedAt:'2026-03-01T12:00:00Z',expiresAt:'2026-03-01T12:00:00Z'},
+    {issuedAt:'2026-03-01T12:10:00Z',expiresAt:'2026-03-01T12:05:00Z'},
+    {issuedAt:'2026-03-01T12:00:00Z',expiresAt:'2026-03-01T12:20:00Z'}
+  ]) {
+    assert.throws(()=>make(args({now,...overrides})),
+      e=>e.message==='ANALYZER_SIGNER_INPUT_INVALID');
+  }
+});
+test('valid leap day UTC seconds can still produce only BLOCKED fixture',()=>{
+  const issuedAt='2024-02-29T12:00:00Z';
+  const expiresAt='2024-02-29T12:10:00Z';
+  const now=Date.parse('2024-02-29T12:00:30Z');
+  const output=make(args({issuedAt,expiresAt,now}));
+  assert.equal(output.signedDisposition,'BLOCKED');
+  assert.equal(output.approvalAuthorized,false);
+  assert.equal(output.reviewerIndependenceVerified,false);
+});
