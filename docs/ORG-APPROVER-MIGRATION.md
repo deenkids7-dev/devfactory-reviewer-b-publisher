@@ -6,13 +6,14 @@
 > below. Consult `docs/MIGRATION-VERIFICATION.md` and
 > `docs/PREKEY-READINESS.md` for current verified/reported state.
 
-**Status:** PREPARATION ONLY. No repository transfer, identity change, GitHub
-App key provisioning, required-reviewer change, or protected-branch merge
-is authorized by this document.
+**Historical status:** This was written BEFORE the organization transfer.
+The transfer is complete and MUST NOT be repeated. Key provisioning,
+privileged publication, genuine review and protected merge gates remain
+blocked. Consult docs/MIGRATION-VERIFICATION.md for current status.
 
-## Why the current account cannot safely grant reviewer access
+## Historical reason for the organization transfer
 
-The Publisher belongs to a **personal GitHub account**,
+The Publisher previously belonged to a **personal GitHub account**,
 `devfactory-reviewer-service`. GitHub personal repositories do not support
 a separate repository collaborator with a granular read-only role.
 The account `deenkids7-dev` is not an eligible selectable environment
@@ -48,7 +49,7 @@ use an additional independent administrative trust domain and monitor
 environment/branch-protection changes. GitHub's environment approval alone
 is NOT proof of independent analysis.
 
-## Operator-controlled sequence (nothing executed yet)
+## Historical transfer sequence (COMPLETED; DO NOT REPEAT)
 
 1. While logged in as `devfactory-reviewer-service`, create a **GitHub Free
    organization**, avoiding a paid upgrade or billing authorization.
