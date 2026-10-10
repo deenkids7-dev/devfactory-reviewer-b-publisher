@@ -160,3 +160,14 @@ evidence includes an oracle term associated with the seeded defect. The
 benchmark separately records any false alert and *blocking* false alerts.
 This dataset is still too small and synthetic to certify a production reviewer.
 The default remains fail-closed and no-model-PASS.
+
+## Directional oracle quality correction
+
+Merely mentioning a relevant word (such as "amount" or "token") no longer
+counts as having correctly identified a seeded bug. Synthetic evaluation now
+requires a directional explanation: always-true authorization bypass, XSS from
+removed escaping, negative amounts newly accepted, or valid-session tokens
+rejected / invalid tokens accepted. The model's report remains untrusted data,
+and this still is only a small heuristic benchmark, NOT independent model
+quality certification. This corrects overly generous historical 7B recall
+figures without rewriting or erasing past logs.

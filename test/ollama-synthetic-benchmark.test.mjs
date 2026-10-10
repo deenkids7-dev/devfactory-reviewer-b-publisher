@@ -19,7 +19,16 @@ function mock(options={}){
  const fetchImpl=async (url,config)=>{
   calls.push({url,config});
   if(options.throwNetwork)throw Error('Never echo unsafe networking exceptions');
-  const content=JSON.stringify({summary:'Only synthetic input',findings:[]});
+  const requestedPath=JSON.parse(JSON.parse(config.body).messages[1].content)
+    .changed_paths[0];
+  const wrongDirection=options.wrongDirection &&
+    requestedPath==='src/payment-synthetic.mjs';
+  const findings=wrongDirection?[{
+    severity:'high',path:requestedPath,line:1,
+    message:'Negative amount may prevent valid transactions',
+    evidence:'This may prevent valid payments'
+  }]:[];
+  const content=JSON.stringify({summary:'Only synthetic input',findings});
   return response(options.url||url,{
    model:options.model||'qwen2.5-coder:7b',
    done:true,done_reason:'stop',
@@ -127,4 +136,16 @@ test('hosted synthetic gate checks ten cases rather than a stale four-case count
  assert.match(workflow,/r\.testsCompleted!==10/);
  assert.match(workflow,/r\.cases\.length!==10/);
  assert.doesNotMatch(workflow,/r\.cases\.length!==4/);
+});
+
+test('model does not earn a detected-bug score for a backwards or generic explanation',async()=>{
+ const f=mock({wrongDirection:true});
+ const r=await runSyntheticLocalOllamaBenchmark({fetchImpl:f.fetchImpl});
+ assert.equal(r.seededSemanticBugs,4);
+ assert.equal(r.seededSemanticBugsDetected,0);
+ const negative=r.cases.find(x=>x.label==='negative amount validation weakened');
+ assert.equal(negative.semanticFindingCount,1);
+ assert.equal(negative.semanticOracleHit,false);
+ assert.equal(r.modelQualityCertified,false);
+ assert.equal(r.approvalAuthorized,false);
 });
