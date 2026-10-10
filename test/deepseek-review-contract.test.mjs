@@ -208,7 +208,7 @@ test('private model findings stay out of logs, copies and JSON serialization',()
   assert.doesNotMatch(JSON.stringify(r),/SYNTHETIC_PRIVATE_FINDING/);
   assert.doesNotMatch(JSON.stringify({...r}),/SYNTHETIC_PRIVATE_FINDING/);
   assert.doesNotMatch(inspect(r),/SYNTHETIC_PRIVATE_FINDING/);
-  assert.match(JSON.stringify(r),/\\[REDACTED\\]/);
+  assert.match(JSON.stringify(r),/\[REDACTED\]/);
   assert.ok(!Object.keys(r).includes('privateCanonicalReportBytes'));
   const exposed=r.privateCanonicalReportBytes;
   exposed.fill(0);
