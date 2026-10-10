@@ -77,3 +77,10 @@ required by fail-closed policy. The next adapter revision binds Ollama's
 structured-output schema to the *exact changed paths* and requests specific
 added-line evidence. Invalid responses remain BLOCKED; outputs are not silently
 filtered or promoted into authorization.
+
+## Fail-closed model diagnostics
+
+Model output defects are classified without showing findings or source in
+public Actions logs: changed-path mismatch, non-positive line, unsupported
+severity, malformed/multiline evidence or duplicate finding. Such errors
+remain blocked, never silently fixed or converted to a model PASS.

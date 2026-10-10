@@ -93,7 +93,7 @@ test('fake model PASS, fingerprint, or other path rejected',()=>{
    message:'bad',evidence:'fake'}]});
  assert.throws(()=>parse(completion(pass)),/OLLAMA_FINDINGS_SCHEMA_INVALID/);
  assert.throws(()=>parse(completion(fake)),/OLLAMA_FINDINGS_SCHEMA_INVALID/);
- assert.throws(()=>parse(completion(path)),/REVIEW_FINDING_INVALID/);
+ assert.throws(()=>parse(completion(path)),/OLLAMA_FINDING_PATH_MISMATCH/);
 });
 test('incomplete, incorrect-model, oversized or invalid outputs blocked',()=>{
  for(const value of [
@@ -122,4 +122,16 @@ test('private findings not leaked through safe result serialization',()=>{
  assert.doesNotMatch(JSON.stringify(v),/SYNTHETIC_ONLY_PRIVATE_FINDING/);
  assert.doesNotMatch(JSON.stringify({...v}),/SYNTHETIC_ONLY_PRIVATE_FINDING/);
  assert.doesNotMatch(inspect(v),/SYNTHETIC_ONLY_PRIVATE_FINDING/);
+});
+
+test('model validator categorizes invalid line, multiline text and duplicates without leaking them',()=>{
+ const item={severity:'high',path:'src/check.mjs',line:1,
+  message:'fixture',evidence:'fixture proof'};
+ const encode=findings=>completion(JSON.stringify({summary:'fixture',findings}));
+ assert.throws(()=>parse(encode([{...item,line:0}])),
+  /OLLAMA_FINDING_LINE_INVALID/);
+ assert.throws(()=>parse(encode([{...item,message:'newline\\nnot allowed'}])),
+  /OLLAMA_FINDING_TEXT_INVALID/);
+ assert.throws(()=>parse(encode([item,item])),
+  /OLLAMA_FINDING_DUPLICATE/);
 });

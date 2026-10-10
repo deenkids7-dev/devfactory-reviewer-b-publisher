@@ -134,12 +134,27 @@ export function validateOfflineOllamaCompletion({
   if(!exact(parsed,['summary','findings'])||
     typeof parsed.summary!=='string'||!Array.isArray(parsed.findings)||
     parsed.findings.length>50)deny('OLLAMA_FINDINGS_SCHEMA_INVALID');
+  const changed=new Set(trustedChangedPaths);
+  const seen=new Set();
+  const validText=(value,max)=>typeof value==='string' &&
+    value.length>=1 && value.length<=max &&
+    !/[\x00-\x1f\x7f]/.test(value);
   const findings=[];
   for(const f of parsed.findings){
     if(!exact(f,['severity','path','line','message','evidence']))
       deny('OLLAMA_FINDINGS_SCHEMA_INVALID');
-    findings.push({...f,fingerprint:digest(
-      'devfactory.review-finding.v1\0'+canonicalJson(f))});
+    if(!changed.has(f.path))deny('OLLAMA_FINDING_PATH_MISMATCH');
+    if(!Number.isSafeInteger(f.line)||f.line<1||f.line>1000000)
+      deny('OLLAMA_FINDING_LINE_INVALID');
+    if(!['critical','high','medium','low','informational'].includes(f.severity))
+      deny('OLLAMA_FINDING_SEVERITY_INVALID');
+    if(!validText(f.message,500)||!validText(f.evidence,1000))
+      deny('OLLAMA_FINDING_TEXT_INVALID');
+    const fingerprint=digest(
+      'devfactory.review-finding.v1\0'+canonicalJson(f));
+    if(seen.has(fingerprint))deny('OLLAMA_FINDING_DUPLICATE');
+    seen.add(fingerprint);
+    findings.push({...f,fingerprint});
   }
   const checked=normalizeUntrustedModelFindings({
     rawModelOutput:canonicalJson({summary:parsed.summary,findings}),
