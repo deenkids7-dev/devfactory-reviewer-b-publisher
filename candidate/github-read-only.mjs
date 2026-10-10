@@ -7,7 +7,9 @@ import { observePrSnapshot } from '../src/github-pr-observer.mjs';
 const OWNER = 'deenkids7-dev';
 const REPO = 'deenkids';
 const PATH_PREFIX = `https://api.github.com/repos/${OWNER}/${REPO}/pulls/`;
+const COMPARE_PREFIX = `https://api.github.com/repos/${OWNER}/${REPO}/compare/`;
 const API = 'https://api.github.com';
+const COMPARE_PATH=/^[a-f0-9]{40}\.\.\.[a-f0-9]{40}$/;
 const ACCEPT = new Set(['application/vnd.github+json', 'application/vnd.github.diff']);
 const JSON_CONTENT = /^application\/(?:vnd\.github\+)?json(?:\s*;|$)/i;
 const DIFF_CONTENT = /^(?:text\/plain|application\/vnd\.github(?:\.v3)?\.diff)(?:\s*;|$)/i;
@@ -16,10 +18,16 @@ function deny(code) { throw new Error(code); }
 function validPr(value) {
   return Number.isSafeInteger(value) && value > 0 && value <= 2147483647;
 }
-function assertFixedTarget(url) {
-  if (typeof url !== 'string' || !url.startsWith(PATH_PREFIX) ||
-      !/^\d+$/.test(url.slice(PATH_PREFIX.length)) ||
-      !validPr(Number(url.slice(PATH_PREFIX.length)))) deny('GITHUB_ENDPOINT_DENIED');
+function assertFixedTarget(url,accept) {
+  if(typeof url!=='string')deny('GITHUB_ENDPOINT_DENIED');
+  if(accept==='application/vnd.github+json' &&
+     url.startsWith(PATH_PREFIX) &&
+     /^\d+$/.test(url.slice(PATH_PREFIX.length)) &&
+     validPr(Number(url.slice(PATH_PREFIX.length))))return;
+  if(accept==='application/vnd.github.diff' &&
+     url.startsWith(COMPARE_PREFIX) &&
+     COMPARE_PATH.test(url.slice(COMPARE_PREFIX.length)))return;
+  deny('GITHUB_ENDPOINT_DENIED');
 }
 function cleanToken(value) {
   // Do not expose the token in error messages, logs or returned values.
@@ -49,7 +57,7 @@ async function consumeBounded(response, maxBytes) {
 /**
  * A concrete API reader, NOT independent-review provenance or authorization.
  *
- * Only GET /repos/deenkids7-dev/deenkids/pulls/:pr is permitted. The token
+ * Only GET /pulls/:pr metadata and immutable /compare/:base...:head DIFF are permitted. The token
  * must belong to a separate trusted GitHub App installation. Calls requiring
  * payment, PR writes, arbitrary URLs or reading other repos are impossible.
  * An injected fetchImpl is for TESTS ONLY. Production MUST use global fetch.
@@ -60,7 +68,7 @@ export function createReadOnlyGitHubTransport({
   cleanToken(installationToken);
   if (typeof fetchImpl !== 'function') deny('GITHUB_TRANSPORT_MISSING');
   return async function request({url,method,accept,maxBytes}) {
-    assertFixedTarget(url);
+    assertFixedTarget(url,accept);
     if (method !== 'GET' || !ACCEPT.has(accept) ||
         !Number.isSafeInteger(maxBytes) || maxBytes < 1 ||
         maxBytes > 2*1024*1024) deny('GITHUB_READ_CONTRACT_VIOLATION');
