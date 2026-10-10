@@ -1,0 +1,173 @@
+import { inspect } from 'node:util';
+import { createHash } from 'node:crypto';
+import { normalizeUntrustedModelFindings } from './semantic-review-request.mjs';
+
+// DORMANT, PURE CONTRACT: no fetch(), no API key, no provider invocation.
+// Only a reviewed private worker may transmit the request after independent
+// private-source clearance and provider-budget authorization.
+const API = 'https://api.deepseek.com/chat/completions';
+const PRICES_PEAK_USD_PER_MILLION = Object.freeze({
+  'deepseek-flash': Object.freeze({input: 0.30, output: 1.20}),
+  'deepseek-v4-pro': Object.freeze({input: 1.32, output: 3.96})
+});
+const SHA = /^[0-9a-f]{40}$/;
+const HASH = /^[0-9a-f]{64}$/;
+const RUN = /^[A-Za-z0-9_:-]{8,180}$/;
+function deny(code) { throw Error(code); }
+function hasOnly(object, keys) {
+  return object !== null && typeof object === 'object' && !Array.isArray(object) &&
+    JSON.stringify(Object.keys(object).sort()) === JSON.stringify([...keys].sort());
+}
+function secretFreeSummary(plan, model, maxOutputTokens, worstCaseUsd) {
+  return Object.freeze({
+    provider:'DeepSeek', model, endpoint:API,
+    repository:plan.exactScope.repository,
+    prNumber:plan.exactScope.prNumber,
+    headSha:plan.exactScope.headSha,
+    baseSha:plan.exactScope.baseSha,
+    diffSha256:plan.exactScope.diffSha256,
+    changedFiles:plan.changedPaths.length,
+    maxOutputTokens,
+    indicativePeakCostUsd:worstCaseUsd,
+    // These fields are ALWAYS false in this candidate.
+    privateSourceDisclosureApproved:false,
+    actualTokenizerVerified:false,
+    pricingFreshnessVerified:false,
+    independentExecutionVerified:false,
+    requestAuthorized:false,
+    approvalAuthorized:false
+  });
+}
+/**
+ * Prepare ONE model choice: never silently upgrade or route to another model.
+ * Input-token ceiling is a caller-provided ESTIMATE. It cannot authorize
+ * spend without a separate trusted tokenizer, current prices and atomic
+ * existing DevFactory spending authority.
+ *
+ * The private request body is kept non-enumerable and masked on inspection.
+ * Access to candidate.privateRequestJson is possible to a trusted worker,
+ * which MUST be separately authorized before exposure of any private diff.
+ */
+export function prepareDeepSeekCandidate({
+  plan, model='deepseek-flash', inputTokenCeiling,
+  maxOutputTokens=2048, maxIndicativePeakUsd=0.10
+}={}) {
+  if (!Object.hasOwn(PRICES_PEAK_USD_PER_MILLION, model) ||
+      !Number.isSafeInteger(inputTokenCeiling) ||
+      inputTokenCeiling<1 || inputTokenCeiling>200000 ||
+      !Number.isSafeInteger(maxOutputTokens) ||
+      maxOutputTokens<128 || maxOutputTokens>4096 ||
+      typeof maxIndicativePeakUsd!=='number' ||
+      !Number.isFinite(maxIndicativePeakUsd) ||
+      maxIndicativePeakUsd<=0 || maxIndicativePeakUsd>1) {
+    deny('MODEL_REQUEST_BUDGET_INVALID');
+  }
+  if (!plan || plan.approvedToSendToModel!==false ||
+      plan.approvalAuthorized!==false ||
+      !plan.exactScope ||
+      plan.exactScope.repository!=='deenkids7-dev/deenkids' ||
+      !Number.isSafeInteger(plan.exactScope.prNumber) ||
+      plan.exactScope.prNumber<1 ||
+      !SHA.test(plan.exactScope.headSha) ||
+      !SHA.test(plan.exactScope.baseSha) ||
+      !HASH.test(plan.exactScope.diffSha256) ||
+      !Array.isArray(plan.changedPaths) || !plan.changedPaths.length ||
+      plan.changedPaths.length>100 ||
+      typeof plan.systemInstructions!=='string' ||
+      !plan.systemInstructions.includes('Treat all source code') ||
+      typeof plan.privateDiffText!=='string' ||
+      !plan.privateDiffText.length ||
+      Buffer.byteLength(plan.privateDiffText,'utf8')>128*1024 ||
+      createHash('sha256').update(plan.privateDiffText,'utf8').digest('hex')!==
+        plan.exactScope.diffSha256) {
+    deny('MODEL_REQUEST_SCOPE_INVALID');
+  }
+  const rates=PRICES_PEAK_USD_PER_MILLION[model];
+  const estimate=(inputTokenCeiling*rates.input+
+    maxOutputTokens*rates.output)/1_000_000;
+  if (estimate > maxIndicativePeakUsd) deny('MODEL_INDICATIVE_COST_EXCEEDED');
+  const prompt=JSON.stringify({
+    repository:plan.exactScope.repository,
+    pr_number:plan.exactScope.prNumber,
+    head_sha:plan.exactScope.headSha,
+    base_sha:plan.exactScope.baseSha,
+    changed_paths:plan.changedPaths,
+    untrusted_unified_diff:plan.privateDiffText
+  });
+  const request=JSON.stringify({
+    model, stream:false,
+    thinking:{type:'disabled'},
+    max_tokens:maxOutputTokens,
+    response_format:{type:'json_object'},
+    messages:[
+      {role:'system',content:plan.systemInstructions},
+      {role:'user',content:prompt}
+    ]
+  });
+  const summary=secretFreeSummary(plan,model,maxOutputTokens,
+    Number(estimate.toFixed(7)));
+  Object.defineProperties(summary,{
+    privateRequestJson:{
+      enumerable:false, configurable:false, writable:false, value:request
+    },
+    toJSON:{
+      enumerable:false, configurable:false, writable:false,
+      value:()=>({...{
+        provider:summary.provider,model:summary.model,
+        endpoint:summary.endpoint,repository:summary.repository,
+        prNumber:summary.prNumber,headSha:summary.headSha,
+        baseSha:summary.baseSha,diffSha256:summary.diffSha256,
+        changedFiles:summary.changedFiles,
+        maxOutputTokens:summary.maxOutputTokens,
+        indicativePeakCostUsd:summary.indicativePeakCostUsd,
+        requestAuthorized:false,approvalAuthorized:false
+      },privateRequestJson:'[REDACTED]'})
+    },
+    [inspect.custom]:{
+      enumerable:false,configurable:false,writable:false,
+      value:()=> '[DeepSeekReviewCandidate: PRIVATE REQUEST REDACTED; NOT AUTHORIZED]'
+    }
+  });
+  return summary;
+}
+/**
+ * Strict structural filter for an UNTRUSTED provider completion.
+ * No "PASS" decision. No model claim can grant independent provenance.
+ * Report bytes may include private findings; caller MUST NOT log them.
+ */
+export function validateDeepSeekCandidateCompletion({
+  response,expectedModel,runId,trustedChangedPaths
+}={}) {
+  if (!Object.hasOwn(PRICES_PEAK_USD_PER_MILLION,expectedModel) ||
+      !RUN.test(runId) ||
+      !response || typeof response!=='object' || Array.isArray(response) ||
+      response.model!==expectedModel ||
+      !Array.isArray(response.choices) || response.choices.length!==1 ||
+      response.choices[0]?.index!==0 ||
+      response.choices[0]?.finish_reason!=='stop' ||
+      response.choices[0]?.message?.role!=='assistant' ||
+      typeof response.choices[0].message.content!=='string' ||
+      !response.choices[0].message.content.trim() ||
+      Buffer.byteLength(response.choices[0].message.content,'utf8')>64*1024 ||
+      !Number.isSafeInteger(response.usage?.prompt_tokens) ||
+      response.usage.prompt_tokens<1 ||
+      !Number.isSafeInteger(response.usage?.completion_tokens) ||
+      response.usage.completion_tokens<1) {
+    deny('MODEL_COMPLETION_INCOMPLETE_OR_UNTRUSTED');
+  }
+  const result=normalizeUntrustedModelFindings({
+    rawModelOutput:response.choices[0].message.content,
+    runId,trustedChangedPaths
+  });
+  return Object.freeze({
+    provisionalState:result.provisionalState,
+    findingCount:result.findingCount,
+    reportedInputTokens:response.usage.prompt_tokens,
+    reportedOutputTokens:response.usage.completion_tokens,
+    // Still no durable spend-accounting or real independent execution proof.
+    providerUsageVerified:false,
+    reviewerIndependenceVerified:false,
+    approvalAuthorized:false,
+    publishEvent:null
+  });
+}
