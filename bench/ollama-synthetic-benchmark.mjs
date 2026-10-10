@@ -25,7 +25,7 @@ const FIXTURES=Object.freeze([
     before:"function isAuthorized(user) { return user?.role === 'admin'; }",
     source:'function isAuthorized(user) { return true; }',
     knownStaticBlocker:false,knownSemanticBug:true,
-    oraclePattern:/(?:always returns? true|bypass(?:es|ing)? authorization|unauthorized access)/i}),
+    oraclePattern:/(?:always returns? true|bypass(?:es|ing)? authorization|authorization (?:check )?bypass(?:ed|es|ing)?|unauthorized access)/i}),
   Object.freeze({label:'safe null-checked authorization',path:AUTH_PATH,
     before:"function isAuthorized(user) { return user.role === 'admin'; }",
     source:"function isAuthorized(user) { return user?.role === 'admin'; }",

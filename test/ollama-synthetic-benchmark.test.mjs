@@ -23,7 +23,14 @@ function mock(options={}){
     .changed_paths[0];
   const wrongDirection=options.wrongDirection &&
     requestedPath==='src/payment-synthetic.mjs';
-  const findings=wrongDirection?[{
+  const authAlt=options.authAlternative && requestedPath==='src/auth-synthetic.mjs' &&
+    JSON.parse(JSON.parse(config.body).messages[1].content).untrusted_unified_diff
+      .includes('+function isAuthorized(user) { return true; }');
+  const findings=authAlt?[{
+    severity:'high',path:requestedPath,line:1,
+    message:'Authorization check bypassed',
+    evidence:'isAuthorized now always returns true for guests'
+  }]:wrongDirection?[{
     severity:'high',path:requestedPath,line:1,
     message:'Negative amount may prevent valid transactions',
     evidence:'This may prevent valid payments'
@@ -177,4 +184,12 @@ test('hosted synthetic workflow cannot report PASS on poor inference quality',()
   import.meta.url),'utf8');
  assert.match(y,/r\.syntheticQualityGatePassed!==true/);
  assert.match(y,/MODEL_QUALITY_GATE_FAILED_NOT_PRODUCTION_READY/);
+});
+
+test('directional oracle recognizes authorization-check-bypassed without a vague PASS',async()=>{
+ const f=mock({authAlternative:true});
+ const r=await runSyntheticLocalOllamaBenchmark({fetchImpl:f.fetchImpl});
+ assert.equal(r.seededSemanticBugsDetected,1);
+ assert.equal(r.syntheticQualityGatePassed,false);
+ assert.equal(r.approvalAuthorized,false);
 });

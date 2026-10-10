@@ -252,3 +252,34 @@ configured context (not a permissive 200,000-token caller default) and a
 `prompt_eval_count + eval_count + 512 > 8192`, or either declared limit is
 exceeded. This does not prove the underlying tokenizer saw every input
 token; independent context-completeness provenance remains unverified.
+
+## Updated independent free-model evidence — real ten-case run, 2026-10-10
+
+[Public GitHub Actions run 38065898352](https://github.com/devfactory-reviewer-trust/devfactory-reviewer-b-publisher/actions/runs/38065898352)
+executed 7B and 14B over ten fixed synthetic examples each. Both inference
+jobs completed and their historical workflows reported SUCCESS **because that
+commit checked execution integrity, not model quality**. The later strict
+quality gate was introduced afterward; it was not part of that run.
+
+| Synthetic benchmark metric | Qwen 7B | Qwen 14B |
+|---|---:|---:|
+| Real model completions | 10 | 10 |
+| Four semantic defects recognized by contemporaneous strict oracle | 2 | 1 |
+| Safe examples triggering any model concern (of four) | 4 | 2 |
+| Safe examples triggering blocking model concerns (of four) | 3 | 0 |
+| Approved for production security reviews | NO | NO |
+
+The strict auth oracle undercounted a concrete 14B phrase,
+"Authorization check bypassed"; a subsequent grammar-only correction adds
+that accurate wording. Do not retroactively change this run's recorded metric
+or claim more bug recall than what its log actually scored. By manual reading,
+14B correctly identified at least the XSS removal and the auth bypass, but
+still misread negative-amount direction, raised speculative safe-case concerns,
+and did not provide the required session-token consequence. The next
+synthetic quality gate requires **all four** seeded semantics and **zero**
+safe alerts, and can legitimately FAIL. It never supplies independent
+execution provenance or permission to post GitHub reviews.
+
+Verdict: neither 7B nor 14B is production-ready as an independent automatic
+Reviewer B. Both remain research/advisory candidates, without model API fees
+and without exposure to PRIVATE DevFactory source.
