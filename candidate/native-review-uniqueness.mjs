@@ -39,6 +39,11 @@ export function assessNativeReviewUniqueness({
       deny('REVIEW_UNIQUENESS_DATA_UNTRUSTED');
     }
     seen.add(review.id);
+    // A partial match of the canonical bot identity is conflicting evidence,
+    // never a justification to publish a second native review.
+    if((review.user.id===BOT_ID)!==(review.user.login===BOT_LOGIN)){
+      deny('REVIEW_BOT_IDENTITY_CONFLICT');
+    }
     if(review.user.id===BOT_ID&&review.user.login===BOT_LOGIN&&
        review.commit_id===currentHeadSha){
       // An incomplete, malformed or unsigned bot review also blocks repeats.
