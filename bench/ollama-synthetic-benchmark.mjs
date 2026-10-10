@@ -120,13 +120,18 @@ export async function runSyntheticLocalOllamaBenchmark({
     const staticAudit=runFailOnlyStaticDiffAudit({diffBytes:bytes,runId:RUN});
     if((staticAudit.blockingFindings>0)!==fixture.knownStaticBlocker)
       deny('OLLAMA_BENCHMARK_STATIC_ORACLE_FAILED');
+    // Public, FIXED synthetic cases ONLY: retain weights on ephemeral runner
+    // between examples. Production private-source request stays keep_alive:0.
+    const syntheticRequest=JSON.parse(candidate.privateRequestJson);
+    if(syntheticRequest.keep_alive!==0)deny('OLLAMA_BENCHMARK_UNSAFE_REQUEST');
+    syntheticRequest.keep_alive='5m';
     let response;
     try{
       response=await fetchImpl(OLLAMA,{
         method:'POST',redirect:'error',cache:'no-store',
         signal:AbortSignal.timeout(180000),
         headers:{'Content-Type':'application/json',Accept:'application/json'},
-        body:candidate.privateRequestJson
+        body:JSON.stringify(syntheticRequest)
       });
     }catch{deny('OLLAMA_BENCHMARK_LOCAL_UNAVAILABLE');}
     const raw=await boundedJson(response);
