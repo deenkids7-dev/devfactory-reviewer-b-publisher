@@ -59,7 +59,7 @@ test('invalid and non-RSA keys are rejected',()=>{
   ]){
     assert.throws(()=>signNativeMarkerOnly(args({
       nativeSignerPrivateKeyPem:value
-    })),/NATIVE_SIGNER_(?:UNPROVISIONED|INVALID_PRIVATE_KEY)/);
+    })),/NATIVE_SIGNER_(?:UNPROVISIONED|INVALID_PRIVATE_KEY|KEY_DENIED)/);
   }
 });
 test('no signer may forge invalid native review payload schema',()=>{
@@ -88,4 +88,14 @@ test('RSA signer never accidentally serializes private GitHub review body',()=>{
   assert.ok(!raw.includes(secret));
  assert.equal(Object.keys(result).includes('reviewBody'),false);
  assert.equal(result.publishEvent,null);
+});
+test('wrong-type and weak RSA native signer keys preserve precise type denial',()=>{
+  const ed=generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'pem'});
+  const weak=generateKeyPairSync('rsa',{modulusLength:1024}).privateKey.export({type:'pkcs8',format:'pem'});
+  for(const nativeSignerPrivateKeyPem of [ed,weak]){
+    assert.throws(()=>signNativeMarkerOnly(args({nativeSignerPrivateKeyPem})),
+      e=>e.message==='NATIVE_SIGNER_KEY_DENIED');
+  }
+  assert.throws(()=>signNativeMarkerOnly(args({nativeSignerPrivateKeyPem:'bad key'.repeat(20)})),
+    e=>e.message==='NATIVE_SIGNER_INVALID_PRIVATE_KEY');
 });

@@ -61,7 +61,7 @@ test('JWT rejects keys not suitable for GitHub App RSA signing',()=>{
   })]){
     assert.throws(()=>createReviewerBAppJwt({
       privateKeyPem:candidate,now
-    }),/APP_AUTH_INVALID_(?:KEY_OR_CLOCK|RSA_PRIVATE_KEY)/);
+    }),/(?:APP_AUTH_INVALID_(?:KEY_OR_CLOCK|RSA_PRIVATE_KEY)|APP_AUTH_KEY_TYPE_DENIED)/);
   }
 });
 
@@ -246,4 +246,14 @@ test('scoped GitHub App installation token cannot leak from ordinary object logg
  assert.match(JSON.stringify(result),/REDACTED_INSTALLATION_TOKEN/);
  assert.equal(result.purpose,'publish');
  assert.equal(Object.isFrozen(result),true);
+});
+test('wrong-type and weak RSA App keys preserve precise key-type denial',()=>{
+  const ed=generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'pem'});
+  const weak=generateKeyPairSync('rsa',{modulusLength:1024}).privateKey.export({type:'pkcs8',format:'pem'});
+  for(const privateKeyPem of [ed,weak]){
+    assert.throws(()=>createReviewerBAppJwt({privateKeyPem,now}),
+      e=>e.message==='APP_AUTH_KEY_TYPE_DENIED');
+  }
+  assert.throws(()=>createReviewerBAppJwt({privateKeyPem:'not-a-key'.repeat(12),now}),
+    e=>e.message==='APP_AUTH_INVALID_RSA_PRIVATE_KEY');
 });

@@ -90,3 +90,23 @@ test('canonical JSON rejects floating point and dangerous object keys',()=>{
 test('no production signing key or publication action in module',()=> {
   assert.ok(!Object.keys(verify(signedFixture())).includes('approve'));
 });
+test('wrong trusted signing key type is rejected with specific code',()=>{
+  const rsa=generateKeyPairSync('rsa',{modulusLength:2048});
+  const pem=rsa.publicKey.export({type:'spki',format:'pem'});
+  const pins=new Map([['TEST_ONLY_NEVER_PRODUCTION',{
+    publicKeyPem:pem,
+    spkiSha256:sha256(rsa.publicKey.export({type:'spki',format:'der'})),
+    issuer:'fixture-isolated-signer',reviewerId:'fixture-reviewer'
+  }]]);
+  assert.throws(()=>verify(signedFixture(),{trustedKeys:pins}),
+    e=>e.message==='UNTRUSTED_KEY_TYPE');
+});
+test('malformed trusted public key fails closed',()=>{
+  const pins=new Map([['TEST_ONLY_NEVER_PRODUCTION',{
+    publicKeyPem:'NOT_A_PUBLIC_KEY',
+    spkiSha256:'0'.repeat(64),
+    issuer:'fixture-isolated-signer',reviewerId:'fixture-reviewer'
+  }]]);
+  assert.throws(()=>verify(signedFixture(),{trustedKeys:pins}),
+    e=>e.message==='SIGNATURE_VERIFICATION_FAILED');
+});

@@ -51,10 +51,10 @@ export function createReviewerBAppJwt({privateKeyPem,now=Date.now()}={}) {
   let key;
   try{
     key=createPrivateKey(privateKeyPem);
-    if(key.asymmetricKeyType!=='rsa'||
-       (key.asymmetricKeyDetails?.modulusLength||0)<2048)
-       deny('APP_AUTH_KEY_TYPE_DENIED');
   }catch{deny('APP_AUTH_INVALID_RSA_PRIVATE_KEY');}
+  if(key.asymmetricKeyType!=='rsa'||
+     (key.asymmetricKeyDetails?.modulusLength||0)<2048)
+    deny('APP_AUTH_KEY_TYPE_DENIED');
   const seconds=Math.floor(now/1000);
   const header=b64(JSON.stringify({alg:'RS256',typ:'JWT'}));
   const payload=b64(JSON.stringify({

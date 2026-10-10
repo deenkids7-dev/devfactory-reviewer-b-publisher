@@ -30,10 +30,10 @@ export function signNativeMarkerOnly({
   let key;
   try {
     key=createPrivateKey(nativeSignerPrivateKeyPem);
-    if(key.asymmetricKeyType!=='rsa' ||
-       (key.asymmetricKeyDetails?.modulusLength||0)<2048)
-       deny('NATIVE_SIGNER_KEY_DENIED');
   } catch {deny('NATIVE_SIGNER_INVALID_PRIVATE_KEY');}
+  if(key.asymmetricKeyType!=='rsa' ||
+     (key.asymmetricKeyDetails?.modulusLength||0)<2048)
+    deny('NATIVE_SIGNER_KEY_DENIED');
   const publicKey=createPublicKey(key);
   const spkiSha256=sha(publicKey.export({type:'spki',format:'der'}));
   if(spkiSha256!==pinnedSignerSpkiSha256)

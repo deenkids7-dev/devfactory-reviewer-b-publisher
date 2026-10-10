@@ -151,3 +151,18 @@ test('read-only native review body does not leak into JSON, spread or Node inspe
  assert.equal(result.approvalAuthorized,false);
  assert.equal(result.independentReviewVerified,false);
 });
+test('null review bodies are safe but never authorize approval; malformed bodies fail closed',async()=>{
+  for(const state of ['COMMENTED','APPROVED']){
+    const fake=mock([[review(44,{state,body:null})]]);
+    const out=await readNativeReviews(context(fake.fetchImpl));
+    assert.equal(out.reviews[0].body,'');
+    assert.equal(out.reviews[0].state,state);
+    assert.equal(out.approvalAuthorized,false);
+    assert.equal(out.independentReviewVerified,false);
+  }
+  for(const body of [undefined,false,{},7,'x'.repeat(120001)]){
+    const fake=mock([[review(45,{body})]]);
+    await assert.rejects(()=>readNativeReviews(context(fake.fetchImpl)),
+      /REVIEWS_ITEM_UNTRUSTED/);
+  }
+});

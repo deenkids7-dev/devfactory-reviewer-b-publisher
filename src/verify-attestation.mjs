@@ -90,23 +90,21 @@ export function verifyAttestation({ envelope, reportBytes, trustedKeys, trustedT
   // Node's base64 parser accepts non-zero unused pad bits. Refuse alternate
   // encodings of the same signature bytes to avoid transport malleability.
   if (rawSignature.toString('base64') !== s.value) reject('MALFORMED_SIGNATURE');
+  let key;
+  try {
+    key=createPublicKey(keyRecord.publicKeyPem);
+  } catch {reject('SIGNATURE_VERIFICATION_FAILED');}
+  if (key.asymmetricKeyType !== 'ed25519') reject('UNTRUSTED_KEY_TYPE');
+  // Trusted signer fingerprint is provisioned independently of any report.
+  if (typeof keyRecord.spkiSha256 !== 'string' || !HEX64.test(keyRecord.spkiSha256))
+    reject('UNPINNED_SIGNING_KEY');
+  const actualSpkiDigest = createHash('sha256')
+    .update(key.export({type:'spki',format:'der'})).digest('hex');
+  sameHash(keyRecord.spkiSha256, actualSpkiDigest, 'SIGNING_KEY_FINGERPRINT_MISMATCH');
   let valid = false;
   try {
-    const key = createPublicKey(keyRecord.publicKeyPem);
-    if (key.asymmetricKeyType !== 'ed25519') reject('UNTRUSTED_KEY_TYPE');
-    // Trusted signer fingerprint is provisioned independently of any report.
-    if (typeof keyRecord.spkiSha256 !== 'string' || !HEX64.test(keyRecord.spkiSha256)) {
-      reject('UNPINNED_SIGNING_KEY');
-    }
-    const actualSpkiDigest = createHash('sha256')
-      .update(key.export({type:'spki',format:'der'})).digest('hex');
-    sameHash(keyRecord.spkiSha256, actualSpkiDigest, 'SIGNING_KEY_FINGERPRINT_MISMATCH');
     valid = verifySignature(null, Buffer.from(canonicalJson(p), 'utf8'), key, rawSignature);
-  } catch (e) {
-    if (['UNTRUSTED_KEY_TYPE', 'UNPINNED_SIGNING_KEY',
-      'SIGNING_KEY_FINGERPRINT_MISMATCH'].includes(e.message)) throw e;
-    reject('SIGNATURE_VERIFICATION_FAILED');
-  }
+  } catch {reject('SIGNATURE_VERIFICATION_FAILED');}
   if (!valid) reject('SIGNATURE_VERIFICATION_FAILED');
 
   // No replay recording here. Only an atomic, authorized publisher may consume

@@ -117,7 +117,8 @@ export async function readNativeReviews({
          typeof review.user.login!=='string'||
          !['APPROVED','CHANGES_REQUESTED','COMMENTED','DISMISSED','PENDING'].includes(review.state)||
          typeof review.commit_id!=='string'||!SHA40.test(review.commit_id)||
-         typeof review.body!=='string'||review.body.length>120000||
+         (review.body!==null&&typeof review.body!=='string')||
+         (typeof review.body==='string'&&review.body.length>120000)||
          review.pull_request_url!==`https://api.github.com/repos/${REPO}/pulls/${prNumber}`){
         deny('REVIEWS_ITEM_UNTRUSTED');
       }
@@ -129,7 +130,7 @@ export async function readNativeReviews({
       result.push(Object.freeze({
         id:review.id,
         user:Object.freeze({id:review.user.id,login:review.user.login}),
-        commit_id:review.commit_id,state:review.state,body:review.body,
+        commit_id:review.commit_id,state:review.state,body:review.body??'',
         submitted_at:review.submitted_at||null,
         pull_request_url:review.pull_request_url
       }));
