@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { inspect } from 'node:util';
 import { canonicalJson } from '../src/canonical.mjs';
-import { normalizeUntrustedModelFindings } from './semantic-review-request.mjs';
+import { normalizeUntrustedModelFindings,prepareBoundedSemanticReview }
+  from './semantic-review-request.mjs';
 
 // Dormant, pure Ollama adapter. No network, no tokens, no inference and no POST.
 // Inspired by MIT-licensed The-PR-Agent/pr-agent, without copying its source.
@@ -44,6 +45,19 @@ function checkPlan(plan){
     typeof plan.privateDiffText!=='string'||
     Buffer.byteLength(plan.privateDiffText,'utf8')>128*1024||
     digest(Buffer.from(plan.privateDiffText,'utf8'))!==s.diffSha256)
+    deny('OLLAMA_SCOPE_UNVERIFIED');
+  // Rebuild the plan from its exact diff: no caller-provided system prompt
+  // or changed-path list is trusted merely because it has the right fields.
+  const rebuilt=prepareBoundedSemanticReview({
+    snapshot:{
+      repository:s.repository,repository_id:1282086207,
+      pr_number:s.prNumber,head_sha:s.headSha,base_sha:s.baseSha,
+      diff_sha256:s.diffSha256
+    },
+    rawDiffBytes:Buffer.from(plan.privateDiffText,'utf8')
+  });
+  if(rebuilt.systemInstructions!==plan.systemInstructions ||
+    JSON.stringify(rebuilt.changedPaths)!==JSON.stringify(plan.changedPaths))
     deny('OLLAMA_SCOPE_UNVERIFIED');
 }
 /**

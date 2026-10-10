@@ -102,3 +102,11 @@ be reused for private diff reviews or in a privileged workflow. Metrics now
 show whether all seeded semantic bugs were detected and no clean fixtures
 were flagged; even if this small synthetic target becomes true, it does NOT
 establish production review quality, provenance, HUMAN_GO or approval.
+
+## Caller-supplied plan hardening
+
+The local adapter rebuilds the semantic plan from the bound SHA-256 diff bytes
+and refuses any caller-supplied system instruction changes or changed-path
+lists that differ from the canonical parser. This closes a self-declared
+prompt/scope spoofing path. It does not by itself authenticate GitHub API
+origin or make the review independent: those remain separate trust gates.
