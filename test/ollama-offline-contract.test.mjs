@@ -194,3 +194,15 @@ test('tiny synthetic prompt fits the conservative context reservation',()=>{
  assert.ok(inputBytes+request.options.num_predict+512 <=request.options.num_ctx);
  assert.equal(v.modelContextCompletenessVerified,false);
 });
+
+test('completion cannot overrun the actual 8192-token context window',()=>{
+ const content=completion(noIssues,{prompt_eval_count:7000,eval_count:1100});
+ assert.throws(()=>parse(content),/OLLAMA_CONTEXT_LIMIT_EXCEEDED/);
+ assert.throws(()=>parse(completion(noIssues,{prompt_eval_count:8500})),
+  /OLLAMA_CONTEXT_LIMIT_EXCEEDED/);
+ assert.throws(()=>parse(completion(noIssues,{eval_count:2100})),
+  /OLLAMA_CONTEXT_LIMIT_EXCEEDED/);
+ const accepted=parse(completion(noIssues,{prompt_eval_count:5000,eval_count:1100}));
+ assert.equal(accepted.modelContextCompletenessVerified,false);
+ assert.equal(accepted.approvalAuthorized,false);
+});

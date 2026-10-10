@@ -243,3 +243,12 @@ intentionally stringent: a red benchmark is better than declaring an unsafe
 model ready. Even a fully green synthetic benchmark would not prove real-world
 model accuracy, independently authenticated execution, or authorized review.
 No private source enters this free CI; run only by explicit benchmark label.
+
+## Token-count runtime bound
+
+The post-inference response parser now defaults to the actual 8,192-token
+configured context (not a permissive 200,000-token caller default) and a
+2,048-token generation cap. It refuses completions for which
+`prompt_eval_count + eval_count + 512 > 8192`, or either declared limit is
+exceeded. This does not prove the underlying tokenizer saw every input
+token; independent context-completeness provenance remains unverified.

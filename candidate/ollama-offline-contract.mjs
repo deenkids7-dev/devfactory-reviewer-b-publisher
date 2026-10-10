@@ -135,11 +135,11 @@ export function prepareOfflineOllamaCandidate({
 export function validateOfflineOllamaCompletion({
   response,expectedModel,runId,trustedChangedPaths,
   trustedDiffBytes,expectedDiffSha256,
-  maxPromptTokens=200000,maxCompletionTokens=4096
+  maxPromptTokens=8192,maxCompletionTokens=2048
 }={}){
   if(!MODELS.includes(expectedModel)||!RUN.test(runId)||
     !Number.isSafeInteger(maxPromptTokens)||maxPromptTokens<1||
-    maxPromptTokens>200000||
+    maxPromptTokens>8192||
     !Number.isSafeInteger(maxCompletionTokens)||maxCompletionTokens<128||
     maxCompletionTokens>4096||
     !response||typeof response!=='object'||Array.isArray(response)||
@@ -154,8 +154,12 @@ export function validateOfflineOllamaCompletion({
     response.prompt_eval_count<1||
     !Number.isSafeInteger(response.eval_count)||response.eval_count<1)
     deny('OLLAMA_COMPLETION_UNVERIFIED');
+  // A completion accepted outside the advertised 8192-token window could
+  // hide truncation. Independent worker provenance is STILL not established.
+  // Reserve 512 tokens for chat framing, even when Ollama usage is misleading.
   if(response.prompt_eval_count>maxPromptTokens||
-    response.eval_count>maxCompletionTokens)
+    response.eval_count>maxCompletionTokens||
+    response.prompt_eval_count+response.eval_count+512>8192)
     deny('OLLAMA_CONTEXT_LIMIT_EXCEEDED');
   let parsed;
   try{parsed=JSON.parse(response.message.content);}
