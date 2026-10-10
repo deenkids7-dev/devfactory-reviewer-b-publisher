@@ -61,7 +61,7 @@ denies('rejects forged trusted paths',report(), 'REVIEW_INPUT_UNTRUSTED',
   {changedPaths:['../secrets.env']});
 denies('rejects missing trusted path scope',report(), 'REVIEW_INPUT_UNTRUSTED',
   {changedPaths:[]});
-denies('rejects invalid JSON',Buffer.from('{'), 'REVIEW_INVALID_JSON');
+denies('rejects invalid JSON',Buffer.from('{ '), 'REVIEW_INVALID_JSON');
 denies('rejects invalid UTF8',Buffer.from([0xff,0xff,0xff]),'REVIEW_INVALID_UTF8');
 denies('rejects oversized report',Buffer.alloc(64*1024+1,0x20),'REVIEW_INPUT_UNTRUSTED');
 denies('rejects empty summary',report({summary:''}),'REVIEW_INVALID_FIELDS');
