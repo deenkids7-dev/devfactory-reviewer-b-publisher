@@ -17,7 +17,7 @@ const RULES=Object.freeze([
     message:'Broad write-all workflow permissions newly introduced'}),
   Object.freeze({id:'workflow-untrusted-shell',severity:'high',
     pathOnly:/^\.github\/workflows\/.*\.ya?ml$/,
-    pattern:/(?:curl|wget)\b.*\|\s*(?:sh|bash)\b/,
+    pattern:/(?:curl|wget)\b.*\|\s*(?:sh|bash|zsh|dash|ksh|ash)\b/,
     message:'Remote downloaded shell code execution newly introduced'}),
   Object.freeze({id:'workflow-token-write-scope',severity:'high',
     pathOnly:/^\.github\/workflows\/.*\.ya?ml$/,

@@ -39,16 +39,19 @@ async function consumeBounded(response, maxBytes) {
   const chunks=[];
   let total=0;
   const reader=response.body.getReader();
+  let completed=false;
   try {
     for (;;) {
       const {done,value}=await reader.read();
-      if (done) break;
+      if (done) { completed=true; break; }
       if (!(value instanceof Uint8Array)) deny('GITHUB_RESPONSE_CHUNK_INVALID');
       total+=value.length;
       if (total>maxBytes) deny('GITHUB_RESPONSE_OVERSIZED');
       chunks.push(Buffer.from(value));
     }
   } finally {
+    // Aborted reads must not leave an HTTP stream consuming resources.
+    if(!completed){try{await reader.cancel();}catch{/* Keep original denial. */}}
     reader.releaseLock();
   }
   return Buffer.concat(chunks,total);

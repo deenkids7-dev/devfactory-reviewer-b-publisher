@@ -194,3 +194,36 @@ test('private immutable compare HTTP 403 (e.g. missing Contents:Read) fails clos
   }),e=>e.message==='GITHUB_REQUEST_FAILED'&&!e.message.includes(TOKEN));
   assert.deepEqual(requests,[URL,IMMUTABLE_COMPARE]);
 });
+
+test('oversized Github HTTP body is cancelled on fail-closed response',async()=>{
+ let cancellations=0;
+ const fake=async url=>({
+  url,status:200,redirected:false,
+  headers:new Headers({'content-type':'application/json'}),
+  body:new ReadableStream({
+   start(c){c.enqueue(new Uint8Array(2048));},
+   cancel(){cancellations++;}
+  })
+ });
+ const get=createReadOnlyGitHubTransport({installationToken:TOKEN,fetchImpl:fake});
+ await assert.rejects(()=>get({url:URL,method:'GET',
+  accept:'application/vnd.github+json',maxBytes:1024}),
+  /GITHUB_RESPONSE_OVERSIZED_OR_INTERRUPTED/);
+ assert.equal(cancellations,1);
+});
+test('successfully completed Github HTTP body is not cancelled',async()=>{
+ let cancellations=0;
+ const fake=async url=>({
+  url,status:200,redirected:false,
+  headers:new Headers({'content-type':'application/json'}),
+  body:new ReadableStream({
+   start(c){c.enqueue(new TextEncoder().encode('{"ok":true}'));c.close();},
+   cancel(){cancellations++;}
+  })
+ });
+ const get=createReadOnlyGitHubTransport({installationToken:TOKEN,fetchImpl:fake});
+ const result=await get({url:URL,method:'GET',
+  accept:'application/vnd.github+json',maxBytes:1024});
+ assert.equal(result.body.toString(),'{"ok":true}');
+ assert.equal(cancellations,0);
+});

