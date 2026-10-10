@@ -63,10 +63,8 @@ export function prepareBoundedSemanticReview({snapshot,rawDiffBytes}={}){
     'If unsure or unable to inspect: use an empty findings array and explain uncertainty in summary.',
     'Do not output private source excerpts unless needed for short pinpoint evidence.'
   ].join('\n');
-  return Object.freeze({
+  const plan={
     systemInstructions,
-    // Body is for a protected reviewer engine ONLY; never log or artifact it.
-    privateDiffText:text,
     exactScope:Object.freeze({
       repository:REPO,prNumber:snapshot.pr_number,
       headSha:snapshot.head_sha,baseSha:snapshot.base_sha,
@@ -91,7 +89,14 @@ export function prepareBoundedSemanticReview({snapshot,rawDiffBytes}={}){
     [inspect.custom](){
       return '[PrivateSemanticReviewPlan: REDACTED]';
     }
+  };
+  // Private source must not leak via Object.keys/Object.assign/object spread,
+  // JSON.stringify or structuredClone. Only a trusted worker with the exact
+  // object can explicitly read this property. Never hand the plan to PR CI.
+  Object.defineProperty(plan,'privateDiffText',{
+    enumerable:false,configurable:false,writable:false,value:text
   });
+  return Object.freeze(plan);
 }
 
 /**
