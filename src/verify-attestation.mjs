@@ -102,7 +102,8 @@ export function verifyAttestation({ envelope, reportBytes, trustedKeys, trustedT
     sameHash(keyRecord.spkiSha256, actualFingerprint, 'SIGNING_KEY_FINGERPRINT_MISMATCH');
     valid = verifySignature(null, Buffer.from(canonicalJson(p), 'utf8'), key, rawSignature);
   } catch (e) {
-    if (e.message === 'UNTRUSTED_KEY_TYPE') throw e;
+    if (['UNTRUSTED_KEY_TYPE','UNPINNED_SIGNING_KEY',
+         'SIGNING_KEY_FINGERPRINT_MISMATCH'].includes(e.message)) throw e;
     reject('SIGNATURE_VERIFICATION_FAILED');
   }
   if (!valid) reject('SIGNATURE_VERIFICATION_FAILED');
