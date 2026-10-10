@@ -121,4 +121,9 @@ test('private diff review plan redacts accidental JSON and debug inspection',()=
   assert.ok(!JSON.stringify(plan).includes('SYNTHETIC_PRIVATE_LITERAL_NEVER_PRINT'));
   assert.ok(!inspect(plan).includes('SYNTHETIC_PRIVATE_LITERAL_NEVER_PRINT'));
   assert.equal(JSON.parse(JSON.stringify(plan)).privateDiffText,'[REDACTED]');
+  assert.ok(!Object.keys(plan).includes('privateDiffText'));
+  assert.ok(!JSON.stringify({...plan}).includes('SYNTHETIC_PRIVATE_LITERAL_NEVER_PRINT'));
+  assert.ok(!JSON.stringify(Object.assign({},plan)).includes('SYNTHETIC_PRIVATE_LITERAL_NEVER_PRINT'));
+  assert.ok(!JSON.stringify(structuredClone(plan)).includes('SYNTHETIC_PRIVATE_LITERAL_NEVER_PRINT'));
+  assert.ok(Object.isFrozen(plan));
 });
