@@ -2,7 +2,7 @@ name: Reviewer B - protected PRIVATE local semantic review
 
 # Protected-main execution ONLY. One bounded R56 activation via an audited marker
 # merge on main by the service account; still subject to environment approval.
-# No pull_request, untrusted PR code execution, elevated GITHUB_TOKEN or retry.
+# No PR-triggered execution, untrusted PR code checkout, elevated token, or retry.
 on:
   workflow_dispatch:
     inputs:
