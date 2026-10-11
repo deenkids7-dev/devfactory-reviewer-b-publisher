@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Secret-free fail-closed verification foundation for Reviewer B; NO production publisher",
   "scripts": {
-    "test": "node --test test/*.test.mjs",
+    "test": "node --test",
     "benchmark:local-synthetic": "node bench/ollama-synthetic-benchmark.mjs"
   },
   "engines": {
