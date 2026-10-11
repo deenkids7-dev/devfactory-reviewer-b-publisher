@@ -200,6 +200,88 @@ test('one Ollama output-budget exhaustion reanalyzes entire trusted shard in sma
  const report=JSON.parse(result.privateCanonicalReportBytes.toString('utf8'));
  assert.equal(report.findings.length,0);
 });
+test('two independent length stops reanalyze every original added line without partial output',async()=>{
+ const trusted=plan();
+ const model=mockModel();
+ const exhausted=new Set();
+ let uplift=0,requests=0;
+ const fetchImpl=async(url,options)=>{
+   requests++;
+   const request=JSON.parse(options.body);
+   const scoped=JSON.parse(request.messages[1].content);
+   const anchors=deriveAddedLinesFromDiff({
+     diffBytes:Buffer.from(scoped.untrusted_unified_diff)});
+   const path=Object.keys(anchors)[0];
+   if(request.options.num_predict===1024&&!exhausted.has(path)){
+     exhausted.add(path);
+     return fakeReply({
+       model:'qwen2.5-coder:7b',done:true,done_reason:'length',
+       message:{role:'assistant',content:'{"summary":"truncated"'},
+       prompt_eval_count:800,eval_count:1024
+     });
+   }
+   if(request.options.num_predict===2048)uplift++;
+   return model.fetchImpl(url,options);
+ };
+ const result=await executeCompleteLocalSemanticReview({
+   plan:trusted,runId:RUN,fetchImpl});
+ assert.deepEqual([...exhausted].sort(),[...paths].sort());
+ assert.ok(uplift>=2);
+ assert.ok(requests<=128);
+ assert.equal(result.rawByteCoverageProven,true);
+ assert.equal(result.originalDiffSha256,sha(diff));
+ assert.equal(result.approvalAuthorized,false);
+ assert.equal(result.independentReviewVerified,false);
+ const observed={};
+ for(const item of model.seen){
+   const anchors=deriveAddedLinesFromDiff({diffBytes:item.bytes});
+   (observed[item.path]??=[]).push(...anchors[item.path]);
+ }
+ assert.deepEqual(observed,deriveAddedLinesFromDiff({diffBytes:diff}));
+});
+test('too-small-to-split length stop gets one larger-output local attempt',async()=>{
+ const bytes=Buffer.from(file('src/tiny.mjs',1));
+ const trusted=plan(bytes);
+ const model=mockModel();
+ let requests=0;
+ const fetchImpl=async(url,options)=>{
+   requests++;
+   const tokenCap=JSON.parse(options.body).options.num_predict;
+   if(requests===1){
+     assert.equal(tokenCap,1024);
+     return fakeReply({
+       model:'qwen2.5-coder:7b',done:true,done_reason:'length',
+       message:{role:'assistant',content:'{"summary":"truncated"'},
+       prompt_eval_count:800,eval_count:1024
+     });
+   }
+   assert.equal(tokenCap,2048);
+   return model.fetchImpl(url,options);
+ };
+ const result=await executeCompleteLocalSemanticReview({
+   plan:trusted,runId:RUN,fetchImpl});
+ assert.equal(requests,2);
+ assert.equal(result.rawByteCoverageProven,true);
+ assert.equal(result.originalDiffSha256,sha(bytes));
+ assert.equal(result.approvalAuthorized,false);
+});
+test('persistent Qwen length exhaustion remains fail-closed after one bounded budget change',async()=>{
+ const bytes=Buffer.from(file('src/tiny.mjs',1));
+ let requests=0;
+ const fetchImpl=async(url,options)=>{
+   requests++;
+   const cap=JSON.parse(options.body).options.num_predict;
+   return fakeReply({
+     model:'qwen2.5-coder:7b',done:true,done_reason:'length',
+     message:{role:'assistant',content:'{"summary":"truncated"'},
+     prompt_eval_count:800,eval_count:cap
+   });
+ };
+ await assert.rejects(()=>executeCompleteLocalSemanticReview({
+   plan:plan(bytes),runId:RUN,fetchImpl
+ }),/OLLAMA_OUTPUT_TRUNCATED/);
+ assert.equal(requests,2);
+});
 test('wrong-model length response never triggers fallback or a false review result',async()=>{
  let requests=0;
  const fetchImpl=async()=>{
