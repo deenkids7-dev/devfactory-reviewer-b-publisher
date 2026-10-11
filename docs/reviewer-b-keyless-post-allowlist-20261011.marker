@@ -1,0 +1,4 @@
+POST-ALLOWLIST PUBLIC SYNTHETIC KEYLESS PROVENANCE, ONE-TIME TRIGGER 2026-10-11.
+GitHub Actions policy now selects the official SHA-pinned actions/attest allowlist.
+No private source, credential, GitHub review, merge authority or HUMAN_GO is represented.
+Do not update this exact marker after the once-only test.
