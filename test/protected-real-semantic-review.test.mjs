@@ -78,6 +78,14 @@ test('actual model finding is bounded, attributed to changed file, still not PAS
  assert.match(p.body,/Access check accepts a non-owner/);
  assert.equal(p.approvalAuthorized,false);
 });
+test('LOW nonblocking model finding remains INCONCLUSIVE but is not discarded',()=>{
+ const f={...finding(),severity:'low'};
+ const observed={...local([f]),provisionalState:'INCONCLUSIVE'};
+ const p=prepareRealSemanticComment({preflight:preflight(),local:observed,runId:RUN});
+ assert.match(p.body,/INCONCLUSIVE/);
+ assert.match(p.body,/LOW src\/a.mjs:4/);
+ assert.equal(p.approvalAuthorized,false);
+});
 test('unsafe model message cannot inject mentions, tags or markdown code fences',()=>{
  const f={...finding(),message:'@everyone <script> bad'+String.fromCharCode(96)+'payload'};
  const p=prepareRealSemanticComment({preflight:preflight(),
