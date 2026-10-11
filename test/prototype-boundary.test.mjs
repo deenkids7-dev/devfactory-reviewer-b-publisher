@@ -63,7 +63,8 @@ test('no workflow has access to private App secrets, write token or privileged t
     if(filename==='reviewer-b-private-semantic.yml'){
       // Only the distinct, approved protected-main service principal can
       // execute a PRIVATE model. No PR-branch workflow, write GITHUB_TOKEN
-      // or external paid inference provider can be used. Exact one-shot\n      // push marker is still protected by the same environment and actor.
+      // or external paid inference provider can be used. Exact one-shot
+      // push marker is still protected by the same environment and actor.
       assert.match(contents,/^on:\n  workflow_dispatch:[\s\S]*?  push:\n    branches:\n      - main\n    paths:\n      - docs\/reviewer-b-semantic-live-899-20261011\.marker\n/m);
       assert.equal((contents.match(/^  push:/gm)||[]).length,1);
       assert.match(contents,/^permissions: \{\}\n/m);
