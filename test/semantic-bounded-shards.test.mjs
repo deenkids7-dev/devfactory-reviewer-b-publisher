@@ -39,6 +39,8 @@ function mockModel({high=false,failAt=-1}={}){
    const bytes=Buffer.from(input.untrusted_unified_diff);
    const anchors=deriveAddedLinesFromDiff({diffBytes:bytes});
    const path=Object.keys(anchors)[0];
+   assert.deepEqual(request.format.properties.findings.items.properties.line.enum,
+     anchors[path]);
    seen.push({path,line:anchors[path][0],bytes});
    const findings=high&&n===1?[{
      severity:'high',path,line:anchors[path][0],
