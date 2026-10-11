@@ -3,6 +3,7 @@ import { inspect } from 'node:util';
 import { createReadOnlyGitHubTransport } from './github-read-only.mjs';
 import { observePrSnapshot } from '../src/github-pr-observer.mjs';
 import { runFailOnlyStaticDiffAudit } from './fail-only-static-audit.mjs';
+import { prepareBoundedSemanticReview } from './semantic-review-request.mjs';
 
 function deny(code) { throw new Error(code); }
 
@@ -47,6 +48,10 @@ export async function runReadOnlyReviewPreflight({
     diffSha256:snapshot.diff_sha256
   });
   const report=Buffer.from(audit.reportBytes);
+  // Future protected local inference can reuse the exact same authenticated
+  // private diff without fetching an unverified second copy. This creates
+  // NO model call, grant of private-source processing, or review authority.
+  const localPlan=prepareBoundedSemanticReview({snapshot,rawDiffBytes});
   // Private file names remain sensitive even when no code line is echoed.
   const output={
     target:summary,staticDisposition:audit.provisionalState,
@@ -57,6 +62,8 @@ export async function runReadOnlyReviewPreflight({
   Object.defineProperties(output,{
     staticReportBytes:{enumerable:false,configurable:false,
       get:()=>Buffer.from(report)},
+    privateSemanticPlan:{enumerable:false,configurable:false,
+      get:()=>localPlan},
     toJSON:{enumerable:false,configurable:false,
       value:()=>({...Object.fromEntries(Object.entries(output)),
         staticReportBytes:'[REDACTED_PRIVATE_REPORT]'})},
