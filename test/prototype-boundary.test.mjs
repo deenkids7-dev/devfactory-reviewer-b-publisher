@@ -32,6 +32,19 @@ test('no workflow has access to private App secrets, write token or privileged t
     // Permit exactly one root permissions mapping; reject ANY nested one.
     assert.equal((contents.match(/^permissions\s*:/gm)||[]).length,1);
     assert.doesNotMatch(contents,/^[ \t]+permissions\s*:/m);
+    if(filename==='reviewer-b-oidc-permission-probe.yml'){
+      // Diagnostic-only protected-main one-shot; no actual OIDC request.
+      assert.match(contents,/^on:\n  push:\n    branches:\n      - main\n    paths:\n      - docs\/reviewer-b-oidc-diagnostic-20261011\.marker\n/m);
+      assert.match(contents,/^permissions:\n  id-token: write\n  attestations: write\n/m);
+      assert.match(contents,/environment:\s*reviewer-b-publish/);
+      const guard=contents.match(/^    if: (.+)$/m)?.[1];
+      assert.equal(guard,"\${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.event_name == 'push' && github.actor == 'devfactory-reviewer-service' }}");
+      assert.equal((contents.match(/^      - name:/gm)||[]).length,1);
+      assert.match(contents,/OIDC_PERMISSION_AVAILABLE_NO_ATTESTATION/);
+      assert.doesNotMatch(contents,/(?:secrets\.|GITHUB_TOKEN|GH_TOKEN|\bcheckout\b|\bcurl\b|\bwget\b|\bgh api\b|\bactions\/attest\b)/);
+      assert.doesNotMatch(contents,/\b(?:pull_request|pull_request_target|workflow_run|workflow_call|schedule|workflow_dispatch)\s*:/);
+      continue;
+    }
     if(filename==='reviewer-b-one-shot-approval-probe.yml'){
       // Narrow one-shot push marker, no source/secrets/network, held by
       // the existing environment; never a substitute for review approval.
