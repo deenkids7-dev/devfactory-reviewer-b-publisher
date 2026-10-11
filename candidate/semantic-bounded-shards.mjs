@@ -24,7 +24,8 @@ function lines(s){return s.match(/[^\n]*\n|[^\n]+$/g)||[];}
 function keysEqual(a,b){
  if(!Array.isArray(a)||!Array.isArray(b)||a.length!==b.length)return false;
  const expected=new Set(b);
- return expected.size===b.length&&a.every(x=>expected.has(x));
+ return expected.size===b.length&&new Set(a).size===a.length&&
+   a.every(x=>expected.has(x));
 }
 function snapFor(plan,bytes){
  const s=plan.exactScope;
