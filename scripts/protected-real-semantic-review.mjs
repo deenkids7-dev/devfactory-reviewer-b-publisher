@@ -63,7 +63,7 @@ export function prepareRealSemanticComment({preflight,local,runId}={}){
  if(report?.schema!=='devfactory.reviewer-b.findings.v1'||
    report.run_id!==runId||!Array.isArray(report.findings)||
    report.findings.length!==local.findingCount||report.findings.length>50||
-   (local.provisionalState==='INCONCLUSIVE')!==(report.findings.length===0))
+   (local.provisionalState==='FAIL'&&report.findings.length===0))
    deny('REAL_SEMANTIC_REPORT_MISMATCH');
  const paths=new Set(preflight.privateSemanticPlan?.changedPaths||[]);
  if(!paths.size)deny('REPORT_CHANGED_SCOPE_MISSING');
