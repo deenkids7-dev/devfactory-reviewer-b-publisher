@@ -187,6 +187,9 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
    const result=await executeLocalOllamaReview({
      plan:chunkPlan,trustedDiffBytes:bytes,runId,
      model,approvedLocalPrivateProcessing:true,
+     // Reuse only on the approved ephemeral LOCAL model runner. This is
+     // strictly within the one protected process; NEVER an external cache.
+     protectedEphemeralKeepAlive:true,
      fetchImpl,maxOutputTokens});
    if(result.localModelExecuted!==true||
      result.approvalAuthorized!==false||

@@ -67,10 +67,12 @@ function checkPlan(plan){
  * This module MUST NOT run private inference from public PR CI.
  */
 export function prepareOfflineOllamaCandidate({
-  plan,model='qwen2.5-coder:7b',maxOutputTokens=2048
+  plan,model='qwen2.5-coder:7b',maxOutputTokens=2048,
+  protectedEphemeralKeepAlive=false
 }={}){
   checkPlan(plan);
-  if(!MODELS.includes(model)||!Number.isSafeInteger(maxOutputTokens)||
+  if(typeof protectedEphemeralKeepAlive!=='boolean'||
+    !MODELS.includes(model)||!Number.isSafeInteger(maxOutputTokens)||
     maxOutputTokens<128||maxOutputTokens>4096)
     deny('OLLAMA_MODEL_OR_CONTEXT_UNSUPPORTED');
   const reviewSchema=structuredClone(FINDINGS_FORMAT);
@@ -114,7 +116,12 @@ export function prepareOfflineOllamaCandidate({
     changed_paths:plan.changedPaths,untrusted_unified_diff:plan.privateDiffText
   });
   const privateRequest=JSON.stringify({
-    model,stream:false,format:reviewSchema,keep_alive:0,
+    // DEFAULT is zero for synthetic fixtures and unprivileged contexts.
+    // Protected ephemeral GitHub runner may reuse local weights across
+    // strictly validated chunks, avoiding repeated cold loads; GitHub tears
+    // down the runner when the job finishes. Never remote/cloud inference.
+    model,stream:false,format:reviewSchema,
+    keep_alive:protectedEphemeralKeepAlive?'5m':0,
     ...(model==='qwen3:8b'?{think:false}:{}),
     options:{temperature:0,num_ctx:8192,num_predict:maxOutputTokens},
     messages:[{role:'system',content:system},{role:'user',content:input}]

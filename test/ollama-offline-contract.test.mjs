@@ -89,6 +89,16 @@ test('R58 no added lines enforces empty model findings, never invent anchors',()
  assert.equal(q.format.properties.findings.maxItems,0);
  assert.equal(q.format.properties.findings.items.properties.line.enum,undefined);
 });
+test('protected ephemeral model reuse is explicit, time-limited and off by default',()=>{
+ const legacy=JSON.parse(prepareOfflineOllamaCandidate({plan:plan()}).privateRequestJson);
+ const hot=JSON.parse(prepareOfflineOllamaCandidate({plan:plan(),protectedEphemeralKeepAlive:true}).privateRequestJson);
+ assert.equal(legacy.keep_alive,0);
+ assert.equal(hot.keep_alive,'5m');
+ assert.equal(hot.model,legacy.model);
+ assert.deepEqual(hot.messages,legacy.messages);
+ assert.deepEqual(hot.format,legacy.format);
+ assert.throws(()=>prepareOfflineOllamaCandidate({plan:plan(),protectedEphemeralKeepAlive:'true'}),/OLLAMA_MODEL_OR_CONTEXT_UNSUPPORTED/);
+});
 test('private prompt stays hidden from JSON, object spread and inspect',()=>{
  const v=prepareOfflineOllamaCandidate({plan:plan()});
  assert.doesNotMatch(JSON.stringify(v),/SYNTHETIC_ONLY_PRIVATE/);
