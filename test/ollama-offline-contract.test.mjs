@@ -41,6 +41,8 @@ test('build local Ollama JSON request, never authorize or publish',()=>{
  assert.equal(input.format.properties.findings.items.additionalProperties,false);
  assert.deepEqual(input.format.properties.findings.items.properties.path.enum,
   ['src/check.mjs']);
+ assert.deepEqual(input.format.properties.findings.items.properties.line.enum,[1]);
+ assert.match(input.messages[0].content,/format schema line enum/);
  assert.equal(input.options.num_ctx,8192);
  assert.equal(input.options.temperature,0);
  assert.equal(input.options.num_predict,2048);
@@ -56,6 +58,36 @@ test('build local Ollama JSON request, never authorize or publish',()=>{
  assert.equal(result.independentReviewVerified,false);
  assert.equal(result.modelExecuted,false);
  assert.equal(result.publishEvent,null);
+});
+test('R58 constraints forbid citing removed lines in single-file model grammar',()=>{
+ const p=plan();
+ const request=JSON.parse(prepareOfflineOllamaCandidate({
+  plan:p,maxOutputTokens:1024
+ }).privateRequestJson);
+ assert.deepEqual(request.format.properties.findings.items.properties.line.enum,[1]);
+ assert.equal(request.format.properties.findings.items.properties.line.minimum,1);
+ const invalid=JSON.stringify({summary:'Example unsafe claim',findings:[{
+   severity:'high',path:'src/check.mjs',line:2,
+   message:'Incorrect deleted/context position',evidence:'synthetic input'
+ }]});
+ assert.throws(()=>parse(completion(invalid)),
+  /OLLAMA_FINDING_NOT_ADDED_LINE/);
+});
+test('R58 no added lines enforces empty model findings, never invent anchors',()=>{
+ const onlyDeleted=Buffer.from(
+  'diff --git a/src/deleted.mjs b/src/deleted.mjs\n'+
+  'index 1234567..abcdef0 100644\n--- a/src/deleted.mjs\n'+
+  '+++ b/src/deleted.mjs\n@@ -1 +0,0 @@\n-old()\n'
+ );
+ const p=prepareBoundedSemanticReview({
+   snapshot:{repository:'deenkids7-dev/deenkids',repository_id:1282086207,
+    pr_number:898,head_sha:'a'.repeat(40),base_sha:'b'.repeat(40),
+    diff_sha256:createHash('sha256').update(onlyDeleted).digest('hex')},
+   rawDiffBytes:onlyDeleted
+ });
+ const q=JSON.parse(prepareOfflineOllamaCandidate({plan:p}).privateRequestJson);
+ assert.equal(q.format.properties.findings.maxItems,0);
+ assert.equal(q.format.properties.findings.items.properties.line.enum,undefined);
 });
 test('private prompt stays hidden from JSON, object spread and inspect',()=>{
  const v=prepareOfflineOllamaCandidate({plan:plan()});
