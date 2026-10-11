@@ -242,12 +242,12 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
  if(parts.originalDiffSha256!==sha(original))
    deny('SEMANTIC_BATCH_ORIGINAL_DRIFT');
  const findings=[],responses=[],seen=new Set();
- let modelCalls=0,attempts=0,fallbacks=0,coveredOriginalParts=0;
- // A single transient localhost failure is recoverable by reviewing the
- // SAME authenticated source fragment in smaller, independently validated
- // parts. This is not a re-review or PASS: every fragment must complete.
- // Never retry unchanged input; no remote model, new identity, or extra job.
- async function reviewChunk(chunk,allowSplit){
+ let modelCalls=0,attempts=0,transportFallbacks=0,outputFallbacks=0;
+ let coveredOriginalParts=0;
+ // Each protected diff part must complete. Length exhaustion can occur on
+ // MULTIPLE independent parts, so a single global fallback is insufficient.
+ // Bound the entire job and never publish/aggregate a truncated response.
+ async function reviewChunk(chunk,allowSplit,tokenBudget=maxOutputTokens){
    const bytes=chunk.privateDiffBytes;
    const chunkPlan=prepareBoundedSemanticReview({
      snapshot:snapFor(plan,bytes),rawDiffBytes:bytes});
@@ -258,31 +258,56 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
        plan:chunkPlan,trustedDiffBytes:bytes,runId,
        model,approvedLocalPrivateProcessing:true,
        protectedEphemeralKeepAlive:true,
-       fetchImpl,maxOutputTokens
+       fetchImpl,maxOutputTokens:tokenBudget
      });
    }catch(error){
-     // A valid local completion with done_reason=length is NOT acceptable:
-     // discard every byte of the incomplete model output, then independently
-     // reanalyze the SAME entire authenticated diff fragment in smaller parts.
-     // Only one such fallback total; malformed/wrong-model responses, source
-     // drift, invalid JSON/schema, and unsafe proof are never recoverable.
-     if(!allowSplit||fallbacks!==0||
-        !['LOCAL_MODEL_REQUEST_FAILED','LOCAL_MODEL_REQUEST_TIMEOUT',
-          'OLLAMA_OUTPUT_TRUNCATED'].includes(error?.message))throw error;
+     const code=error?.message;
+     if(code==='OLLAMA_OUTPUT_TRUNCATED'&&allowSplit){
+       // The only accepted signal is a validated local Ollama length stop.
+       // Never reuse partial JSON. Review the COMPLETE original shard as
+       // smaller authenticated diff parts with twice the output allowance.
+       // Permit separate affected shards, but cap recoveries for the run.
+       if(outputFallbacks>=16)throw error;
+       outputFallbacks++;
+       let smaller;
+       try{smaller=partitionRealSemanticDiff({
+         plan:chunkPlan,maxChunkBytes:768});}
+       catch{smaller=null;}
+       const splitProven=smaller&&
+         smaller.originalDiffSha256===sha(bytes)&&
+         smaller.originalByteCount===bytes.length&&
+         smaller.shardCount>=2&&smaller.shardCount<=10&&
+         smaller.shards.every(x=>x.byteCount<bytes.length);
+       if(splitProven){
+         for(const part of smaller.shards)
+           await reviewChunk(part,false,Math.max(tokenBudget,2048));
+         return;
+       }
+       // A valid very small shard cannot be subdivided. One bounded
+       // higher-token attempt is allowed, never the same unchanged request.
+       if(tokenBudget<2048){
+         await reviewChunk(chunk,false,2048);
+         return;
+       }
+       throw error;
+     }
+     // Preserve the original single global CPU/transport recovery. Invalid
+     // schema, wrong model, drift, arbitrary errors never trigger a retry.
+     if(!allowSplit||transportFallbacks!==0||
+        !['LOCAL_MODEL_REQUEST_FAILED','LOCAL_MODEL_REQUEST_TIMEOUT']
+          .includes(code))throw error;
      let smaller;
-     try{
-       smaller=partitionRealSemanticDiff({
-         plan:chunkPlan,maxChunkBytes:768});
-     }catch{throw error;}
+     try{smaller=partitionRealSemanticDiff({
+       plan:chunkPlan,maxChunkBytes:768});}
+     catch{throw error;}
      if(smaller.originalDiffSha256!==sha(bytes)||
         smaller.originalByteCount!==bytes.length||
         smaller.shardCount<2||smaller.shardCount>10||
         smaller.shards.some(x=>x.byteCount>=bytes.length))
        throw error;
-     fallbacks++;
-     // Do not consume or publish a failed partial inference; subshards
-     // cover the entire original fragment in order with no line loss.
-     for(const part of smaller.shards)await reviewChunk(part,false);
+     transportFallbacks++;
+     for(const part of smaller.shards)
+       await reviewChunk(part,false,tokenBudget);
      return;
    }
    if(result.localModelExecuted!==true||
@@ -309,7 +334,7 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
    coveredOriginalParts++;
  }
  if(coveredOriginalParts!==parts.shardCount||modelCalls<parts.shardCount||
-    attempts>128||fallbacks>1)
+    attempts>128||transportFallbacks>1||outputFallbacks>16)
    deny('SEMANTIC_BATCH_INCOMPLETE');
  const complete=Buffer.from(canonicalJson({
    schema:'devfactory.reviewer-b.findings.v1',
