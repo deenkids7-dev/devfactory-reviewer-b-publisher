@@ -28,7 +28,7 @@ fetched, no App/PAT/model key is
 required, no review is posted, and no approval/merge is authorized.
 
 The workflow is **not executable from a PR branch**. The one-time push trigger
-is restricted to the exact public synthetic activation marker path; it
+is restricted to the exact public synthetic retry marker path; it
 requires the approved service-account actor and a separate protected
 environment approval. It cannot retrieve or attest private source. It must first pass
 review/authorization, be merged to protected `main`, and pass the existing

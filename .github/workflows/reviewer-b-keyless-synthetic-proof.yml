@@ -9,7 +9,7 @@ on:
     branches:
       - main
     paths:
-      - docs/reviewer-b-keyless-synthetic-once-20261011.marker
+      - docs/reviewer-b-keyless-synthetic-retry-20261011.marker
 
 permissions:
   id-token: write
@@ -18,7 +18,7 @@ permissions:
 jobs:
   synthetic-provenance:
     name: Sign public synthetic provenance only
-    if: ${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && github.actor == 'devfactory-reviewer-service' }}
+    if: ${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.actor == 'devfactory-reviewer-service' }}
     environment: reviewer-b-publish
     runs-on: ubuntu-latest
     timeout-minutes: 5

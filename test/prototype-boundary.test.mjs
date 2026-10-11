@@ -68,12 +68,12 @@ test('no workflow has access to private App secrets, write token or privileged t
       assert.match(contents,/workflow_dispatch\s*:/);
       assert.match(contents,/environment:\s*reviewer-b-publish/);
       assert.match(contents,/github\.ref == 'refs\/heads\/main'/);
-      assert.match(contents,/github\.event_name == 'workflow_dispatch'/);
+      // Event types are restricted by the workflow's exact on: mappings.
       assert.match(contents,/github\.actor == 'devfactory-reviewer-service'/);
       assert.match(contents,/github\.repository == 'devfactory-reviewer-trust\/devfactory-reviewer-b-publisher'/);
-      assert.match(contents,/^on:\n  workflow_dispatch:\n  push:\n    branches:\n      - main\n    paths:\n      - docs\/reviewer-b-keyless-synthetic-once-20261011\.marker\n/m);
+      assert.match(contents,/^on:\n  workflow_dispatch:\n  push:\n    branches:\n      - main\n    paths:\n      - docs\/reviewer-b-keyless-synthetic-retry-20261011\.marker\n/m);
       const gate=contents.match(/^    if: (.+)$/m)?.[1];
-      assert.equal(gate,"\${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && github.actor == 'devfactory-reviewer-service' }}");
+      assert.equal(gate,"\${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.actor == 'devfactory-reviewer-service' }}");
       assert.match(contents,/actions\/attest@1e69f48acb82d1966a394da916b4c1698aa569d6/);
       assert.equal((contents.match(/^      - name:/gm)||[]).length,2);
       assert.match(contents,/create-storage-record:\s*false/);
