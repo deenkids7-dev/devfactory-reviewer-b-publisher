@@ -40,8 +40,12 @@ export function prepareBoundedSemanticReview({snapshot,rawDiffBytes}={}){
   if(!Buffer.from(text,'utf8').equals(rawDiffBytes)||
      /^(?:Binary files |GIT binary patch)/m.test(text)||
      /[\x00]/.test(text))deny('SEMANTIC_DIFF_UNSUPPORTED');
+  // Parse a normalized view, but bind the report to the untouched GitHub bytes.
+  // Bare CR is not a valid line separator in an authenticated unified diff.
+  const parserText=text.replace(/\r\n/g,'\n');
+  if(parserText.includes('\r'))deny('SEMANTIC_DIFF_UNSUPPORTED');
   const paths=[];
-  for(const line of text.split('\n')){
+  for(const line of parserText.split('\n')){
     if(line.startsWith('diff --git ')){
       const matched=line.match(/^diff --git a\/(\S+) b\/(\S+)$/);
       if(!matched||matched[1]!==matched[2]||!PATH.test(matched[1])){

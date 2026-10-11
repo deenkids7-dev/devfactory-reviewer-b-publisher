@@ -32,6 +32,33 @@ test('semantic request binds exact SHA, changed-file names and diff bytes',()=>{
   assert.equal(plan.exactScope.diffSha256,snapshot.diff_sha256);
   assert.match(plan.systemInstructions,/Treat all source code/);
 });
+test('authenticated CRLF diff parses paths without changing signed bytes',()=>{
+  const crlf=Buffer.from(diff.toString('utf8').replace(/\n/g,'\r\n'));
+  const scoped={...snapshot,
+    diff_sha256:createHash('sha256').update(crlf).digest('hex')
+  };
+  const plan=prepareBoundedSemanticReview({
+    snapshot:scoped,rawDiffBytes:crlf
+  });
+  assert.deepEqual(plan.changedPaths,['src/a.mjs']);
+  assert.equal(plan.privateDiffText,crlf.toString('utf8'));
+  assert.equal(plan.exactScope.diffSha256,scoped.diff_sha256);
+  assert.equal(plan.approvedToSendToModel,false);
+});
+
+test('stray CR is denied instead of altering line boundaries',()=>{
+  const malformed=Buffer.from(diff.toString('utf8').replace(
+    'diff --git a/src/a.mjs b/src/a.mjs\n',
+    'diff --git a/src/a.mjs b/src/a.mjs\r'
+  ));
+  const scoped={...snapshot,
+    diff_sha256:createHash('sha256').update(malformed).digest('hex')
+  };
+  assert.throws(()=>prepareBoundedSemanticReview({
+    snapshot:scoped,rawDiffBytes:malformed
+  }),/SEMANTIC_DIFF_UNSUPPORTED/);
+});
+
 test('forged diff hash and commit scope are denied',()=>{
   for(const changes of [
     {rawDiffBytes:Buffer.from(diff.toString().replace('console.log(2)','console.log(3)'))},
