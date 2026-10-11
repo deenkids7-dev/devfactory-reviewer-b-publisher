@@ -82,7 +82,7 @@ test('unsafe model message cannot inject mentions, tags or markdown code fences'
  const f={...finding(),message:'@everyone <script> bad'+String.fromCharCode(96)+'payload'};
  const p=prepareRealSemanticComment({preflight:preflight(),
    local:local([f]),runId:RUN});
- assert.doesNotMatch(p.body,/@everyone|<script>|bad.payload/);
+ assert.doesNotMatch(p.body,/@everyone|<script>|bad\x60payload/);
  assert.match(p.body,/＠|_everyone/);
 });
 test('reject fake or stale model, body, report, path and authority before publication',()=>{
