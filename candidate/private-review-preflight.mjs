@@ -10,8 +10,9 @@ function deny(code) { throw new Error(code); }
 /**
  * Secret-free orchestrator, to be executed ONLY in a future privileged job
  * with an independently provisioned installation token. Does no write, no
- * model inference and no publication. The raw private diff never appears in
- * the returned object: all private bytes are kept inside this call.
+ * model inference and no publication. The raw private diff is available only
+ * via a NONENUMERABLE privateSemanticPlan getter for a separately authorized
+ * protected LOCAL model, never by default JSON, spread, or Node inspection.
  *
  * Caller must separately approve exposure before ANY use of the model
  * interface. This preflight is not a code review or an approval.
