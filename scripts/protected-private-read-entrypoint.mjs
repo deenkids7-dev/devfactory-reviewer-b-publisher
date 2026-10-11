@@ -28,7 +28,7 @@ export async function executeProtectedReadOnlyPreflight(options={}){
   // context check. The CLI can only run in one exact trusted workflow.
   const safeOptions=options && typeof options==='object' && !Array.isArray(options)
     ?options:{};
-  const {env={},fetchImpl=fetch,now=Date.now()}=safeOptions;
+  const {env={},fetchImpl=globalThis.fetch,now=Date.now()}=safeOptions;
   if(!approvedReadOnlyExecutionContext(env))
     return Object.freeze({code:'CONTEXT_DENIED',ok:false});
   const privateKeyPem=env.REVIEWER_B_GITHUB_APP_PRIVATE_KEY_PEM;
@@ -40,8 +40,8 @@ export async function executeProtectedReadOnlyPreflight(options={}){
       runId:'gh-'+env.GITHUB_RUN_ID+'-'+env.GITHUB_RUN_ATTEMPT,
       appPrivateKeyPem:privateKeyPem,now,fetchImpl
     });
-    if(result.approvalAuthorized!==false||result.publishEvent!==null||
-       result.independentReviewVerified!==false)
+    if(result?.approvalAuthorized!==false||result?.publishEvent!==null||
+       result?.independentReviewVerified!==false)
       return Object.freeze({code:'FORBIDDEN_AUTHORITY',ok:false});
     return Object.freeze({
       code:result.blockingFindings>0?'STATIC_FINDINGS_BLOCK':'INCONCLUSIVE_NOT_REVIEWED',

@@ -57,7 +57,10 @@ export function validateOfflineSemgrepCEFindings({
      n>=hit.start.line&&n<=hit.end.line);
    if(selectedLine===undefined){preexisting++;continue;}
    const identity=hit.check_id+'\0'+hit.path+'\0'+selectedLine;
-   if(seen.has(identity))deny('SEMGREP_CE_DUPLICATE_FINDING');
+   // Semgrep can emit multiple matches of the SAME rule at one added line.
+   // Preserve the single blocking finding rather than treating duplicates
+   // as scanner corruption. Different rules/lines remain distinct.
+   if(seen.has(identity))continue;
    seen.add(identity);
    findings.push({
      fingerprint:digest('devfactory.semgrep-ce.v1\0'+rulePackSha256+'\0'+identity),

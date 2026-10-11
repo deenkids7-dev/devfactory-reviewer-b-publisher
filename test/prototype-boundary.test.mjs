@@ -32,9 +32,37 @@ test('no workflow has access to private App secrets, write token or privileged t
     // Permit exactly one root permissions mapping; reject ANY nested one.
     assert.equal((contents.match(/^permissions\s*:/gm)||[]).length,1);
     assert.doesNotMatch(contents,/^[ \t]+permissions\s*:/m);
+    if(filename==='reviewer-b-oidc-permission-probe.yml'){
+      // Diagnostic-only protected-main one-shot; no actual OIDC request.
+      assert.match(contents,/^on:\n  push:\n    branches:\n      - main\n    paths:\n      - docs\/reviewer-b-oidc-diagnostic-20261011\.marker\n/m);
+      assert.match(contents,/^permissions:\n  id-token: write\n  attestations: write\n/m);
+      assert.match(contents,/environment:\s*reviewer-b-publish/);
+      const guard=contents.match(/^    if: (.+)$/m)?.[1];
+      assert.equal(guard,"\${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.event_name == 'push' && github.actor == 'devfactory-reviewer-service' }}");
+      assert.equal((contents.match(/^      - name:/gm)||[]).length,1);
+      assert.match(contents,/OIDC_PERMISSION_AVAILABLE_NO_ATTESTATION/);
+      assert.doesNotMatch(contents,/(?:secrets\.|GITHUB_TOKEN|GH_TOKEN|\bcheckout\b|\bcurl\b|\bwget\b|\bgh api\b|\bactions\/attest\b)/);
+      assert.doesNotMatch(contents,/\b(?:pull_request|pull_request_target|workflow_run|workflow_call|schedule|workflow_dispatch)\s*:/);
+      continue;
+    }
+    if(filename==='reviewer-b-one-shot-approval-probe.yml'){
+      // Narrow one-shot push marker, no source/secrets/network, held by
+      // the existing environment; never a substitute for review approval.
+      assert.match(contents,/^on:\n  push:\n    branches:\n      - main\n    paths:\n      - docs\/reviewer-b-one-shot-approval-20261011\.marker\n/m);
+      assert.match(contents,/^permissions: \{\}\n/m);
+      assert.match(contents,/environment:\s*reviewer-b-publish/);
+      const guard=contents.match(/^    if: (.+)$/m)?.[1];
+      assert.equal(guard,"\${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.event_name == 'push' && github.actor == 'devfactory-reviewer-service' }}");
+      assert.equal((contents.match(/^      - name:/gm)||[]).length,1);
+      assert.match(contents,/NO_SECRETS_APPROVAL_GATE_RELEASED/);
+      assert.doesNotMatch(contents,/(?:secrets\.|GITHUB_TOKEN|GH_TOKEN|\bcheckout\b|\bcurl\b|\bwget\b|\bgh api\b)/);
+      assert.doesNotMatch(contents,/\b(?:id-token|attestations|contents|actions|issues|pull-requests)\s*:\s*write\b/);
+      assert.doesNotMatch(contents,/\b(?:pull_request|pull_request_target|workflow_run|schedule|workflow_dispatch)\s*:/);
+      continue;
+    }
     if(filename==='reviewer-b-private-readonly-preflight.yml'){
-      // ONLY this separately reviewed, operator-held job may receive
-      // a private App PEM, and it can only read the PRIVATE target.
+      // A distinct manual-only future privileged PRIVATE-read probe,
+      // guarded by actor, protected main and the existing environment.
       const granted=contents.match(/^permissions:\n((?: {2}[^\n]+\n)+)/m)?.[1];
       assert.equal(granted,'  contents: read\n');
       const guard=contents.match(/^    if: (.+)$/m)?.[1];
@@ -59,18 +87,17 @@ test('no workflow has access to private App secrets, write token or privileged t
       assert.match(contents,/workflow_dispatch\s*:/);
       assert.match(contents,/environment:\s*reviewer-b-publish/);
       assert.match(contents,/github\.ref == 'refs\/heads\/main'/);
-      assert.match(contents,/github\.event_name == 'workflow_dispatch'/);
+      // Event types are restricted by the workflow's exact on: mappings.
       assert.match(contents,/github\.actor == 'devfactory-reviewer-service'/);
       assert.match(contents,/github\.repository == 'devfactory-reviewer-trust\/devfactory-reviewer-b-publisher'/);
-      const events=contents.match(/^on:\n((?: {2}[^\n]+\n)+)/m)?.[1];
-      assert.equal(events,'  workflow_dispatch:\n');
+      assert.match(contents,/^on:\n  workflow_dispatch:\n  push:\n    branches:\n      - main\n    paths:\n      - docs\/reviewer-b-keyless-synthetic-retry-20261011\.marker\n/m);
       const gate=contents.match(/^    if: (.+)$/m)?.[1];
-      assert.equal(gate,"\${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.actor == 'devfactory-reviewer-service' }}");
+      assert.equal(gate,"\${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.actor == 'devfactory-reviewer-service' }}");
       assert.match(contents,/actions\/attest@1e69f48acb82d1966a394da916b4c1698aa569d6/);
       assert.equal((contents.match(/^      - name:/gm)||[]).length,2);
       assert.match(contents,/create-storage-record:\s*false/);
       assert.match(contents,/not_a_review/);
-      assert.doesNotMatch(contents,/\b(?:pull_request|pull_request_target|workflow_run|workflow_call|schedule|push)\s*:/);
+      assert.doesNotMatch(contents,/\b(?:pull_request|pull_request_target|workflow_run|workflow_call|schedule)\s*:/);
       assert.doesNotMatch(contents,/\b(?:secrets\.|GITHUB_TOKEN|GH_TOKEN|checkout|curl|wget|gh api)\b/);
       assert.doesNotMatch(contents,/\b(?:contents|pull-requests|issues|actions|checks|administration)\s*:\s*write\b/);
       continue;

@@ -31,6 +31,23 @@ test('synthetic subject byte construction matches verification instructions',()=
     repo+'/.github/workflows/reviewer-b-keyless-synthetic-proof.yml'));
 });
 
+test('runtime verification pins exact trusted protected main provenance',()=>{
+  const flags=[
+    '--signer-workflow '+repo+'/.github/workflows/reviewer-b-keyless-synthetic-proof.yml',
+    '--signer-digest "$PUBLISHER_MAIN_SHA"',
+    '--source-ref refs/heads/main',
+    '--source-digest "$PUBLISHER_MAIN_SHA"',
+    '--deny-self-hosted-runners'
+  ];
+  for(const flag of flags)assert.ok(runbook.includes(flag),'missing '+flag);
+  assert.match(runbook,/PUBLISHER_MAIN_SHA='REPLACE_WITH_VERIFIED_40_HEX_RUN_SHA'/);
+  assert.match(runbook,/\[\[ "\$PUBLISHER_MAIN_SHA" =~ \^\[a-f0-9\]\{40\}\$ \]\] \|\| exit 1/);
+  assert.match(runbook,/not merely the untrusted statement/);
+  assert.match(runbook,/does \*\*not\*\* disable upload of the signed attestation/);
+  assert.match(workflow,/create-storage-record:\s*false/);
+  assert.doesNotMatch(workflow,/artifact-metadata:\s*write/);
+});
+
 test('manual release plan never asserts live Reviewer B success',()=>{
   assert.match(manual,/two GitHub accounts only/);
   assert.match(manual,/co-owned/);
