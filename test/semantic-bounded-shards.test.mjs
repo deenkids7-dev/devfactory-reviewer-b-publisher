@@ -172,6 +172,49 @@ test('one transient LOCAL failure is recovered by complete smaller authenticated
    JSON.stringify(deriveAddedLinesFromDiff({diffBytes:diff})));
  assert.doesNotMatch(JSON.stringify(done),/changed_0_xxx/);
 });
+test('one Ollama output-budget exhaustion reanalyzes entire trusted shard in smaller pieces',async()=>{
+ const trusted=plan();
+ const baseline=planAdaptiveSemanticShards({plan:trusted}).partitions;
+ const model=mockModel();
+ let requests=0;
+ const fetchImpl=async(...args)=>{
+   requests++;
+   if(requests===2){
+     return fakeReply({
+       model:'qwen2.5-coder:7b',done:true,done_reason:'length',
+       message:{role:'assistant',content:'{"summary":"unfinished"'},
+       prompt_eval_count:800,eval_count:1024
+     });
+   }
+   return model.fetchImpl(...args);
+ };
+ const result=await executeCompleteLocalSemanticReview({
+   plan:trusted,runId:RUN,fetchImpl});
+ assert.ok(requests>baseline.shardCount);
+ assert.ok(result.processedShardCount>baseline.shardCount);
+ assert.equal(result.rawByteCoverageProven,true);
+ assert.equal(result.originalDiffSha256,sha(diff));
+ assert.equal(result.approvalAuthorized,false);
+ assert.equal(result.independentReviewVerified,false);
+ assert.equal(result.provisionalState,'INCONCLUSIVE');
+ const report=JSON.parse(result.privateCanonicalReportBytes.toString('utf8'));
+ assert.equal(report.findings.length,0);
+});
+test('wrong-model length response never triggers fallback or a false review result',async()=>{
+ let requests=0;
+ const fetchImpl=async()=>{
+   requests++;
+   return fakeReply({
+     model:'qwen2.5-coder:1.5b',done:true,done_reason:'length',
+     message:{role:'assistant',content:'{"summary":"unfinished"'},
+     prompt_eval_count:800,eval_count:1024
+   });
+ };
+ await assert.rejects(()=>executeCompleteLocalSemanticReview({
+   plan:plan(),runId:RUN,fetchImpl
+ }),/OLLAMA_COMPLETION_UNVERIFIED/);
+ assert.equal(requests,1);
+});
 test('persistent local failure rejects ALL review output after one bounded split',async()=>{
  const model=mockModel();
  let attempts=0;
