@@ -35,6 +35,7 @@ function mockModel({high=false,failAt=-1}={}){
    if(n===failAt)throw Error('LOCAL_SYNTHETIC_MODEL_FAILURE');
    assert.equal(url,'http://127.0.0.1:11434/api/chat');
    const request=JSON.parse(options.body);
+   assert.equal(request.keep_alive,'5m');
    const input=JSON.parse(request.messages[1].content);
    const bytes=Buffer.from(input.untrusted_unified_diff);
    const anchors=deriveAddedLinesFromDiff({diffBytes:bytes});
