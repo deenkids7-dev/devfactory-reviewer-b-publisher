@@ -47,6 +47,12 @@ test('protected execution requires exact trusted main, workflow, actor and MODEL
  assert.equal(canRunRealSemanticReview(env()),true);
  assert.equal(canRunRealSemanticReview({...env(),GITHUB_EVENT_NAME:'push',
   REVIEWER_B_TARGET_PR:'899'}),true);
+ assert.equal(canRunRealSemanticReview({...env(),GITHUB_EVENT_NAME:'issue_comment',
+  REVIEWER_B_TARGET_PR:'901',REVIEWER_B_EXPECTED_HEAD:HEAD}),true);
+ assert.equal(canRunRealSemanticReview({...env(),GITHUB_EVENT_NAME:'issue_comment',
+  REVIEWER_B_TARGET_PR:'901',REVIEWER_B_EXPECTED_HEAD:'invalid'}),false);
+ assert.equal(canRunRealSemanticReview({...env(),GITHUB_EVENT_NAME:'issue_comment',
+  REVIEWER_B_TARGET_PR:'901',REVIEWER_B_EXPECTED_HEAD:null}),false);
  for(const patch of [
   {GITHUB_ACTOR:'deenkids7-dev'},{GITHUB_REF:'refs/heads/dev'},
   {GITHUB_EVENT_NAME:'pull_request'},
@@ -243,6 +249,16 @@ test('protected LIVE stage classifier leaks no secret or private paths',()=>{
  for(const x of [undefined,null,{},[],{message:'OLLAMA_COMPLETION_UNVERIFIED'}])
    assert.equal(classifyProtectedReviewFailure('LOCAL_MODEL',x),
      'REAL_REVIEW_LOCAL_MODEL_FAILED_CLOSED');
+});
+test('issue request expected exact HEAD verified before any local model inference',()=>{
+ const source=readFileSync(new globalThis.URL(
+  '../scripts/protected-real-semantic-review.mjs',import.meta.url),'utf8');
+ const preflight=source.indexOf('await runReadOnlyReviewPreflight(');
+ const compare=source.indexOf("deny('REVIEW_REQUEST_HEAD_CHANGED')");
+ const model=source.indexOf('await executeCompleteLocalSemanticReview(');
+ assert.ok(preflight>=0&&compare>preflight&&model>compare);
+ assert.match(source,/env\.REVIEWER_B_EXPECTED_HEAD!==preflight\.target\.headSha/);
+ assert.match(source,/"REVIEW_REQUEST_HEAD_CHANGED"/);
 });
 test('long Qwen analysis must refresh the short-lived GitHub App JWT before write',()=>{
  const src=readFileSync(new globalThis.URL('../scripts/protected-real-semantic-review.mjs',
