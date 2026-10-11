@@ -7,3 +7,5 @@ Model: qwen2.5-coder:7b running on localhost within approved Publisher job
 Output: exactly one GitHub App COMMENTED report, not APPROVED.
 Authorization: require reviewer-b-publish environment approval; no GITHUB_TOKEN write access.
 This marker cannot authorize a merge, HUMAN_GO, independent PASS, or private source disclosure.
+
+R57 one-shot diagnostic retry: the prior protected run 38154396284 failed closed after real local model processing. This protected merge invokes the existing service-only marker workflow once more for PR899. The new public error code is a static allowlisted stage and cause; no PRIVATE source, credentials, model output, or stack traces are exposed.

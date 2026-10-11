@@ -21,6 +21,19 @@ const WORKFLOW=PUB+'/.github/workflows/reviewer-b-private-semantic.yml@refs/head
 const digest=x=>createHash('sha256').update(x).digest('hex');
 function deny(code){throw Error(code);}
 function fail(code){return Object.freeze({ok:false,code});}
+const SAFE_DIAGNOSTIC_CODES=new Set(["LOCAL_MODEL_REQUEST_FAILED","LOCAL_MODEL_RESPONSE_REJECTED","LOCAL_MODEL_ENDPOINT_UNVERIFIED","LOCAL_MODEL_INVALID_JSON","LOCAL_MODEL_RESPONSE_OVERSIZED","LOCAL_MODEL_ENCODING_INVALID","LOCAL_MODEL_DIFF_SCOPE_MISMATCH","OLLAMA_COMPLETION_UNVERIFIED","OLLAMA_CONTEXT_CAPACITY_UNVERIFIED","OLLAMA_CONTEXT_LIMIT_EXCEEDED","OLLAMA_INVALID_JSON","OLLAMA_FINDINGS_SCHEMA_INVALID","OLLAMA_FINDING_PATH_MISMATCH","OLLAMA_FINDING_LINE_INVALID","OLLAMA_FINDING_NOT_ADDED_LINE","OLLAMA_FINDING_DUPLICATE","SEMANTIC_SHARD_SOURCE_INVALID","SEMANTIC_SHARD_SCOPE_MISMATCH","SEMANTIC_SHARD_FILE_MISMATCH","SEMANTIC_SHARD_BAD_SOURCE_LINE","SEMANTIC_BATCH_INVALID_REPORT","SEMANTIC_BATCH_DUPLICATE_FINDING","SEMANTIC_BATCH_INCOMPLETE","REAL_SEMANTIC_PROOF_INVALID","REAL_SEMANTIC_REPORT_MISMATCH","SEMANTIC_POST_FAILED","SEMANTIC_POST_REJECTED","SEMANTIC_POST_UNVERIFIED","SEMANTIC_READBACK_INVALID","SEMANTIC_ALREADY_REVIEWED","APP_AUTH_API_REQUEST_FAILED","APP_AUTH_INSTALLATION_SCOPE_UNVERIFIED","PREFLIGHT_DIFF_MISMATCH","READ_PROOF_FAILED"]);
+const SAFE_STAGES=new Set(['TOKEN_READ','PRIVATE_PREFLIGHT','LOCAL_MODEL','PRIVATE_REPORT','TOKEN_WRITE','NATIVE_POST']);
+/** PUBLIC log may contain ONLY a static stage plus an exact audited code.
+ * Never print error strings, HTTP payloads, stack traces, PRIVATE source,
+ * filenames or app credentials from this privileged workflow.
+ */
+export function classifyProtectedReviewFailure(stage,error){
+ const cleanStage=SAFE_STAGES.has(stage)?stage:'UNKNOWN';
+ const code=error instanceof Error&&SAFE_DIAGNOSTIC_CODES.has(error.message)
+   ?error.message:'FAILED_CLOSED';
+ return 'REAL_REVIEW_'+cleanStage+'_'+code;
+}
+
 function text(v,max){
  if(typeof v!=='string'||!v.trim()||v.length>max||
    /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(v))deny('REPORT_TEXT_UNSAFE');
@@ -189,29 +202,35 @@ export async function executeProtectedRealSemanticReview({
  const pem=env.REVIEWER_B_GITHUB_APP_PRIVATE_KEY_PEM;
  if(typeof pem!=='string'||pem.length<100)
    return fail('CREDENTIAL_NOT_PROVISIONED');
+ let stage='TOKEN_READ';
  try{
    const runId='gh-'+env.GITHUB_RUN_ID+'-'+env.GITHUB_RUN_ATTEMPT;
    const jwt=createReviewerBAppJwt({privateKeyPem:pem,now});
    const read=await createScopedReviewerBInstallationToken({
      appJwt:jwt,purpose:'reviewRead',now,fetchImpl});
+   stage='PRIVATE_PREFLIGHT';
    const preflight=await runReadOnlyReviewPreflight({
      prNumber:Number(env.REVIEWER_B_TARGET_PR),
      runId,installationToken:read.token,fetchImpl});
+   stage='LOCAL_MODEL';
    const local=await executeCompleteLocalSemanticReview({
      plan:preflight.privateSemanticPlan,runId,model:MODEL,
      fetchImpl:modelFetchImpl,maxOutputTokens:1024});
+   stage='PRIVATE_REPORT';
    const plan=prepareRealSemanticComment({preflight,local,runId});
    // LOCAL inference may run longer than the initial App JWT's 8-minute TTL.
    // Mint the purpose-separated WRITE token with a fresh App JWT only AFTER
    // the complete PRIVATE model report is validated. No bearer survives a retry.
+   stage='TOKEN_WRITE';
    const writerNow=Date.now();
    const writerJwt=createReviewerBAppJwt({privateKeyPem:pem,now:writerNow});
    const writer=await createScopedReviewerBInstallationToken({
      appJwt:writerJwt,purpose:'publish',now:writerNow,fetchImpl});
+   stage='NATIVE_POST';
    return await publishRealSemanticComment({plan,readToken:read.token,
      writeToken:writer.token,approvedProtectedPublication:true,fetchImpl});
- }catch{
-   return fail('REAL_REVIEW_FAILED_CLOSED');
+ }catch(error){
+   return fail(classifyProtectedReviewFailure(stage,error));
  }
 }
 if(process.argv[1]&&fileURLToPath(import.meta.url)===resolve(process.argv[1])){
