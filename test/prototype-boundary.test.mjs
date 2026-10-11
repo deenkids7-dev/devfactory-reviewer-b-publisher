@@ -60,6 +60,30 @@ test('no workflow has access to private App secrets, write token or privileged t
       assert.doesNotMatch(contents,/\b(?:pull_request|pull_request_target|workflow_run|schedule|workflow_dispatch)\s*:/);
       continue;
     }
+    if(filename==='reviewer-b-private-semantic.yml'){
+      // Only the distinct, approved protected-main service principal can
+      // execute a PRIVATE model. No PR-branch workflow, write GITHUB_TOKEN
+      // or external paid inference provider can be used.
+      assert.match(contents,/^on:\n  workflow_dispatch:\n/m);
+      assert.match(contents,/^permissions: \{\}\n/m);
+      assert.match(contents,/^concurrency:\n  group: reviewer-b-protected-real-semantic-manual\n  cancel-in-progress: false\n/m);
+      assert.match(contents,/environment:\s*reviewer-b-publish/);
+      assert.match(contents,/github\.ref == 'refs\/heads\/main'/);
+      assert.match(contents,/github\.actor == 'devfactory-reviewer-service'/);
+      assert.match(contents,/github\.repository == 'devfactory-reviewer-trust\/devfactory-reviewer-b-publisher'/);
+      assert.equal((contents.match(/secrets\./g)||[]).length,1);
+      assert.match(contents,/secrets\.REVIEWER_B_GITHUB_APP_PRIVATE_KEY_PEM/);
+      assert.match(contents,/REVIEWER_B_EXPECTED_MODEL: 'qwen2\.5-coder:7b'/);
+      assert.match(contents,/OLLAMA_NO_CLOUD: '1'/);
+      assert.match(contents,/127\.0\.0\.1:11434/);
+      assert.match(contents,/sha256sum -c -/);
+      assert.match(contents,/node scripts\/protected-real-semantic-review\.mjs/);
+      assert.match(contents,/--proto '=https' --proto-redir '=https'/);
+      assert.doesNotMatch(contents,/\b(?:pull_request|pull_request_target|workflow_run|workflow_call|push|schedule)\s*:/);
+      assert.doesNotMatch(contents,/\b[A-Za-z-]+\s*:\s*write\b/);
+      assert.doesNotMatch(contents,/github\.token|GH_TOKEN|GITHUB_TOKEN|actions\/checkout/);
+      continue;
+    }
     if(filename==='reviewer-b-native-comment-once.yml'){
       // Exactly one protected-main service-actor native COMMENTED proof.
       // It has no GITHUB_TOKEN write access; GitHub App identity is separate.
