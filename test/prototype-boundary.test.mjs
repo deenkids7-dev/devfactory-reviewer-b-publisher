@@ -63,8 +63,10 @@ test('no workflow has access to private App secrets, write token or privileged t
     if(filename==='reviewer-b-private-readonly-preflight.yml'){
       // A distinct manual-only future privileged PRIVATE-read probe,
       // guarded by actor, protected main and the existing environment.
-      const granted=contents.match(/^permissions:\n((?: {2}[^\n]+\n)+)/m)?.[1];
-      assert.equal(granted,'  contents: read\n');
+      assert.match(contents,/^permissions: \{\}\n/m);
+      assert.doesNotMatch(contents,/(?:GH_READ_TOKEN|github\.token|Authorization: Bearer)/);
+      assert.match(contents,/--proto '=https' --proto-redir '=https'/);
+      assert.match(contents,/--max-time 45 --max-filesize 8388608/);
       const guard=contents.match(/^    if: (.+)$/m)?.[1];
       assert.equal(guard,"\${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.actor == 'devfactory-reviewer-service' && github.event_name == 'workflow_dispatch' }}");
       assert.match(contents,/^on:\n  workflow_dispatch:/m);
@@ -90,7 +92,7 @@ test('no workflow has access to private App secrets, write token or privileged t
       // Event types are restricted by the workflow's exact on: mappings.
       assert.match(contents,/github\.actor == 'devfactory-reviewer-service'/);
       assert.match(contents,/github\.repository == 'devfactory-reviewer-trust\/devfactory-reviewer-b-publisher'/);
-      assert.match(contents,/^on:\n  workflow_dispatch:\n  push:\n    branches:\n      - main\n    paths:\n      - docs\/reviewer-b-keyless-synthetic-retry-20261011\.marker\n/m);
+      assert.match(contents,/^on:\n  workflow_dispatch:\n  push:\n    branches:\n      - main\n    paths:\n      - docs\/reviewer-b-keyless-post-allowlist-20261011\.marker\n/m);
       const gate=contents.match(/^    if: (.+)$/m)?.[1];
       assert.equal(gate,"\${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.actor == 'devfactory-reviewer-service' }}");
       assert.match(contents,/actions\/attest@1e69f48acb82d1966a394da916b4c1698aa569d6/);

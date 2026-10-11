@@ -10,8 +10,7 @@ on:
         required: true
         type: string
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   approved-private-read:
@@ -26,18 +25,19 @@ jobs:
         env:
           GH_REPO: ${{ github.repository }}
           GH_SHA: ${{ github.sha }}
-          GH_READ_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           test "$GH_REPO" = "devfactory-reviewer-trust/devfactory-reviewer-b-publisher"
           [[ "$GH_SHA" =~ ^[0-9a-f]{40}$ ]]
           mkdir source
+          # PUBLIC source: never attach an ambient token to a redirect.
+          # HTTPS-only, bounded archive from the exact protected commit.
           curl --fail --silent --show-error --location --retry 2 \
-            --header "Authorization: Bearer ${GH_READ_TOKEN}" \
+            --proto '=https' --proto-redir '=https' \
+            --max-time 45 --max-filesize 8388608 \
             --header 'Accept: application/vnd.github+json' \
             "https://api.github.com/repos/${GH_REPO}/tarball/${GH_SHA}" \
             --output trusted-source.tar.gz
-          unset GH_READ_TOKEN
           tar -xzf trusted-source.tar.gz -C source --strip-components=1
       - name: Bounded immutable PRIVATE read, no code or secrets in logs
         shell: bash

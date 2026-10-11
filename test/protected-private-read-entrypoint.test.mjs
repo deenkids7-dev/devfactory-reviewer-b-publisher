@@ -82,7 +82,10 @@ test('protected workflow triggers only from main and a fixed actor',()=>{
  assert.match(workflow,/github\.actor == 'devfactory-reviewer-service'/);
  assert.match(workflow,/github\.repository == 'devfactory-reviewer-trust\/devfactory-reviewer-b-publisher'/);
  assert.match(workflow,/github\.event_name == 'workflow_dispatch'/);
- assert.match(workflow,/^permissions:\n  contents: read\n/m);
+ assert.match(workflow,/^permissions: \{\}\n/m);
+ assert.doesNotMatch(workflow,/(?:GH_READ_TOKEN|github\.token|Authorization: Bearer)/);
+ assert.match(workflow,/--proto '=https' --proto-redir '=https'/);
+ assert.match(workflow,/--max-time 45 --max-filesize 8388608/);
  assert.doesNotMatch(workflow,/\b(?:pull_request_target|workflow_run|push|schedule)\s*:/);
  assert.doesNotMatch(workflow,/\b[A-Za-z-]+\s*:\s*write\b/);
  assert.doesNotMatch(workflow,/\b(?:actions\/checkout|secrets\.GITHUB_TOKEN|id-token|attestations)\b/);

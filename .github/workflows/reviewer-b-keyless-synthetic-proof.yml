@@ -9,7 +9,7 @@ on:
     branches:
       - main
     paths:
-      - docs/reviewer-b-keyless-synthetic-retry-20261011.marker
+      - docs/reviewer-b-keyless-post-allowlist-20261011.marker
 
 permissions:
   id-token: write

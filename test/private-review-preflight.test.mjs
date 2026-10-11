@@ -4,6 +4,8 @@ import { createHash } from 'node:crypto';
 import { inspect } from 'node:util';
 import { runReadOnlyReviewPreflight }
   from '../candidate/private-review-preflight.mjs';
+import {executeLocalOllamaReview}
+  from '../candidate/local-ollama-executor.mjs';
 
 const TOKEN='ghs_SYNTHETIC_ONLY_NOT_A_REAL_SECRET_123';
 const RUN='synthetic-readonly-898';
@@ -70,6 +72,46 @@ test('authenticated-style read gives only target metadata and redacted fail-only
   assert.ok(!serialized.includes(TOKEN),'Installation token leaked into output');
   assert.equal(Object.isFrozen(result),true);
 });
+test('immutable private diff can reach a protected LOCAL model without leak or PASS',async()=>{
+  const fake=service();
+  const preflight=await runReadOnlyReviewPreflight({
+    prNumber:898,runId:RUN,installationToken:TOKEN,fetchImpl:fake.fetchImpl
+  });
+  const localPlan=preflight.privateSemanticPlan;
+  assert.equal(localPlan.exactScope.headSha,'a'.repeat(40));
+  assert.equal(localPlan.exactScope.diffSha256,preflight.target.diffSha256);
+  assert.match(localPlan.privateDiffText,new RegExp(PRIVATE));
+  assert.equal(localPlan.approvedToSendToModel,false);
+  assert.equal(preflight.staticDisposition,'FAIL');
+  assert.ok(!Object.keys(preflight).includes('privateSemanticPlan'));
+  assert.doesNotMatch(JSON.stringify(preflight),new RegExp(PRIVATE));
+  assert.doesNotMatch(inspect(preflight),new RegExp(PRIVATE));
+  const modelOutput=JSON.stringify({
+    model:'qwen2.5-coder:7b',done:true,done_reason:'stop',
+    message:{role:'assistant',content:JSON.stringify({
+      summary:'Local synthetic model caught a disallowed write scope',
+      findings:[{severity:'high',path:'.github/workflows/check.yml',line:1,
+        message:'Broad token scope introduced',
+        evidence:'Synthetic test evidence'}]
+    })},prompt_eval_count:500,eval_count:100
+  });
+  const result=await executeLocalOllamaReview({
+    plan:localPlan,trustedDiffBytes:DIFF,runId:RUN,
+    approvedLocalPrivateProcessing:true,
+    fetchImpl:async(url,request)=>({
+      url,status:200,redirected:false,
+      headers:{get:name=>name==='content-type'?'application/json':null},
+      body:new Response(modelOutput).body
+    })
+  });
+  assert.equal(result.provisionalState,'FAIL');
+  assert.equal(result.findingCount,1);
+  assert.equal(result.approvalAuthorized,false);
+  assert.equal(result.independentReviewVerified,false);
+  assert.equal(result.publishEvent,null);
+  assert.doesNotMatch(JSON.stringify(result),new RegExp(PRIVATE));
+});
+
 test('no static matches yields INCONCLUSIVE not PASS',async()=>{
   const safe=Buffer.from(
     'diff --git a/src/demo.mjs b/src/demo.mjs\n'+
