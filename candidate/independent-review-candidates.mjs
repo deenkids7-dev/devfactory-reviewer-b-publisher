@@ -24,9 +24,10 @@ export function assessIndependentReviewCandidates({
   repository,prNumber,expectedHeadSha,reviews,eligibleReviewerLogins
 }={}){
   if(repository!==REPO||!Number.isSafeInteger(prNumber)||prNumber<1||
-    !SHA.test(expectedHeadSha)||!Array.isArray(reviews)||reviews.length>500||
+    typeof expectedHeadSha!=='string'||!SHA.test(expectedHeadSha)||
+    !Array.isArray(reviews)||reviews.length>500||
     !Array.isArray(eligibleReviewerLogins)||eligibleReviewerLogins.length>20||
-    eligibleReviewerLogins.some(x=>!LOGIN.test(x)||OWNED.has(x))||
+    eligibleReviewerLogins.some(x=>typeof x!=='string'||!LOGIN.test(x)||OWNED.has(x))||
     new Set(eligibleReviewerLogins).size!==eligibleReviewerLogins.length)
     deny('REVIEW_CANDIDATES_SCOPE_INVALID');
   const eligible=new Set(eligibleReviewerLogins);
