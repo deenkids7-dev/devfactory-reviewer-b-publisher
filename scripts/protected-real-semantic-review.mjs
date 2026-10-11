@@ -63,16 +63,24 @@ export function prepareRealSemanticComment({preflight,local,runId}={}){
  let report;
  try{report=JSON.parse(bytes.toString('utf8'));}catch{deny('REPORT_JSON_INVALID');}
  if(report?.schema!=='devfactory.reviewer-b.findings.v1'||
-   report.run_id!==runId||!Array.isArray(report.findings)||
+   report.run_id!==runId||typeof report.summary!=='string'||
+   !report.summary.trim()||report.summary.length>2000||
+   !Array.isArray(report.findings)||
    report.findings.length!==local.findingCount||report.findings.length>50||
    (local.provisionalState==='FAIL'&&report.findings.length===0))
    deny('REAL_SEMANTIC_REPORT_MISMATCH');
  const paths=new Set(preflight.privateSemanticPlan?.changedPaths||[]);
  if(!paths.size)deny('REPORT_CHANGED_SCOPE_MISSING');
  const lines=report.findings.map(f=>{
-   if(!f||!paths.has(f.path)||!Number.isSafeInteger(f.line)||f.line<1||
-     !SHA64.test(f.fingerprint)||!['critical','high','medium','low','informational']
-       .includes(f.severity))deny('REPORT_FINDING_INVALID');
+   if(!f||typeof f!=='object'||Array.isArray(f)||
+     typeof f.path!=='string'||!paths.has(f.path)||
+     !Number.isSafeInteger(f.line)||f.line<1||
+     typeof f.fingerprint!=='string'||!SHA64.test(f.fingerprint)||
+     typeof f.severity!=='string'||
+     !['critical','high','medium','low','informational'].includes(f.severity)||
+     typeof f.message!=='string'||!f.message.trim()||f.message.length>500||
+     typeof f.evidence!=='string'||!f.evidence.trim()||f.evidence.length>1000)
+     deny('REPORT_FINDING_INVALID');
    return '- '+f.severity.toUpperCase()+' '+text(f.path,300)+
      ':'+f.line+' — '+text(f.message,500)+' (Evidence: '+text(f.evidence,1000)+')';
  });
