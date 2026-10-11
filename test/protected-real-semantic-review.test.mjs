@@ -141,6 +141,35 @@ function emulator({changedHead=false,override=null,existing=null}={}){
 }
 const args=(em,other={})=>({plan:prepared(),readToken:READ,writeToken:WRITE,
  approvedProtectedPublication:true,fetchImpl:em.fetchImpl,...other});
+test('Gemini findings: missing or mistyped report fields are explicitly denied',()=>{
+ const examples=[
+   {summary:undefined}, {summary:null}, {summary:42},
+   {summary:[]}, {summary:''}, {summary:' '.repeat(3)},
+   {summary:'X'.repeat(2001)}
+ ];
+ for(const change of examples){
+   const raw=JSON.parse(report().toString('utf8'));
+   Object.assign(raw,change);
+   const candidate={...local(),privateCanonicalReportBytes:
+     Buffer.from(JSON.stringify(raw))};
+   assert.throws(()=>prepareRealSemanticComment({
+     preflight:preflight(),local:candidate,runId:RUN
+   }),/REAL_SEMANTIC_REPORT_MISMATCH/);
+ }
+ for(const invalid of [
+   {message:null}, {message:2}, {message:[]}, {message:' '},
+   {message:'X'.repeat(501)},
+   {evidence:null}, {evidence:4}, {evidence:[]},
+   {evidence:' '},{evidence:'X'.repeat(1001)},
+   {fingerprint:['e'.repeat(64)]}
+ ]){
+   const findingValue={...finding(),...invalid};
+   const candidate=local([findingValue]);
+   assert.throws(()=>prepareRealSemanticComment({
+     preflight:preflight(),local:candidate,runId:RUN
+   }),/REPORT_FINDING_INVALID/);
+ }
+});
 test('real PRIVATE semantic report is published exactly as native COMMENTED',async()=>{
  const em=emulator();
  const result=await publishRealSemanticComment(args(em));
