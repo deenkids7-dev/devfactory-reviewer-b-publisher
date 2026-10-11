@@ -16,7 +16,8 @@ where free-plan artifact attestations are unavailable.
 ## Implemented safe rehearsal
 
 `.github/workflows/reviewer-b-keyless-synthetic-proof.yml` is an
-intentionally manual-only, protected-main-only, environment-held workflow.
+protected-main-only, environment-held workflow with manual dispatch and a narrowly
+scoped one-time marker-filtered push activation.
 It uses a GitHub-hosted runner, creates ONE fixed PUBLIC synthetic JSON subject
 and calls the pinned GitHub-maintained `actions/attest` action. Permissions
 are limited to `id-token: write` and `attestations: write`. The workflow's
@@ -26,7 +27,10 @@ GitHub attestation API. No private source is checked out, no API source diff is
 fetched, no App/PAT/model key is
 required, no review is posted, and no approval/merge is authorized.
 
-The workflow is **not executable from a PR branch**. It must first pass
+The workflow is **not executable from a PR branch**. The one-time push trigger
+is restricted to the exact public synthetic activation marker path; it
+requires the approved service-account actor and a separate protected
+environment approval. It cannot retrieve or attest private source. It must first pass
 review/authorization, be merged to protected `main`, and pass the existing
 `reviewer-b-publish` environment hold-and-release gate. Branch protections
 and required CI checks remain intact. The organization's GitHub Actions policy
