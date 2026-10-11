@@ -75,6 +75,23 @@ test('every NEW-side line is represented in valid standalone local shards',()=>{
  assert.doesNotMatch(JSON.stringify(p),/changed_0_xxx/);
  assert.doesNotMatch(inspect(p),/changed_0_xxx/);
 });
+test('Gemini: long valid nested pathname header is supported without partial coverage',()=>{
+ const name='src/'+('subdir/'.repeat(13))+'very-long-valid-module-name.mjs';
+ const bytes=Buffer.from(file(name,20));
+ const header=bytes.toString('utf8').split('@@ ')[0];
+ assert.ok(Buffer.byteLength(header,'utf8')>512);
+ assert.ok(Buffer.byteLength(header,'utf8')<1024);
+ const result=partitionRealSemanticDiff({plan:plan(bytes)});
+ assert.equal(result.changedFileCount,1);
+ assert.equal(result.rawByteCoverageProven,true);
+ assert.ok(result.shardCount>0);
+ const all=[];
+ for(const shard of result.shards){
+  const anchors=deriveAddedLinesFromDiff({diffBytes:shard.privateDiffBytes});
+  all.push(...anchors[name]);
+ }
+ assert.deepEqual(all,deriveAddedLinesFromDiff({diffBytes:bytes})[name]);
+});
 test('real semantic model called once per exact bounded shard, then one bound report',async()=>{
  const model=mockModel();
  const p=partitionRealSemanticDiff({plan:plan()});
