@@ -24,8 +24,13 @@ Do not mislabel this as an independent security sign-off.
 
 ## Stage A — explicit policy / security release decision (manual)
 
-**Owner must make an explicit, recorded choice before merging protected
-security-critical code**:
+**The operator has now selected option B as the target implementation
+strategy in conversation on 2026-10-11.** This is engineering direction,
+NOT a GitHub-native code review, exact-HEAD HUMAN_GO, effective branch-policy
+change or authorized merge. The change proposal and hard security gates are
+specified in `docs/AUTOMATED-ATTESTED-REVIEW-POLICY-V1.md`.
+
+The two formally distinct security-policy options are:
 
 A. Keep the current contract and commission an **independently accountable
 security review** of the final exact HEAD of the Publisher and the private
