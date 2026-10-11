@@ -69,7 +69,7 @@ test('every NEW-side line is represented in valid standalone local shards',()=>{
    reconstructed[path]??=[];
    reconstructed[path].push(...anch[path]);
  }
- assert.deepEqual(reconstructed,inputAnchors);
+ assert.equal(JSON.stringify(reconstructed),JSON.stringify(inputAnchors));
  assert.equal(p.approvalAuthorized,false);
  assert.equal(p.independentReviewVerified,false);
  assert.doesNotMatch(JSON.stringify(p),/changed_0_xxx/);
@@ -115,8 +115,8 @@ test('one incomplete LOCAL model call rejects full review instead of partial acc
 });
 test('invalid diff source, changing digest, CRLF or huge line cannot be silently skipped',()=>{
  const original=plan();
- const wrong={...original,exactScope:{...original.exactScope,
-   diffSha256:'f'.repeat(64)}};
+ const wrong={...original,privateDiffText:original.privateDiffText,
+   exactScope:{...original.exactScope,diffSha256:'f'.repeat(64)}};
  assert.throws(()=>partitionRealSemanticDiff({plan:wrong}),/SEMANTIC_SHARD_SOURCE_INVALID/);
  const crlf=Buffer.from(file('src/a.mjs',4).replace(/\n/g,'\r\n'));
  assert.throws(()=>partitionRealSemanticDiff({plan:plan(crlf)}),
