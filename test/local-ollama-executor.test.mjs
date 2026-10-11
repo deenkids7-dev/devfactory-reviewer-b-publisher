@@ -106,6 +106,33 @@ test('redirect, wrong origin, or content type fail closed',async()=>{
     })),/LOCAL_MODEL_ENDPOINT_UNVERIFIED/);
   }
 });
+test('malformed or throwing response Headers fail closed without leaking details',async()=>{
+  for(const headers of [
+    {'content-type':'application/json'},
+    {get:()=>{throw Error(secret);}},
+    null
+  ]){
+    await assert.rejects(()=>executeLocalOllamaReview(ctx({
+      fetchImpl:async()=>makeResponse(completion(),{headers})
+    })),e=>e.message==='LOCAL_MODEL_ENDPOINT_UNVERIFIED'&&
+      !e.message.includes(secret));
+  }
+});
+test('oversized streaming denial never waits indefinitely for stuck cancel',async()=>{
+  let cancelled=false,released=false;
+  const stuck={
+    getReader:()=>({
+      read:async()=>({done:false,value:new Uint8Array(300000)}),
+      cancel:()=>{cancelled=true;return new Promise(()=>{});},
+      releaseLock:()=>{released=true;}
+    })
+  };
+  await assert.rejects(()=>executeLocalOllamaReview(ctx({
+    fetchImpl:async()=>makeResponse(completion(),{body:stuck})
+  })),/LOCAL_MODEL_RESPONSE_REJECTED/);
+  assert.equal(cancelled,true);
+  assert.equal(released,true);
+});
 test('oversized response and malformed content never grant approval',async()=>{
   for(const data of ['{', 'x'.repeat(300000),completion([],{done:false})]){
     await assert.rejects(()=>executeLocalOllamaReview(ctx({

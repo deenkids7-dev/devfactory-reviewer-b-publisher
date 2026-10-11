@@ -25,7 +25,9 @@ async function consumeBounded(response){
       chunks.push(Buffer.from(part.value));
     }
   }finally{
-    if(!done){try{await reader.cancel();}catch{/* preserve denial */}}
+    // A hostile or wedged local stream must not delay fail-closed denial.
+    // Trigger cancellation without awaiting a potentially unending Promise.
+    if(!done){try{Promise.resolve(reader.cancel()).catch(()=>{});}catch{/* preserve denial */}}
     reader.releaseLock();
   }
   return Buffer.concat(chunks,count);
@@ -65,11 +67,18 @@ export async function executeLocalOllamaReview({
       body:req.privateRequestJson
     });
   }catch{deny('LOCAL_MODEL_REQUEST_FAILED');}
+  // Production fetch supplies a real Headers object. Reject malformed
+  // custom clients instead of accepting an ambiguous object header bag.
+  let contentType,length;
+  try{
+    if(typeof response?.headers?.get!=='function')
+      deny('LOCAL_MODEL_ENDPOINT_UNVERIFIED');
+    contentType=response.headers.get('content-type');
+    length=response.headers.get('content-length');
+  }catch{deny('LOCAL_MODEL_ENDPOINT_UNVERIFIED');}
   if(response?.status!==200||response.redirected!==false||
-     response.url!==LOCAL_URL||
-     !JSON_TYPE.test(response.headers?.get('content-type')||''))
+     response.url!==LOCAL_URL||!JSON_TYPE.test(contentType||''))
     deny('LOCAL_MODEL_ENDPOINT_UNVERIFIED');
-  const length=response.headers?.get('content-length');
   if(length!==null&&length!==undefined&&length!==''&&
      (!/^\d+$/.test(length)||Number(length)>MAX_RESPONSE_BYTES))
     deny('LOCAL_MODEL_RESPONSE_OVERSIZED');
