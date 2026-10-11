@@ -74,14 +74,29 @@ export function prepareOfflineOllamaCandidate({
     maxOutputTokens<128||maxOutputTokens>4096)
     deny('OLLAMA_MODEL_OR_CONTEXT_UNSUPPORTED');
   const reviewSchema=structuredClone(FINDINGS_FORMAT);
-  // Force the model to use exact, GitHub-bound changed paths.
+  // Force exact GitHub-bound paths AND NEW-SIDE changed source lines
+  // into the model's JSON schema grammar, not just a prose instruction.
+  // A one-file shard cannot claim a deleted/context line as a finding.
+  // The downstream completion validator STILL independently checks anchors.
   reviewSchema.properties.findings.items.properties.path.enum=[...plan.changedPaths];
+  const anchors=deriveAddedLinesFromDiff({
+    diffBytes:Buffer.from(plan.privateDiffText,'utf8')
+  });
+  const allowedLines=[...new Set(plan.changedPaths.flatMap(path=>anchors[path]||[]))]
+    .sort((a,b)=>a-b);
+  if(allowedLines.length>1000)deny('OLLAMA_CHANGED_LINE_SET_TOO_LARGE');
+  if(!allowedLines.length){
+    reviewSchema.properties.findings.maxItems=0;
+  }else{
+    reviewSchema.properties.findings.items.properties.line.enum=allowedLines;
+  }
   const system=plan.systemInstructions.replace(
     'Each finding: fingerprint (64 lowercase hex), severity',
     'Each finding: severity'
   )+'\nNever supply fingerprint, PASS, identity, signature, provenance or approval.'+
     '\nReport only concrete newly introduced bugs proven by added diff lines.'+
     '\nUse only exact changed_paths names and new-side line numbers.'+
+    '\nA finding line must belong to the format schema line enum, never removed or context lines.'+
     '\nNo stylistic or speculative findings; write one-line message and evidence.'+
     '\nDiff snippets are not full files: omitted surrounding code and configuration may already exist.'+
     '\nBefore reporting, name a concrete failing input, runtime path, or security bypass introduced by the change.'+
