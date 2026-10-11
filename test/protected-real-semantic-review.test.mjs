@@ -176,7 +176,7 @@ test('live HEAD drift, prior bot review, wrong bot and fake APPROVED fail closed
 });
 
 test('long Qwen analysis must refresh the short-lived GitHub App JWT before write',()=>{
- const src=readFileSync(new URL('../scripts/protected-real-semantic-review.mjs',
+ const src=readFileSync(new globalThis.URL('../scripts/protected-real-semantic-review.mjs',
    import.meta.url),'utf8');
  const analysis=src.indexOf('await executeCompleteLocalSemanticReview(');
  const refresh=src.indexOf('const writerNow=Date.now();');
