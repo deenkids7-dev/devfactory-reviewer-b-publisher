@@ -92,6 +92,20 @@ test('Gemini: long valid nested pathname header is supported without partial cov
  }
  assert.deepEqual(all,deriveAddedLinesFromDiff({diffBytes:bytes})[name]);
 });
+test('numeric-only pathname preserves strict authenticated ordered scope',()=>{
+ const bytes=Buffer.from(file('src/alpha.mjs',6)+file('123',6));
+ const scope=plan(bytes);
+ assert.deepEqual(scope.changedPaths,['src/alpha.mjs','123']);
+ const found=partitionRealSemanticDiff({plan:scope});
+ assert.equal(found.changedFileCount,2);
+ assert.deepEqual(found.shards.map(s=>s.path),
+  ['src/alpha.mjs','123']);
+ assert.equal(found.rawByteCoverageProven,true);
+ const forged={...scope,privateDiffText:scope.privateDiffText,
+  changedPaths:['123','src/alpha.mjs']};
+ assert.throws(()=>partitionRealSemanticDiff({plan:forged}),
+  /SEMANTIC_SHARD_FILE_MISMATCH/);
+});
 test('security: changed-file encounter order is binding and cannot be sorted away',()=>{
  const trusted=plan();
  const reordered={...trusted,
