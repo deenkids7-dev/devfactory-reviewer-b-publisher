@@ -59,11 +59,13 @@ export async function executeLocalOllamaReview({
   if(digest!==req.diffSha256||
      trustedDiffBytes.toString('utf8')!==plan.privateDiffText)
     deny('LOCAL_MODEL_DIFF_SCOPE_MISMATCH');
-  // GitHub's CPU-only Qwen 7B inference may exceed 90 seconds on one
-  // bounded shard. Keep a finite 210-second per-shard deadline, still
-  // subordinate to the protected workflow's 45-minute overall deadline.
-  // Never retry, fall back to a remote model or accept partial output.
-  const modelSignal=AbortSignal.timeout(210000);
+  // Live protected #904 review on 2026-10-11 demonstrated a legitimate
+  // LOCAL_MODEL_REQUEST_TIMEOUT (210s CPU limit) without any private data
+  // leaving the runner. Permit a finite six-minute shard on GitHub's
+  // variable-throughput CPU, still subordinate to the workflow's 45-minute
+  // hard limit. Preserve exact diff coverage and fail-closed semantics.
+  // Never silently retry, use a remote model or accept partial output.
+  const modelSignal=AbortSignal.timeout(360000);
   let response;
   try{
     response=await fetchImpl(LOCAL_URL,{
