@@ -1,0 +1,165 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {inspect} from 'node:util';
+import {canRunRealSemanticReview,prepareRealSemanticComment,
+  publishRealSemanticComment,executeProtectedRealSemanticReview}
+  from '../scripts/protected-real-semantic-review.mjs';
+
+const HEAD='a'.repeat(40),BASE='b'.repeat(40),DIFF='c'.repeat(64);
+const RUN='gh-38140023698-1', PR=899;
+const URL='https://api.github.com/repos/deenkids7-dev/deenkids/pulls/899';
+const READ='test-read-token-98765432',WRITE='test-write-token-12345678';
+const env=()=>({
+ GITHUB_REPOSITORY:'devfactory-reviewer-trust/devfactory-reviewer-b-publisher',
+ GITHUB_REF:'refs/heads/main',GITHUB_EVENT_NAME:'workflow_dispatch',
+ GITHUB_ACTOR:'devfactory-reviewer-service',
+ GITHUB_SHA:'f'.repeat(40),GITHUB_RUN_ID:'38140023698',
+ GITHUB_RUN_ATTEMPT:'1',REVIEWER_B_TARGET_PR:'899',
+ GITHUB_WORKFLOW_REF:'devfactory-reviewer-trust/devfactory-reviewer-b-publisher/.github/workflows/reviewer-b-private-semantic.yml@refs/heads/main',
+ REVIEWER_B_EXPECTED_MODEL:'qwen2.5-coder:7b'
+});
+const preflight=()=>({
+ target:{repository:'deenkids7-dev/deenkids',repositoryId:1282086207,
+  prNumber:PR,headSha:HEAD,baseSha:BASE,diffSha256:DIFF},
+ staticDisposition:'INCONCLUSIVE',blockingFindings:0,
+ approvalAuthorized:false,independentReviewVerified:false,publishEvent:null,
+ privateSemanticPlan:{changedPaths:['src/a.mjs']}
+});
+const report=(findings=[])=>Buffer.from(JSON.stringify({
+ schema:'devfactory.reviewer-b.findings.v1',run_id:RUN,
+ summary:'A real-model structured report from a PRIVATE test diff.',findings
+}));
+const local=(findings=[])=>({
+ model:'qwen2.5-coder:7b',localModelExecuted:true,
+ provisionalState:findings.length?'FAIL':'INCONCLUSIVE',
+ findingCount:findings.length,localResponseSha256:'d'.repeat(64),
+ privateCanonicalReportBytes:report(findings),
+ approvalAuthorized:false,independentReviewVerified:false,publishEvent:null
+});
+const finding=()=>({severity:'high',path:'src/a.mjs',line:4,
+ message:'Access check accepts a non-owner',evidence:'Specified test input bypasses guard',
+ fingerprint:'e'.repeat(64)});
+const prepared=()=>prepareRealSemanticComment({preflight:preflight(),local:local(),runId:RUN});
+test('protected execution requires exact trusted main, workflow, actor and MODEL',()=>{
+ assert.equal(canRunRealSemanticReview(env()),true);
+ for(const patch of [
+  {GITHUB_ACTOR:'deenkids7-dev'},{GITHUB_REF:'refs/heads/dev'},
+  {GITHUB_EVENT_NAME:'pull_request'},{GITHUB_EVENT_NAME:'push'},
+  {GITHUB_WORKFLOW_REF:'attacker/other'},
+  {REVIEWER_B_TARGET_PR:'0'},{REVIEWER_B_TARGET_PR:'899;rm'},
+  {REVIEWER_B_EXPECTED_MODEL:'gemini-expensive'},
+  {GITHUB_SHA:'invalid'}
+ ])assert.equal(canRunRealSemanticReview({...env(),...patch}),false);
+});
+test('no protected environment key means no PRIVATE source or external HTTP',async()=>{
+ let calls=0;
+ for(const patch of [{},{REVIEWER_B_GITHUB_APP_PRIVATE_KEY_PEM:null}]){
+  const result=await executeProtectedRealSemanticReview({env:{...env(),...patch},
+   fetchImpl:async()=>{calls++;throw Error('DO_NOT_CALL');}});
+  assert.deepEqual(result,{ok:false,code:'CREDENTIAL_NOT_PROVISIONED'});
+ }
+ assert.equal(calls,0);
+});
+test('real LOCAL response is represented as COMMENT, never approval',()=>{
+ const p=prepared();
+ assert.equal(p.event,'COMMENT');
+ assert.equal(p.approvalAuthorized,false);
+ assert.equal(p.independentReviewVerified,false);
+ assert.match(p.body,/INCONCLUSIVE/);
+ assert.match(p.body,/Real local response SHA-256/);
+ assert.match(p.body,/NO automated PASS/);
+ assert.doesNotMatch(p.body,/event:\s*APPROVE/);
+});
+test('actual model finding is bounded, attributed to changed file, still not PASS',()=>{
+ const p=prepareRealSemanticComment({preflight:preflight(),
+   local:local([finding()]),runId:RUN});
+ assert.match(p.body,/PROVISIONAL_FINDINGS/);
+ assert.match(p.body,/src\/a.mjs:4/);
+ assert.match(p.body,/Access check accepts a non-owner/);
+ assert.equal(p.approvalAuthorized,false);
+});
+test('unsafe model message cannot inject mentions, tags or markdown code fences',()=>{
+ const f={...finding(),message:'@everyone <script> bad'+String.fromCharCode(96)+'payload'};
+ const p=prepareRealSemanticComment({preflight:preflight(),
+   local:local([f]),runId:RUN});
+ assert.doesNotMatch(p.body,/@everyone|<script>|bad.payload/);
+ assert.match(p.body,/＠|_everyone/);
+});
+test('reject fake or stale model, body, report, path and authority before publication',()=>{
+ const patches=[
+  {local:{...local(),localModelExecuted:false}},
+  {local:{...local(),model:'qwen3:8b'}},
+  {local:{...local(),approvalAuthorized:true}},
+  {local:{...local(),privateCanonicalReportBytes:Buffer.from('not json')}},
+  {local:{...local(),findingCount:7}},
+  {local:local([{...finding(),path:'secrets/other'}])},
+  {preflight:{...preflight(),target:{...preflight().target,headSha:'x'.repeat(40)}}},
+  {preflight:{...preflight(),independentReviewVerified:true}},
+  {runId:'evil'}
+ ];
+ for(const patch of patches)assert.throws(()=>prepareRealSemanticComment({
+  preflight:preflight(),local:local(),runId:RUN,...patch
+ }),/REPORT_|SEMANTIC_|REAL_|PROOF_|UNSAFE/);
+});
+const reply=(url,obj)=>({url,redirected:false,status:200,
+ headers:{get:key=>key==='content-type'?'application/json':null},
+ body:new Response(JSON.stringify(obj)).body});
+function emulator({changedHead=false,override=null,existing=null}={}){
+ let post=null,n=0,calls=[];
+ const fetchImpl=async(url,opt)=>{
+  calls.push({url,method:opt.method,auth:opt.headers.Authorization});
+  if(url===URL&&opt.method==='GET')
+   return reply(url,{number:PR,state:'open',merged_at:null,
+    head:{sha:changedHead?'f'.repeat(40):HEAD,
+     repo:{id:1282086207,full_name:'deenkids7-dev/deenkids'}},
+    base:{repo:{id:1282086207,full_name:'deenkids7-dev/deenkids'}}});
+  if(url===URL+'/reviews?per_page=100&page=1'&&opt.method==='GET')
+    return reply(url,[...(existing?[existing]:[]),...(post?[post]:[])]);
+  if(url===URL+'/reviews'&&opt.method==='POST'){
+    n++;
+    const payload=JSON.parse(opt.body);
+    post={id:1234567,state:'COMMENTED',commit_id:payload.commit_id,
+      body:payload.body,pull_request_url:URL,
+      user:{id:340237276,login:'devfactory-reviewer-b[bot]'},
+      submitted_at:'2026-10-11T18:00:00Z',...override};
+    return reply(url,post);
+  }
+  throw Error('WRONG_HTTP_ENDPOINT');
+ };
+ return {fetchImpl,calls,posts:()=>n};
+}
+const args=(em,other={})=>({plan:prepared(),readToken:READ,writeToken:WRITE,
+ approvedProtectedPublication:true,fetchImpl:em.fetchImpl,...other});
+test('real PRIVATE semantic report is published exactly as native COMMENTED',async()=>{
+ const em=emulator();
+ const result=await publishRealSemanticComment(args(em));
+ assert.equal(result.code,'REAL_REVIEW_COMMENT_VERIFIED');
+ assert.equal(result.reviewId,1234567);
+ assert.equal(result.approvalAuthorized,false);
+ assert.equal(em.posts(),1);
+ assert.equal(em.calls.filter(c=>c.method==='POST')[0].auth,'Bearer '+WRITE);
+ assert.ok(em.calls.filter(c=>c.method==='GET')
+  .every(c=>c.auth==='Bearer '+READ));
+ assert.doesNotMatch(JSON.stringify(result),/PRIVATE_TEST_SECRET/);
+ assert.doesNotMatch(inspect(result),/PRIVATE_TEST_SECRET/);
+});
+test('cannot POST when human protected environment authorization is absent',async()=>{
+ const em=emulator();
+ for(const value of [undefined,false,'true',1,null]){
+  await assert.rejects(()=>publishRealSemanticComment(args(em,{
+   approvedProtectedPublication:value})),/SEMANTIC_PUBLISH_DENIED/);
+ }
+ assert.equal(em.calls.length,0);
+});
+test('live HEAD drift, prior bot review, wrong bot and fake APPROVED fail closed',async()=>{
+ const cases=[
+  [emulator({changedHead:true}),/REVIEWS_HEAD_CHANGED/],
+  [emulator({existing:{id:99,commit_id:HEAD,state:'COMMENTED',
+   user:{id:340237276,login:'devfactory-reviewer-b[bot]'},
+   pull_request_url:URL,body:'older',submitted_at:null}}),/SEMANTIC_ALREADY_REVIEWED/],
+  [emulator({override:{state:'APPROVED'}}),/SEMANTIC_POST_UNVERIFIED/],
+  [emulator({override:{user:{id:100,login:'bad-bot'}}}),/SEMANTIC_POST_UNVERIFIED/]
+ ];
+ for(const [em,pattern] of cases)
+  await assert.rejects(()=>publishRealSemanticComment(args(em)),pattern);
+});
