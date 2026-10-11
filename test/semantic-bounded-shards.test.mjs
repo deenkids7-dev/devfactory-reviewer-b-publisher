@@ -188,7 +188,7 @@ test('QUICK lane reduces local calls without skipping one authenticated added li
   const name=Object.keys(anchors)[0];
   (seen[name]??=[]).push(...anchors[name]);
  }
- assert.deepEqual(seen,original);
+ assert.equal(JSON.stringify(seen),JSON.stringify(original));
  const model=mockModel();
  const result=await executeCompleteLocalSemanticReview({
    plan:trusted,runId:RUN,fetchImpl:model.fetchImpl});
