@@ -1,0 +1,50 @@
+name: Reviewer B - one-shot private native COMMENTED canary
+# SECURITY: This is never a review APPROVAL. Trigger once on protected main
+# marker; separate environment holds access to the GitHub App PEM.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - docs/reviewer-b-native-comment-once-20261011.marker
+
+permissions: {}
+
+concurrency:
+  group: reviewer-b-native-comment-only-pr899
+  cancel-in-progress: false
+
+jobs:
+  comment-only-on-protected-pr899:
+    name: Reviewer B native COMMENTED (never APPROVED)
+    if: ${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.actor == 'devfactory-reviewer-service' && github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: reviewer-b-publish
+    steps:
+      - name: Acquire exactly reviewed PUBLIC publisher source
+        shell: bash
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$GH_REPO" = "devfactory-reviewer-trust/devfactory-reviewer-b-publisher"
+          [[ "$GH_SHA" =~ ^[a-f0-9]{40}$ ]]
+          mkdir source
+          curl --fail --silent --show-error --location --retry 2 \
+            --proto '=https' --proto-redir '=https' \
+            --max-time 45 --max-filesize 8388608 \
+            --header 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/${GH_REPO}/tarball/${GH_SHA}" \
+            --output trusted-source.tar.gz
+          tar -xzf trusted-source.tar.gz -C source --strip-components=1
+      - name: Comment-only native readback, no code or credentials logged
+        shell: bash
+        env:
+          REVIEWER_B_GITHUB_APP_PRIVATE_KEY_PEM: ${{ secrets.REVIEWER_B_GITHUB_APP_PRIVATE_KEY_PEM }}
+          REVIEWER_B_TARGET_PR: '899'
+        run: |
+          set -euo pipefail
+          cd source
+          node scripts/protected-native-comment-entrypoint.mjs
