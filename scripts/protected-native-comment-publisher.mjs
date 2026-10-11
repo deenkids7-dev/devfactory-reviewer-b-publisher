@@ -1,4 +1,3 @@
-import {inspect} from 'node:util';
 import {readNativeReviews} from '../candidate/github-review-readback.mjs';
 import {assessNativeReviewUniqueness} from '../candidate/native-review-uniqueness.mjs';
 import {prepareNonAuthorizingNativeComment} from '../candidate/native-comment-contract.mjs';

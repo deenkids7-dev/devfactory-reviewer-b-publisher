@@ -36,7 +36,7 @@ export async function executeNativeCommentOnlyCanary({
       appJwt:jwt,purpose:'reviewRead',now,fetchImpl
     });
     const preflight=await runReadOnlyReviewPreflight({
-      prNumber:899,runId,installationToken:read.token,fetchImpl
+      prNumber:Number(PR),runId,installationToken:read.token,fetchImpl
     });
     if(preflight.staticDisposition!=='INCONCLUSIVE'||
        preflight.blockingFindings!==0||
