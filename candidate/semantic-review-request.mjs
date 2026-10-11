@@ -28,7 +28,8 @@ export function prepareBoundedSemanticReview({snapshot,rawDiffBytes}={}){
   if(!snapshot||snapshot.repository!==REPO||
      snapshot.repository_id!==1282086207||
      !Number.isSafeInteger(snapshot.pr_number)||snapshot.pr_number<1||
-     !SHA.test(snapshot.head_sha)||!SHA.test(snapshot.base_sha)||
+     (typeof snapshot.head_sha!=='string'||!SHA.test(snapshot.head_sha))||
+     (typeof snapshot.base_sha!=='string'||!SHA.test(snapshot.base_sha))||
      !HEX64.test(snapshot.diff_sha256)||
      !Buffer.isBuffer(rawDiffBytes)||rawDiffBytes.length<16||
      rawDiffBytes.length>MAX_DIFF||
@@ -109,7 +110,7 @@ export function normalizeUntrustedModelFindings({
 }={}){
   if(typeof rawModelOutput!=='string'||
      Buffer.byteLength(rawModelOutput,'utf8')>64*1024||
-     !RUN.test(runId))deny('SEMANTIC_MODEL_OUTPUT_INVALID');
+     (typeof runId!=='string'||!RUN.test(runId)))deny('SEMANTIC_MODEL_OUTPUT_INVALID');
   let model;
   try{model=JSON.parse(rawModelOutput);}catch{
     deny('SEMANTIC_MODEL_JSON_INVALID');

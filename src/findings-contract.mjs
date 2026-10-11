@@ -43,7 +43,7 @@ export function validateReviewerFindings({reportBytes,changedPaths}) {
   if (normalized!==raw) deny('REVIEW_NONCANONICAL_JSON');
   if (!fields(value,['schema','run_id','summary','findings']) ||
       value.schema!=='devfactory.reviewer-b.findings.v1' ||
-      !RUN_ID.test(value.run_id) ||
+      (typeof value.run_id!=='string' || !RUN_ID.test(value.run_id)) ||
       !text(value.summary,1,2000) ||
       !Array.isArray(value.findings) || value.findings.length>MAX_FINDINGS) {
     deny('REVIEW_INVALID_FIELDS');
@@ -52,7 +52,7 @@ export function validateReviewerFindings({reportBytes,changedPaths}) {
   const seen=new Set();
   for(const finding of value.findings){
     if (!fields(finding,['fingerprint','severity','path','line','message','evidence']) ||
-        !HASH.test(finding.fingerprint) ||
+        (typeof finding.fingerprint!=='string' || !HASH.test(finding.fingerprint)) ||
         !SEVERITIES.has(finding.severity) ||
         !PATH.test(finding.path) || !changed.has(finding.path) ||
         !Number.isSafeInteger(finding.line) || finding.line<1 || finding.line>1_000_000 ||
