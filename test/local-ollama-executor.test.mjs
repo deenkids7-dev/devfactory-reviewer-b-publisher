@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { inspect } from 'node:util';
+import {readFileSync} from 'node:fs';
 import { prepareBoundedSemanticReview } from '../candidate/semantic-review-request.mjs';
 import { executeLocalOllamaReview } from '../candidate/local-ollama-executor.mjs';
 
@@ -153,4 +154,15 @@ test('unexpected supplied transport and input are rejected before network',async
   await assert.rejects(()=>executeLocalOllamaReview(ctx({
     trustedDiffBytes:null
   })),/LOCAL_MODEL_INPUT_UNVERIFIED/);
+});
+
+test('R59 local Ollama request stays finite, isolated, and rejects timeout separately',()=>{
+ const src=readFileSync(new URL('../candidate/local-ollama-executor.mjs',
+  import.meta.url),'utf8');
+ assert.match(src,/const modelSignal=AbortSignal\.timeout\(210000\)/);
+ assert.match(src,/signal:modelSignal/);
+ assert.match(src,/if\(modelSignal\.aborted\)deny\('LOCAL_MODEL_REQUEST_TIMEOUT'\)/);
+ assert.match(src,/deny\('LOCAL_MODEL_REQUEST_FAILED'\)/);
+ assert.match(src,/const LOCAL_URL='http:\/\/127\.0\.0\.1:11434\/api\/chat'/);
+ assert.doesNotMatch(src,/https:\/\/(?:openai|google|anthropic)\./);
 });
