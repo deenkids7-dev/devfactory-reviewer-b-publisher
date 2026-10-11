@@ -52,14 +52,21 @@ test('empty scan is INCONCLUSIVE, old findings are only counted',()=>{
  assert.equal(prior.ruleFindings,0);
  assert.equal(prior.excludedPreexistingCount,1);
 });
-test('Semgrep scan errors, incorrect path/severity and duplicate findings fail closed',()=>{
+test('duplicate same-rule same-line matches remain one blocking finding',()=>{
+ const x=verify(ctx(make([finding(),finding()])));
+ assert.equal(x.provisionalState,'FAIL');
+ assert.equal(x.blockingFindings,1);
+ assert.equal(x.ruleFindings,1);
+ assert.equal(JSON.parse(x.privateCanonicalReportBytes).findings.length,1);
+ assert.equal(x.approvalAuthorized,false);
+});
+test('Semgrep scan errors, incorrect path/severity fail closed',()=>{
  for(const bad of [
   make([finding()],[{type:'ParseError'}]),
   make([{...finding(),path:'../../secret.mjs'}]),
   make([{...finding(),check_id:'p/ci'}]),
   make([finding(2,{severity:'BANANAS'})]),
   make([finding(2,{is_ignored:true})]),
-  make([finding(),finding()]),
   make([{...finding(),end:{line:1,col:1}}]),
   make([finding()]).replace('1.136.0','unknown'),
   'not-json'
