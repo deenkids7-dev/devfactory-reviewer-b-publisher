@@ -1,0 +1,30 @@
+name: Reviewer B - OIDC permission availability diagnostic
+# One-shot PUBLIC account/workflow permission diagnostic; no private source,
+# no external actions, no token fetch, and no attestation claim.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - docs/reviewer-b-oidc-diagnostic-20261011.marker
+
+permissions:
+  id-token: write
+  attestations: write
+
+jobs:
+  check-oidc-permission:
+    name: Check environment held OIDC token endpoint existence only
+    if: ${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.event_name == 'push' && github.actor == 'devfactory-reviewer-service' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    environment: reviewer-b-publish
+    steps:
+      - name: Confirm OIDC is provisioned without issuing or printing a token
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$RUNNER_ENVIRONMENT" = "github-hosted"
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}"
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}"
+          echo "OIDC_PERMISSION_AVAILABLE_NO_ATTESTATION"
