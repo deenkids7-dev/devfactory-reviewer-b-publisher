@@ -19,8 +19,11 @@ where free-plan artifact attestations are unavailable.
 intentionally manual-only, protected-main-only, environment-held workflow.
 It uses a GitHub-hosted runner, creates ONE fixed PUBLIC synthetic JSON subject
 and calls the pinned GitHub-maintained `actions/attest` action. Permissions
-are limited to `id-token: write` and `attestations: write`. No private
-source is checked out, no API source diff is fetched, no App/PAT/model key is
+are limited to `id-token: write` and `attestations: write`. The workflow's
+`create-storage-record: false` only disables optional linked-artifact
+metadata: it does **not** disable upload of the signed attestation to the
+GitHub attestation API. No private source is checked out, no API source diff is
+fetched, no App/PAT/model key is
 required, no review is posted, and no approval/merge is authorized.
 
 The workflow is **not executable from a PR branch**. It must first pass
@@ -37,13 +40,25 @@ logs and attestation ID. GitHub's external signature verifies *where the public
 synthetic subject was attested*, not that real Reviewer B ran.
 
 To reconstitute the public subject byte-for-byte for an authorized
-post-run verification on a trusted local machine:
+post-run verification on a trusted local machine, first read the **actual**
+`github.sha` from the successful approved workflow run on protected
+`main`. Supply that verified commit as `PUBLISHER_MAIN_SHA`. Never choose
+the current default-branch HEAD or accept a commit from the PR branch:
+a later run could have a different signing source. The GitHub CLI must
+validate the certificate provenance, not merely the untrusted statement.
 
 ```sh
+# Replace with the exact 40-hex SHA recorded on the approved protected-main run.
+PUBLISHER_MAIN_SHA='REPLACE_WITH_VERIFIED_40_HEX_RUN_SHA'
+[[ "$PUBLISHER_MAIN_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 1
 printf '%s\n' '{"schema":"devfactory.synthetic-provenance.v1","not_a_review":true,"private_code":false}' > reviewer-b-synthetic-proof.json
 gh attestation verify reviewer-b-synthetic-proof.json \
   -R devfactory-reviewer-trust/devfactory-reviewer-b-publisher \
-  --signer-workflow devfactory-reviewer-trust/devfactory-reviewer-b-publisher/.github/workflows/reviewer-b-keyless-synthetic-proof.yml
+  --signer-workflow devfactory-reviewer-trust/devfactory-reviewer-b-publisher/.github/workflows/reviewer-b-keyless-synthetic-proof.yml \
+  --signer-digest "$PUBLISHER_MAIN_SHA" \
+  --source-ref refs/heads/main \
+  --source-digest "$PUBLISHER_MAIN_SHA" \
+  --deny-self-hosted-runners
 ```
 
 This verification can only succeed if a REAL matching attestation has been
