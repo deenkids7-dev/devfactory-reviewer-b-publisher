@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {inspect} from 'node:util';
 import {readFileSync} from 'node:fs';
 import {canRunRealSemanticReview,prepareRealSemanticComment,
-  publishRealSemanticComment,executeProtectedRealSemanticReview}
+  publishRealSemanticComment,executeProtectedRealSemanticReview,
+  classifyProtectedReviewFailure}
   from '../scripts/protected-real-semantic-review.mjs';
 
 const HEAD='a'.repeat(40),BASE='b'.repeat(40),DIFF='c'.repeat(64);
@@ -222,7 +223,23 @@ test('security: protected workflow never logs raw credentials, model errors or s
  const source=readFileSync(new globalThis.URL(
   '../scripts/protected-real-semantic-review.mjs',import.meta.url),'utf8');
  assert.doesNotMatch(source,/console\.(?:error|warn|debug|info)\s*\(/);
- assert.match(source,/catch\s*\{\s*return fail\('REAL_REVIEW_FAILED_CLOSED'\);\s*\}/);
+ assert.match(source,/return fail\(classifyProtectedReviewFailure\(stage,error\)\)/);
+});
+test('protected LIVE stage classifier leaks no secret or private paths',()=>{
+ const known=classifyProtectedReviewFailure('LOCAL_MODEL',
+   Error('OLLAMA_COMPLETION_UNVERIFIED'));
+ assert.equal(known,'REAL_REVIEW_LOCAL_MODEL_OLLAMA_COMPLETION_UNVERIFIED');
+ const unknown=classifyProtectedReviewFailure('NATIVE_POST',
+   Error('PRIVATE_FILENAME=/home/user/key.pem?token=SECRET'));
+ assert.equal(unknown,'REAL_REVIEW_NATIVE_POST_FAILED_CLOSED');
+ const forgedStage=classifyProtectedReviewFailure(
+   'SECRET_USER_CONTROLLED_STAGE',Error('OLLAMA_COMPLETION_UNVERIFIED'));
+ assert.equal(forgedStage,'REAL_REVIEW_UNKNOWN_OLLAMA_COMPLETION_UNVERIFIED');
+ assert.doesNotMatch([known,unknown,forgedStage].join(' '),
+   /PRIVATE_FILENAME|SECRET|key\.pem|\/home\/user/);
+ for(const x of [undefined,null,{},[],{message:'OLLAMA_COMPLETION_UNVERIFIED'}])
+   assert.equal(classifyProtectedReviewFailure('LOCAL_MODEL',x),
+     'REAL_REVIEW_LOCAL_MODEL_FAILED_CLOSED');
 });
 test('long Qwen analysis must refresh the short-lived GitHub App JWT before write',()=>{
  const src=readFileSync(new globalThis.URL('../scripts/protected-real-semantic-review.mjs',
