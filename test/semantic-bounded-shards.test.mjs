@@ -141,6 +141,24 @@ test('adaptive model batching preserves ALL diff lines, with fewer or equal requ
  assert.doesNotMatch(JSON.stringify(fast),/changed_0_xxx/);
  assert.doesNotMatch(inspect(fast),/changed_0_xxx/);
 });
+test('synthetic medium PR reduces CPU model calls without dropped diff lines',()=>{
+ const bytes=Buffer.from(file('src/adaptive-medium.mjs',85));
+ const scoped=plan(bytes);
+ const legacy=partitionRealSemanticDiff({plan:scoped,maxChunkBytes:1536});
+ const adaptive=chooseCompleteSemanticPartition({plan:scoped});
+ assert.ok(adaptive.shardCount<legacy.shardCount,
+   'Expected lower inference count while preserving full diff coverage');
+ const expected=deriveAddedLinesFromDiff({diffBytes:bytes});
+ const lines=[];
+ for(const shard of adaptive.shards){
+   const anchored=deriveAddedLinesFromDiff({
+     diffBytes:shard.privateDiffBytes});
+   lines.push(...anchored['src/adaptive-medium.mjs']);
+ }
+ assert.deepEqual(lines,expected['src/adaptive-medium.mjs']);
+ assert.equal(adaptive.originalByteCount,bytes.length);
+ assert.equal(adaptive.originalDiffSha256,sha(bytes));
+});
 test('adaptive sizing rejects untrusted input, unknown model, or badly sized budget',()=>{
  for(const invalid of [
   {model:'external-cloud'},
