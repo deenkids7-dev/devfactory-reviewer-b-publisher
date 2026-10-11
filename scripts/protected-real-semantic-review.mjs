@@ -159,9 +159,9 @@ export async function publishRealSemanticComment({plan,readToken,writeToken,
    body:JSON.stringify({event:'COMMENT',commit_id:plan.headSha,body:plan.body})});
  }catch{deny('SEMANTIC_POST_FAILED');}
  if(![200,201].includes(response?.status)||response?.url!==url||
-   response.redirected!==false||
+   response?.redirected!==false||
    !/^application\/(?:vnd\.github\+)?json(?:\s*;|$)/i.test(
-     response.headers?.get?.('content-type')||''))
+     response?.headers?.get?.('content-type')||''))
      deny('SEMANTIC_POST_REJECTED');
  const created=await readJson(response);
  if(!Number.isSafeInteger(created?.id)||created.id<1||
