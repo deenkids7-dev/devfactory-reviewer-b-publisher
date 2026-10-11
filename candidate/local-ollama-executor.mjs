@@ -11,7 +11,7 @@ const JSON_TYPE=/^application\/json(?:\s*;|$)/i;
 const MAX_RESPONSE_BYTES=256*1024;
 function deny(code){throw Error(code);}
 async function consumeBounded(response){
-  if(!response?.body?.getReader)deny('LOCAL_MODEL_BODY_INVALID');
+  if(typeof response?.body?.getReader!=='function')deny('LOCAL_MODEL_BODY_INVALID');
   const reader=response.body.getReader();
   let count=0,done=false;const chunks=[];
   try{
