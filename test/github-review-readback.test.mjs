@@ -1,0 +1,216 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { inspect } from 'node:util';
+import { readNativeReviews } from '../candidate/github-review-readback.mjs';
+
+const TOKEN='ghs_SYNTHETIC_ONLY_NOT_REAL_TOKEN';
+const repo='deenkids7-dev/deenkids';
+const url=p=>`https://api.github.com/repos/${repo}/pulls/898/reviews?per_page=100&page=${p}`;
+const head='a'.repeat(40);
+const META_URL=`https://api.github.com/repos/${repo}/pulls/898`;
+const meta=(sha=head)=>({number:898,state:'open',merged_at:null,
+  head:{sha,repo:{id:1282086207,full_name:repo}},
+  base:{repo:{id:1282086207,full_name:repo}}
+});
+const review=(id,changes={})=>({
+  id,user:{id:340237276,login:'devfactory-reviewer-b[bot]'},
+  commit_id:head,state:'COMMENTED',
+  submitted_at:'2026-10-10T12:00:00Z',
+  pull_request_url:`https://api.github.com/repos/${repo}/pulls/898`,
+  body:'Synthetic review - not independent',...changes
+});
+function response(target,body,overrides={}){
+  const bytes=Buffer.from(JSON.stringify(body));
+  return {
+    url:overrides.url||target,status:overrides.status||200,redirected:false,
+    headers:new Headers({'content-type':overrides.contentType||'application/json'}),
+    body:new ReadableStream({start(c){c.enqueue(bytes);c.close();}})
+  };
+}
+function mock(pageSets,opts={}){
+  const calls=[];
+  const fetchImpl=async (target,req)=>{
+    calls.push({target,req});
+    if(opts.fail)throw Error('secret: '+TOKEN);
+    if(target===META_URL){
+      const count=calls.filter(c=>c.target===META_URL).length;
+      return response(target,meta(count===2?(opts.headAfter||head):(opts.headBefore||head)),opts);
+    }
+    const page=Number(new URL(target).searchParams.get('page'));
+    return response(target,pageSets[page-1]||[],opts);
+  };
+  return {calls,fetchImpl};
+}
+function context(fetchImpl){
+  return {prNumber:898,expectedHeadSha:head,
+    installationToken:TOKEN,fetchImpl};
+}
+test('reads bounded native reviews from private API, without review authority',async()=>{
+  const fake=mock([[review(1)]]);
+  const result=await readNativeReviews(context(fake.fetchImpl));
+  assert.equal(result.reviews.length,1);
+  assert.equal(result.reviews[0].id,1);
+  assert.equal(result.reviews[0].user.id,340237276);
+  assert.ok(Object.isFrozen(result.reviews[0]));
+  assert.ok(Object.isFrozen(result.reviews[0].user));
+  assert.equal(result.approvalAuthorized,false);
+  assert.equal(result.independentReviewVerified,false);
+  assert.equal(fake.calls[0].target,META_URL);
+  assert.equal(fake.calls[1].target,url(1));
+  assert.equal(fake.calls[2].target,META_URL);
+  assert.ok(fake.calls.every(c=>c.req.method==='GET'));
+  assert.ok(fake.calls.every(c=>c.req.redirect==='error'));
+  assert.ok(fake.calls.every(c=>c.req.headers.Authorization==='Bearer '+TOKEN));
+  assert.ok(!JSON.stringify(result).includes(TOKEN));
+});
+test('paginates without truncating when exactly 100 reviews',async()=>{
+  const first=Array.from({length:100},(_,i)=>review(i+1));
+  const fake=mock([first,[review(101)]]);
+  const result=await readNativeReviews(context(fake.fetchImpl));
+  assert.equal(result.reviews.length,101);
+  assert.deepEqual(fake.calls.map(x=>x.target),[META_URL,url(1),url(2),META_URL]);
+});
+test('rejects >250 review records rather than silently discarding evidence',async()=>{
+  const pages=[
+    Array.from({length:100},(_,i)=>review(i+1)),
+    Array.from({length:100},(_,i)=>review(i+101)),
+    Array.from({length:100},(_,i)=>review(i+201))
+  ];
+  const fake=mock(pages);
+  await assert.rejects(()=>readNativeReviews(context(fake.fetchImpl)),
+    /REVIEWS_TOO_MANY/);
+});
+test('cannot accept a duplicate review ID across pages',async()=>{
+  const fake=mock([Array.from({length:100},(_,i)=>review(i+1)),[review(1)]]);
+  await assert.rejects(()=>readNativeReviews(context(fake.fetchImpl)),
+    /REVIEWS_ITEM_UNTRUSTED/);
+});
+test('rejects forged author or malformed PR URL',async()=>{
+  const fake=mock([[review(1,{pull_request_url:'https://other.example/898'})]]);
+  await assert.rejects(()=>readNativeReviews(context(fake.fetchImpl)),
+    /REVIEWS_ITEM_UNTRUSTED/);
+});
+test('redirect, unexpected media and HTTP failure are denied',async()=>{
+  for(const opts of [
+    {url:'https://attacker.example/reviews'},{contentType:'text/html'},
+    {status:301}
+  ]){
+    const fake=mock([[review(1)]],opts);
+    await assert.rejects(()=>readNativeReviews(context(fake.fetchImpl)),
+      /REVIEWS_HEAD_UNTRUSTED|REVIEWS_GITHUB_RESPONSE_REJECTED/);
+  }
+});
+test('network error cannot leak token into caller-facing error',async()=>{
+  const fake=mock([],{fail:true});
+  await assert.rejects(()=>readNativeReviews(context(fake.fetchImpl)),
+    e=>['REVIEWS_HEAD_READ_FAILED','REVIEWS_GITHUB_REQUEST_FAILED'].includes(e.message)&&!e.message.includes(TOKEN));
+});
+test('path and auth tokens must match expected repository',async()=>{
+  const fake=mock([[review(1)]]);
+  for(const data of [
+    {prNumber:'898'}, {prNumber:0},
+    {expectedHeadSha:'BAD'},
+    {installationToken:'bad header\nBearer'}
+  ]){
+    await assert.rejects(()=>readNativeReviews({
+      ...context(fake.fetchImpl),...data
+    }),/REVIEWS_INVALID_REQUEST/);
+  }
+  assert.equal(fake.calls.length,0);
+});
+test('empty reviews cannot grant approval',async()=>{
+  const fake=mock([[]]);
+  const result=await readNativeReviews(context(fake.fetchImpl));
+  assert.equal(result.reviews.length,0);
+  assert.equal(result.approvalAuthorized,false);
+});
+
+test('HEAD move during review pagination fails closed before publishing',async()=>{
+  const fake=mock([[review(1)]],{headAfter:'c'.repeat(40)});
+  await assert.rejects(()=>readNativeReviews(context(fake.fetchImpl)),
+    /REVIEWS_HEAD_CHANGED_OR_UNVERIFIED/);
+  assert.deepEqual(fake.calls.map(x=>x.target),[META_URL,url(1),META_URL]);
+});
+test('caller-provided expected HEAD must match observed GitHub HEAD',async()=>{
+  const fake=mock([[review(1)]],{headBefore:'d'.repeat(40)});
+  await assert.rejects(()=>readNativeReviews(context(fake.fetchImpl)),
+    /REVIEWS_HEAD_CHANGED_OR_UNVERIFIED/);
+  assert.deepEqual(fake.calls.map(x=>x.target),[META_URL]);
+});
+
+test('read-only native review body does not leak into JSON, spread or Node inspection',async()=>{
+ const secret='SYNTHETIC_PRIVATE_NATIVE_REVIEW_FINDING_BODY_987';
+ const fake=mock([[review(10,{body:secret})]]);
+ const result=await readNativeReviews(context(fake.fetchImpl));
+ assert.equal(result.reviews[0].body,secret);
+ assert.equal(result.reviews.length,1);
+ for(const serialized of [JSON.stringify(result),JSON.stringify({...result}),inspect(result)])
+  assert.ok(!serialized.includes(secret));
+ assert.match(JSON.stringify(result),/REDACTED_PRIVATE_REVIEWS/);
+ assert.equal(Object.keys(result).includes('reviews'),false);
+ assert.equal(result.approvalAuthorized,false);
+ assert.equal(result.independentReviewVerified,false);
+});
+test('null review bodies are safe but never authorize approval; malformed bodies fail closed',async()=>{
+  for(const state of ['COMMENTED','APPROVED']){
+    const fake=mock([[review(44,{state,body:null})]]);
+    const out=await readNativeReviews(context(fake.fetchImpl));
+    assert.equal(out.reviews[0].body,'');
+    assert.equal(out.reviews[0].state,state);
+    assert.equal(out.approvalAuthorized,false);
+    assert.equal(out.independentReviewVerified,false);
+  }
+  for(const body of [undefined,false,{},7,'x'.repeat(120001)]){
+    const fake=mock([[review(45,{body})]]);
+    await assert.rejects(()=>readNativeReviews(context(fake.fetchImpl)),
+      /REVIEWS_ITEM_UNTRUSTED/);
+  }
+});
+
+test('native GitHub submitted_at is restricted to a string or empty value',async()=>{
+  for(const submitted_at of [{epoch:1},['2026-10-10T12:00:00Z'],12,true,false]){
+    const fake=mock([[review(51,{submitted_at})]]);
+    await assert.rejects(()=>readNativeReviews(context(fake.fetchImpl)),
+      /REVIEWS_ITEM_UNTRUSTED/);
+  }
+  for(const submitted_at of [null,undefined]){
+    const fake=mock([[review(52,{state:'PENDING',submitted_at})]]);
+    const out=await readNativeReviews(context(fake.fetchImpl));
+    assert.equal(out.reviews[0].submitted_at,null);
+    assert.equal(out.approvalAuthorized,false);
+  }
+});
+test('cancels oversized GitHub review body stream before failing closed',async()=>{
+ let cancelled=0;
+ const fetchImpl=async target=>{
+   if(target===META_URL)return response(target,meta());
+   return {
+    url:target,status:200,redirected:false,
+    headers:new Headers({'content-type':'application/json'}),
+    body:new ReadableStream({
+      start(c){c.enqueue(new Uint8Array(1024*1024+1));},
+      cancel(){cancelled++;}
+    })
+   };
+ };
+ await assert.rejects(()=>readNativeReviews(context(fetchImpl)),
+  e=>e.message==='REVIEWS_GITHUB_MALFORMED_JSON');
+ assert.equal(cancelled,1);
+});
+test('cancels malformed review chunks without overriding rejection',async()=>{
+ let cancelled=0;
+ const fetchImpl=async target=>{
+   if(target===META_URL)return response(target,meta());
+   return {
+    url:target,status:200,redirected:false,
+    headers:new Headers({'content-type':'application/json'}),
+    body:new ReadableStream({
+      start(c){c.enqueue('NOT_BYTES');},
+      cancel(){cancelled++;}
+    })
+   };
+ };
+ await assert.rejects(()=>readNativeReviews(context(fetchImpl)),
+  e=>e.message==='REVIEWS_GITHUB_MALFORMED_JSON');
+ assert.equal(cancelled,1);
+});

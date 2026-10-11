@@ -1,0 +1,76 @@
+name: Reviewer B - Real Semgrep CE Public Synthetic Canary
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'rules/reviewer-b-semgrep-ce.yml'
+      - 'candidate/semgrep-ce-offline-contract.mjs'
+      - 'test/semgrep-ce-offline-contract.test.mjs'
+      - 'test/semgrep-ce-end-to-end.test.mjs'
+      - '.github/workflows/reviewer-b-semgrep-ce-synthetic.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  actual-semgrep-ce-public-synthetic-only:
+    if: github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.event.pull_request.head.repo.full_name == github.repository
+    name: Run pinned CE scanner on FIXED public synthetic source only
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Fetch only exact public Publisher HEAD
+        shell: bash
+        env:
+          GH_READ_TOKEN: ${{ github.token }}
+          GH_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_REPO: ${{ github.repository }}
+          GH_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          set -euo pipefail
+          test "$GH_REPO" = 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher'
+          test "$GH_HEAD_REPO" = "$GH_REPO"
+          [[ "$GH_SHA" =~ ^[0-9a-f]{40}$ ]]
+          mkdir source
+          curl --fail --silent --show-error --location --retry 2 \
+            --header "Authorization: Bearer $GH_READ_TOKEN" \
+            --header 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/$GH_REPO/tarball/$GH_SHA" \
+            --output source.tar.gz
+          unset GH_READ_TOKEN
+          tar -xzf source.tar.gz -C source --strip-components=1
+      - name: Install public Semgrep Community Edition in isolated runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/semgrep-ce-venv"
+          "$RUNNER_TEMP/semgrep-ce-venv/bin/python" -m pip install --no-input \
+            --disable-pip-version-check 'semgrep==1.180.0' > "$RUNNER_TEMP/semgrep-pip.log" 2>&1
+          "$RUNNER_TEMP/semgrep-ce-venv/bin/semgrep" --version
+      - name: Scan known unsafe and safe public synthetic JavaScript files
+        shell: bash
+        env:
+          SEMGREP_SEND_METRICS: 'off'
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/semgrep-public-only"
+          printf 'eval(publicSyntheticUserInput);\n' > "$RUNNER_TEMP/semgrep-public-only/danger.js"
+          printf 'const safe = 42;\n' > "$RUNNER_TEMP/semgrep-public-only/safe.js"
+          "$RUNNER_TEMP/semgrep-ce-venv/bin/semgrep" scan \
+            --json --metrics=off --disable-version-check \
+            --config source/rules/reviewer-b-semgrep-ce.yml \
+            --output "$RUNNER_TEMP/semgrep-public-report.json" \
+            "$RUNNER_TEMP/semgrep-public-only"
+          python3 - "$RUNNER_TEMP/semgrep-public-report.json" <<'PY'
+          import json,sys
+          with open(sys.argv[1],encoding="utf-8") as f: report=json.load(f)
+          assert isinstance(report.get("results"),list)
+          assert report.get("errors")==[]
+          result=report["results"]
+          assert len(result)==1, "SEMGREP_CE_SYNTHETIC_COUNT_FAILED"
+          assert "javascript-dynamic-eval" in result[0]["check_id"]
+          assert result[0]["path"].endswith("danger.js")
+          assert result[0]["start"]["line"]==1
+          print("SEMGREP_CE_REAL_EXECUTION_PUBLIC_SYNTHETIC_ONLY")
+          PY

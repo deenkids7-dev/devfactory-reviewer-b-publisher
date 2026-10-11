@@ -1,0 +1,14 @@
+{
+  "name": "devfactory-reviewer-b-attestation-verifier",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Secret-free fail-closed verification foundation for Reviewer B; NO production publisher",
+  "scripts": {
+    "test": "node --test",
+    "benchmark:local-synthetic": "node bench/ollama-synthetic-benchmark.mjs"
+  },
+  "engines": {
+    "node": ">=20.11.0"
+  }
+}

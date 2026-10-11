@@ -1,0 +1,79 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { deriveAddedLinesFromDiff,isAddedLine } from '../candidate/diff-added-lines.mjs';
+const hdr=p=>'diff --git a/'+p+' b/'+p+'\n'+
+ 'index 0123456..abcdef0 100644\n--- a/'+p+'\n+++ b/'+p+'\n';
+const parse=s=>deriveAddedLinesFromDiff({diffBytes:Buffer.from(s)});
+test('source additions anchor only the newly added lines across multiple hunks',()=>{
+ const x=parse(hdr('src/demo.mjs')+
+ '@@ -4,3 +4,4 @@\n context\n-old\n+new\n+extra\n context2\n'+
+ '@@ -20,2 +21,2 @@\n gone\n-old2\n+new2\n');
+ assert.deepEqual(x['src/demo.mjs'],[5,6,22]);
+ assert.equal(isAddedLine({anchors:x,path:'src/demo.mjs',line:5}),true);
+ assert.equal(isAddedLine({anchors:x,path:'src/demo.mjs',line:4}),false);
+ assert.equal(isAddedLine({anchors:x,path:'other',line:5}),false);
+});
+test('deletion-only PR cannot fabricate an added-line citation',()=>{
+ const x=parse(hdr('src/file.mjs')+'@@ -1 +0,0 @@\n-old\n');
+ assert.deepEqual(x['src/file.mjs'],[]);
+});
+test('reject incomplete or oversized hunk declarations',()=>{
+ for(const source of [
+  hdr('src/a.mjs')+'@@ -1,2 +1,2 @@\n-old\n+new\n',
+  hdr('src/a.mjs')+'@@ -1 +1 @@\n-old\n+new\n+extra\n',
+  hdr('src/a.mjs')+'@@ broken @@\n-old\n+new\n'
+ ])assert.throws(()=>parse(source),/DIFF_ANCHOR_/);
+});
+test('reject duplicate/unsafe names instead of silently merging sources',()=>{
+ assert.throws(()=>parse(hdr('src/a.mjs')+'@@ -1 +1 @@\n-a\n+b\n'+
+  hdr('src/a.mjs')+'@@ -1 +1 @@\n-c\n+d\n'),/DIFF_ANCHOR_PATH_INVALID/);
+ assert.throws(()=>parse('diff --git a/../x b/../x\n@@ -1 +1 @@\n-x\n+y\n'),
+  /DIFF_ANCHOR_PATH_INVALID/);
+});
+test('reject invalid UTF-8 or binary input',()=>{
+ assert.throws(()=>deriveAddedLinesFromDiff({diffBytes:Buffer.from([255,0,7])}),
+  /DIFF_ANCHOR_/);
+});
+
+test('line-anchor parser rejects overlapping or decreasing hunk coordinates',()=>{
+ const h=hdr('src/overlap.mjs');
+ for(const caseText of [
+  '@@ -1 +1 @@\n-old\n+new\n@@ -1 +1 @@\n-old2\n+new2\n',
+  '@@ -9 +9 @@\n-a\n+b\n@@ -2 +2 @@\n-a\n+b\n',
+  '@@ -0 +1 @@\n-old\n+new\n',
+  '@@ -1 +0 @@\n-old\n+new\n'
+ ])assert.throws(()=>parse(h+caseText),/DIFF_ANCHOR_HUNK_ORDER_INVALID/);
+});
+test('zero-span new/deleted-file coordinates remain supported',()=>{
+ const add=parse('diff --git a/new.mjs b/new.mjs\n'+
+  'new file mode 100644\n--- /dev/null\n+++ b/new.mjs\n'+
+  '@@ -0,0 +1 @@\n+new\n');
+ assert.deepEqual(add['new.mjs'],[1]);
+ const del=parse('diff --git a/old.mjs b/old.mjs\n'+
+  'deleted file mode 100644\n--- a/old.mjs\n+++ /dev/null\n'+
+  '@@ -1 +0,0 @@\n-old\n');
+ assert.deepEqual(del['old.mjs'],[]);
+});
+
+test('CRLF unified diff preserves exact added-line positions without altering input bytes',()=>{
+ const raw=Buffer.from(hdr('src/windows.mjs')+'@@ -1 +1 @@\n-before\n+after\n');
+ const crlf=Buffer.from(raw.toString('utf8').replace(/\n/g,'\r\n'));
+ const before=Buffer.from(crlf);
+ const anchors=deriveAddedLinesFromDiff({diffBytes:crlf});
+ assert.deepEqual(anchors['src/windows.mjs'],[1]);
+ assert.ok(crlf.equals(before));
+ assert.throws(()=>deriveAddedLinesFromDiff({
+  diffBytes:Buffer.from(raw.toString().replace('\n','\r'))
+ }),/DIFF_ANCHOR_/);
+});
+
+
+test('actual Git empty context line is a prefixed space, never bare blank',()=>{
+ const valid=hdr('src/blank.mjs')+
+  '@@ -1,3 +1,3 @@\n-old\n+new\n \n unchanged\n';
+ assert.deepEqual(parse(valid)['src/blank.mjs'],[1]);
+ // A text-trimming intermediary is untrusted: lost context prefixes are fatal.
+ const corrupted=valid.replace('\n \n','\n\n');
+ assert.notEqual(corrupted,valid);
+ assert.throws(()=>parse(corrupted),/DIFF_ANCHOR_HUNK_MISMATCH/);
+});
