@@ -237,7 +237,8 @@ test('two independent length stops reanalyze every original added line without p
    const anchors=deriveAddedLinesFromDiff({diffBytes:item.bytes});
    (observed[item.path]??=[]).push(...anchors[item.path]);
  }
- assert.deepEqual(observed,deriveAddedLinesFromDiff({diffBytes:diff}));
+ assert.equal(JSON.stringify(observed),
+   JSON.stringify(deriveAddedLinesFromDiff({diffBytes:diff})));
 });
 test('too-small-to-split length stop gets one larger-output local attempt',async()=>{
  const bytes=Buffer.from(file('src/tiny.mjs',1));
