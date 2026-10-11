@@ -36,12 +36,13 @@ export function nativePayloadBytes(payload) {
       payload.app_bot_id!==340237276 ||
       payload.installation_id!==169674558 ||
       !Number.isSafeInteger(payload.pr_number) || payload.pr_number<1 ||
-      !SHA40.test(payload.head_sha) || !SHA40.test(payload.base_sha) ||
+      (typeof payload.head_sha!=='string'||!SHA40.test(payload.head_sha)) ||
+      (typeof payload.base_sha!=='string'||!SHA40.test(payload.base_sha)) ||
       (payload.verdict!=='PASS' && payload.verdict!=='FAIL') ||
-      !SHA256.test(payload.report_sha256) ||
-      !NONCE.test(payload.nonce) ||
-      !RUN.test(payload.reviewer_run_id) ||
-      !PROVENANCE.test(payload.provenance_ref) ||
+      (typeof payload.report_sha256!=='string'||!SHA256.test(payload.report_sha256)) ||
+      (typeof payload.nonce!=='string'||!NONCE.test(payload.nonce)) ||
+      (typeof payload.reviewer_run_id!=='string'||!RUN.test(payload.reviewer_run_id)) ||
+      (typeof payload.provenance_ref!=='string'||!PROVENANCE.test(payload.provenance_ref)) ||
       typeof payload.completed_at!=='string' ||
       !ISO_UTC.test(payload.completed_at) ||
       !Number.isFinite(Date.parse(payload.completed_at)) ||
