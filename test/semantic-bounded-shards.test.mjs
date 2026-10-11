@@ -4,7 +4,8 @@ import {createHash} from 'node:crypto';
 import {inspect} from 'node:util';
 import {deriveAddedLinesFromDiff} from '../candidate/diff-added-lines.mjs';
 import {prepareBoundedSemanticReview} from '../candidate/semantic-review-request.mjs';
-import {partitionRealSemanticDiff,executeCompleteLocalSemanticReview}
+import {partitionRealSemanticDiff,planAdaptiveSemanticShards,
+ executeCompleteLocalSemanticReview}
  from '../candidate/semantic-bounded-shards.mjs';
 const sha=x=>createHash('sha256').update(x).digest('hex');
 const HEAD='a'.repeat(40),BASE='b'.repeat(40);
@@ -119,7 +120,7 @@ test('security: changed-file encounter order is binding and cannot be sorted awa
 });
 test('real semantic model called once per exact bounded shard, then one bound report',async()=>{
  const model=mockModel();
- const p=partitionRealSemanticDiff({plan:plan()});
+ const p=planAdaptiveSemanticShards({plan:plan()}).partitions;
  const r=await executeCompleteLocalSemanticReview({
    plan:plan(),runId:RUN,fetchImpl:model.fetchImpl});
  assert.equal(model.count(),p.shardCount);
@@ -167,4 +168,79 @@ test('invalid diff source, changing digest, CRLF or huge line cannot be silently
    'changed_0_'+'z'.repeat(5000)));
  assert.throws(()=>partitionRealSemanticDiff({plan:plan(tooLong)}),
    /SEMANTIC_SHARD_LINE_TOO_LARGE/);
+});
+
+test('QUICK lane reduces local calls without skipping one authenticated added line',async()=>{
+ const bytes=Buffer.from(file('src/alpha.mjs',65)+file('src/beta.mjs',65));
+ const trusted=plan(bytes);
+ const baseline=partitionRealSemanticDiff({plan:trusted,maxChunkBytes:1536});
+ const route=planAdaptiveSemanticShards({plan:trusted,maxOutputTokens:1024});
+ assert.equal(route.mode,'QUICK',route.reason);
+ assert.equal(route.geminiAdvisoryRecommended,false);
+ assert.ok(route.partitions.shardCount<baseline.shardCount);
+ assert.equal(route.partitions.rawByteCoverageProven,true);
+ assert.equal(route.partitions.originalDiffSha256,sha(bytes));
+ const original=deriveAddedLinesFromDiff({diffBytes:bytes});
+ const seen={};
+ for(const chunk of route.partitions.shards){
+  assert.ok(chunk.byteCount<=3072);
+  const anchors=deriveAddedLinesFromDiff({diffBytes:chunk.privateDiffBytes});
+  const name=Object.keys(anchors)[0];
+  (seen[name]??=[]).push(...anchors[name]);
+ }
+ assert.equal(JSON.stringify(seen),JSON.stringify(original));
+ const model=mockModel();
+ const result=await executeCompleteLocalSemanticReview({
+   plan:trusted,runId:RUN,fetchImpl:model.fetchImpl});
+ assert.equal(result.reviewMode,'QUICK');
+ assert.equal(result.geminiAdvisoryRecommended,false);
+ assert.equal(result.processedShardCount,route.partitions.shardCount);
+ assert.equal(model.count(),route.partitions.shardCount);
+ assert.equal(result.originalDiffSha256,sha(bytes));
+ assert.equal(result.rawByteCoverageProven,true);
+ assert.equal(result.approvalAuthorized,false);
+ assert.equal(result.independentReviewVerified,false);
+});
+test('sensitive runtime and security paths retain DEEP model coverage, Gemini remains advisory',()=>{
+ for(const name of [
+  'devfactory/autonomy/scripts/start.ps1',
+  'devfactory/autonomy/lib/controllerCorePreLedgerBase.mjs',
+  '.github/workflows/ci.yml',
+  'src/auth/session.mjs',
+  'supabase/migrations/2026.sql',
+  'devfactory/lib/merge-executor-core.mjs',
+  'payments/checkout.ts'
+ ]){
+  const p=plan(Buffer.from(file(name,65)));
+  const route=planAdaptiveSemanticShards({plan:p});
+  const baseline=partitionRealSemanticDiff({plan:p,maxChunkBytes:1536});
+  assert.equal(route.mode,'DEEP',name);
+  assert.equal(route.reason,'SENSITIVE_CHANGE');
+  assert.equal(route.geminiAdvisoryRecommended,true);
+  assert.equal(route.partitions.shardCount,baseline.shardCount);
+  assert.equal(route.partitions.originalDiffSha256,baseline.originalDiffSha256);
+ }
+});
+test('QUICK never bypasses strict context budget and falls back BEFORE local inference',()=>{
+ const bytes=Buffer.from(file('src/alpha.mjs',65)+file('src/beta.mjs',65));
+ const trusted=plan(bytes);
+ const low=planAdaptiveSemanticShards({plan:trusted,maxOutputTokens:1024});
+ const high=planAdaptiveSemanticShards({plan:trusted,maxOutputTokens:4096});
+ assert.equal(low.partitions.rawByteCoverageProven,true);
+ assert.equal(high.partitions.rawByteCoverageProven,true);
+ assert.ok(high.partitions.shardCount>=low.partitions.shardCount);
+ assert.equal(high.partitions.originalDiffSha256,low.partitions.originalDiffSha256);
+ const invalid={...trusted,privateDiffText:trusted.privateDiffText,
+   changedPaths:[...trusted.changedPaths].reverse()};
+ assert.throws(()=>planAdaptiveSemanticShards({plan:invalid}),
+  /SEMANTIC_SHARD_FILE_MISMATCH/);
+});
+test('LARGE diffs and too many files keep exhaustive DEEP lane and do not skip Gemini risk',()=>{
+ const paths=['src/a.mjs','src/b.mjs','src/c.mjs','src/d.mjs','src/e.mjs'];
+ const scope=plan(Buffer.from(paths.map(n=>file(n,24)).join('')));
+ const r=planAdaptiveSemanticShards({plan:scope});
+ assert.equal(r.mode,'DEEP');
+ assert.equal(r.reason,'LARGE_OR_MANY_FILES');
+ assert.equal(r.partitions.changedFileCount,5);
+ assert.equal(r.partitions.rawByteCoverageProven,true);
 });

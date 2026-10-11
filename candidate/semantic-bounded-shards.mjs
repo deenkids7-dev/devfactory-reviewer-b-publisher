@@ -11,6 +11,7 @@ import {inspect} from 'node:util';
 import {canonicalJson} from '../src/canonical.mjs';
 import {deriveAddedLinesFromDiff} from './diff-added-lines.mjs';
 import {prepareBoundedSemanticReview} from './semantic-review-request.mjs';
+import {prepareOfflineOllamaCandidate} from './ollama-offline-contract.mjs';
 import {executeLocalOllamaReview} from './local-ollama-executor.mjs';
 
 const REPO='deenkids7-dev/deenkids',MODEL='qwen2.5-coder:7b';
@@ -165,6 +166,67 @@ export function partitionRealSemanticDiff({plan,maxChunkBytes=1536}={}){
  });
  return Object.freeze(safe);
 }
+/**
+ * QUICK is a conservative performance optimization, not fewer checks:
+ * identical authenticated PRIVATE bytes and full added-line coverage, with
+ * fewer calls to the SAME local Qwen 7B model. All request/context/schema
+ * checks are pre-proven before first inference; otherwise use existing DEEP.
+ *
+ * The classifier reads verified paths only. It does not parse or obey PR
+ * instructions, touch network/cloud, mint merge approval, or bypass CI.
+ * Sensitive runtime/security/permissions/release changes remain DEEP.
+ */
+const SENSITIVE_REVIEW_PATH=/(?:^\.github\/|^devfactory\/(?:autonomy\/(?:lib\/|scripts\/)|lib\/(?:quality-autonomy\/|merge|ciRun|failure-prevention\/))|(?:^|\/)(?:auth|security|secret|secrets|permission|permissions|payment|payments|billing|pricing|migration|migrations|infra|deploy|release)(?:\/|[._-]|$)|\.(?:ps1|sql|ya?ml)$)/i;
+export function planAdaptiveSemanticShards({plan,maxOutputTokens=1024}={}){
+ const deep=partitionRealSemanticDiff({plan,maxChunkBytes:1536});
+ const paths=plan.changedPaths;
+ const small=deep.originalByteCount<=12288 && paths.length<=4;
+ const sensitive=paths.some(p=>SENSITIVE_REVIEW_PATH.test(p));
+ if(!small||sensitive)return Object.freeze({
+   mode:'DEEP',geminiAdvisoryRecommended:sensitive,
+   partitions:deep,reason:sensitive?'SENSITIVE_CHANGE':'LARGE_OR_MANY_FILES'
+ });
+ // Never attempt to fit a model shard optimistically; preconstruct the same
+ // strict LOCAL request that executeLocalOllamaReview will require. A context
+ // overflow falls back BEFORE inference. Unexpected validation errors still
+ // fail closed rather than turning into a soft review.
+ for(const cap of [3072,2304]){
+  let parts;
+  try{parts=partitionRealSemanticDiff({plan,maxChunkBytes:cap});}
+  catch(e){
+    if(e?.message==='SEMANTIC_SHARD_LINE_TOO_LARGE')continue;
+    throw e;
+  }
+  if(parts.shardCount>=deep.shardCount)continue;
+  let contextFits=true;
+  for(const shard of parts.shards){
+    const bytes=shard.privateDiffBytes;
+    const single=prepareBoundedSemanticReview({
+      snapshot:snapFor(plan,bytes),rawDiffBytes:bytes
+    });
+    try{
+      prepareOfflineOllamaCandidate({
+        plan:single,model:MODEL,maxOutputTokens,
+        protectedEphemeralKeepAlive:true
+      });
+    }catch(e){
+      if(e?.message==='OLLAMA_CONTEXT_CAPACITY_UNVERIFIED'){
+        contextFits=false;break;
+      }
+      throw e;
+    }
+  }
+  if(contextFits)return Object.freeze({
+    mode:'QUICK',geminiAdvisoryRecommended:false,
+    partitions:parts,reason:'BOUNDED_CONTEXT_PROVEN'
+  });
+ }
+ return Object.freeze({
+  mode:'DEEP',geminiAdvisoryRecommended:false,
+  partitions:deep,reason:'CONTEXT_OR_SIZE_FALLBACK'
+ });
+}
+
 /** Every shard is re-bound to the exact PR and its original private SHA.
  * No incomplete/model-error path yields a result. Global disposition is
  * provisional; model findings are NOT merge authority.
@@ -174,7 +236,8 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
 }={}){
  if(model!==MODEL||typeof runId!=='string'||typeof fetchImpl!=='function')
    deny('SEMANTIC_BATCH_INPUT_INVALID');
- const parts=partitionRealSemanticDiff({plan});
+ const routing=planAdaptiveSemanticShards({plan,maxOutputTokens});
+ const parts=routing.partitions;
  const original=Buffer.from(plan.privateDiffText,'utf8');
  if(parts.originalDiffSha256!==sha(original))
    deny('SEMANTIC_BATCH_ORIGINAL_DRIFT');
@@ -224,6 +287,8 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
    provisionalState:findings.some(f=>['critical','high'].includes(f.severity))
      ?'FAIL':'INCONCLUSIVE',
    findingCount:findings.length,processedShardCount:modelCalls,
+   reviewMode:routing.mode,
+   geminiAdvisoryRecommended:routing.geminiAdvisoryRecommended,
    originalDiffSha256:parts.originalDiffSha256,
    rawByteCoverageProven:true,modelContextCompletenessVerified:false,
    independentReviewVerified:false,approvalAuthorized:false,publishEvent:null
