@@ -192,8 +192,13 @@ export async function executeProtectedRealSemanticReview({
      plan:preflight.privateSemanticPlan,runId,model:MODEL,
      fetchImpl:modelFetchImpl,maxOutputTokens:1024});
    const plan=prepareRealSemanticComment({preflight,local,runId});
+   // LOCAL inference may run longer than the initial App JWT's 8-minute TTL.
+   // Mint the purpose-separated WRITE token with a fresh App JWT only AFTER
+   // the complete PRIVATE model report is validated. No bearer survives a retry.
+   const writerNow=Date.now();
+   const writerJwt=createReviewerBAppJwt({privateKeyPem:pem,now:writerNow});
    const writer=await createScopedReviewerBInstallationToken({
-     appJwt:jwt,purpose:'publish',now,fetchImpl});
+     appJwt:writerJwt,purpose:'publish',now:writerNow,fetchImpl});
    return await publishRealSemanticComment({plan,readToken:read.token,
      writeToken:writer.token,approvedProtectedPublication:true,fetchImpl});
  }catch{
