@@ -10,7 +10,7 @@ import {approvedReadOnlyExecutionContext} from './protected-private-read-entrypo
 import {createReviewerBAppJwt,createScopedReviewerBInstallationToken}
  from '../candidate/github-app-auth.mjs';
 import {runReadOnlyReviewPreflight} from '../candidate/private-review-preflight.mjs';
-import {executeLocalOllamaReview} from '../candidate/local-ollama-executor.mjs';
+import {executeCompleteLocalSemanticReview} from '../candidate/semantic-bounded-shards.mjs';
 import {readNativeReviews} from '../candidate/github-review-readback.mjs';
 import {assessNativeReviewUniqueness} from '../candidate/native-review-uniqueness.mjs';
 const REPO='deenkids7-dev/deenkids';
@@ -53,6 +53,8 @@ export function prepareRealSemanticComment({preflight,local,runId}={}){
    local?.localModelExecuted!==true||local.model!==MODEL||
    !['FAIL','INCONCLUSIVE'].includes(local.provisionalState)||
    !Number.isSafeInteger(local.findingCount)||local.findingCount<0||
+   local.rawByteCoverageProven!==true||local.originalDiffSha256!==t.diffSha256||
+   !Number.isSafeInteger(local.processedShardCount)||local.processedShardCount<1||
    local.approvalAuthorized!==false||
    local.independentReviewVerified!==false||local.publishEvent!==null||
    typeof local.localResponseSha256!=='string'||!SHA64.test(local.localResponseSha256)||
@@ -89,7 +91,8 @@ export function prepareRealSemanticComment({preflight,local,runId}={}){
    'Real local response SHA-256: '+local.localResponseSha256,
    'Protected run: '+runId,
    'Static blockers: '+preflight.blockingFindings,
-   'Semantic findings: '+local.findingCount,'',
+   'Semantic findings: '+local.findingCount,
+   'Full-diff local model parts completed: '+local.processedShardCount,'',
    'Model summary: '+text(report.summary,2000),'',
    ...lines,'',
    'Manual verification required. This native COMMENTED report has no independent',
@@ -185,10 +188,8 @@ export async function executeProtectedRealSemanticReview({
    const preflight=await runReadOnlyReviewPreflight({
      prNumber:Number(env.REVIEWER_B_TARGET_PR),
      runId,installationToken:read.token,fetchImpl});
-   const diff=Buffer.from(preflight.privateSemanticPlan.privateDiffText,'utf8');
-   const local=await executeLocalOllamaReview({
-     plan:preflight.privateSemanticPlan,trustedDiffBytes:diff,
-     runId,model:MODEL,approvedLocalPrivateProcessing:true,
+   const local=await executeCompleteLocalSemanticReview({
+     plan:preflight.privateSemanticPlan,runId,model:MODEL,
      fetchImpl:modelFetchImpl,maxOutputTokens:1024});
    const plan=prepareRealSemanticComment({preflight,local,runId});
    const writer=await createScopedReviewerBInstallationToken({
