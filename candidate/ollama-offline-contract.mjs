@@ -166,6 +166,21 @@ export function validateOfflineOllamaCompletion({
   trustedDiffBytes,expectedDiffSha256,
   maxPromptTokens=8192,maxCompletionTokens=2048
 }={}){
+  // A valid local model may exhaust its finite output budget while writing
+  // structured JSON. Distinguish ONLY this exact, safely bounded condition
+  // from malformed/wrong-model/untrusted responses, so the protected caller
+  // can attempt a single COMPLETE reanalysis of smaller authenticated shards.
+  // The truncated response is NEVER parsed, trusted or published.
+  if(response?.model===expectedModel&&response?.error===undefined&&
+     response?.done===true&&response?.done_reason==='length'&&
+     response?.message?.role==='assistant'&&
+     typeof response.message.content==='string'&&
+     Number.isSafeInteger(response?.prompt_eval_count)&&
+     response.prompt_eval_count>0&&response.prompt_eval_count<=8192&&
+     Number.isSafeInteger(response?.eval_count)&&
+     response.eval_count>0&&response.eval_count<=maxCompletionTokens&&
+     response.prompt_eval_count+response.eval_count+512<=8192)
+    deny('OLLAMA_OUTPUT_TRUNCATED');
   if(!MODELS.includes(expectedModel)||!RUN.test(runId)||
     !Number.isSafeInteger(maxPromptTokens)||maxPromptTokens<1||
     maxPromptTokens>8192||
