@@ -29,7 +29,8 @@ function text(v,max){
 }
 export function canRunRealSemanticReview(env){
  return approvedReadOnlyExecutionContext(env) &&
-   env.GITHUB_EVENT_NAME==='workflow_dispatch' &&
+   (env.GITHUB_EVENT_NAME==='workflow_dispatch'||
+    (env.GITHUB_EVENT_NAME==='push' && env.REVIEWER_B_TARGET_PR==='899')) &&
    env.GITHUB_WORKFLOW_REF===WORKFLOW &&
    env.REVIEWER_B_EXPECTED_MODEL===MODEL &&
    typeof env.REVIEWER_B_TARGET_PR==='string' &&
