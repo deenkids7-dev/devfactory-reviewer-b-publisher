@@ -112,7 +112,7 @@ test('security: changed-file encounter order is binding and cannot be sorted awa
    privateDiffText:trusted.privateDiffText,
    changedPaths:[...trusted.changedPaths].reverse()};
  assert.throws(()=>partitionRealSemanticDiff({plan:reordered}),
-   /SEMANTIC_SHARD_SCOPE_MISMATCH/);
+   /SEMANTIC_SHARD_FILE_MISMATCH/);
 });
 test('real semantic model called once per exact bounded shard, then one bound report',async()=>{
  const model=mockModel();
