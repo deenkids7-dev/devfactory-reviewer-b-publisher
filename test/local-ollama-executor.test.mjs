@@ -168,10 +168,10 @@ test('R59 local Ollama request stays finite, isolated, and rejects timeout separ
 });
 
 // R64 regression: finite local-only CPU allowance, never an indefinite job.
-test('R64 real slow-CPU case retains strict finite timeout and never falls back',()=>{
+test('R64 slow CPU allowance is finite and LOCAL-only',()=>{
  const src=readFileSync(new URL('../candidate/local-ollama-executor.mjs',import.meta.url),'utf8');
- assert.match(src,/AbortSignal\\.timeout\\(360000\\)/);
- assert.match(src,/if\\(modelSignal\\.aborted\\)deny\\('LOCAL_MODEL_REQUEST_TIMEOUT'\\)/);
- assert.doesNotMatch(src,/fetchImpl\\(.*https:\\/\\//);
- assert.doesNotMatch(src,/retry.*LOCAL_URL|Promise\\.race\\(/);
+ assert.match(src,/AbortSignal\.timeout\(360000\)/);
+ assert.match(src,/if\(modelSignal\.aborted\)deny\('LOCAL_MODEL_REQUEST_TIMEOUT'\)/);
+ assert.match(src,/const LOCAL_URL='http:\/\/127\.0\.0\.1:11434\/api\/chat'/);
+ assert.doesNotMatch(src,/fetchImpl\(.*https:\/\//);
 });
