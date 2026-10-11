@@ -37,7 +37,12 @@ COMMENTED publication only, after PRIVATE read verified in run 38140023698.
 
 If successful, the private PR will show a genuine GitHub App COMMENTED
 review with report/diff digests but no source code or claimed security PASS.
-It does **not** satisfy DevFactory's independent review gate. The real
+It does **not** satisfy DevFactory's independent review gate. A separate
+comment-only marker deliberately avoids the signed native evidence prefix
+`devfactory-reviewer-b-native:v1`, to prevent incorrect classification.
+The already published PR #899 proof on 2026-10-11 used that old native
+prefix but has NO signed envelope; it is not authoritative and MUST NOT be
+counted as reviewer PASS. Do not replace/remove existing reviews silently. The real
 quality-scored semantic engine, private report certificate verifier and
 policy branch `AUTOMATED_ATTESTED` remain release-blocked separately.
 No reviewer can authorize master merges from this canary.

@@ -5,7 +5,7 @@ const REPO_ID=1282086207;
 const SHA40=/^[a-f0-9]{40}$/;
 const SHA64=/^[a-f0-9]{64}$/;
 const RUN=/^gh-[1-9][0-9]{0,18}-[1-9][0-9]{0,18}$/;
-const MARKER=/^<!-- devfactory-reviewer-b-native:v1:[A-Za-z0-9_-]+ -->\n/;
+const MARKER=/^<!-- devfactory-reviewer-b-comment-only:v1:[a-f0-9]{32} -->\n/;
 function deny(code){throw Error(code);}
 const digest=b=>createHash('sha256').update(b).digest('hex');
 /**
@@ -33,7 +33,7 @@ export function prepareNonAuthorizingNativeComment({
     deny('NATIVE_COMMENT_UNTRUSTED_PREFLIGHT');
   const reportSha=digest(p.staticReportBytes);
   const marker=digest(Buffer.from([t.prNumber,expectedHeadSha,runId,reportSha].join(':'))).slice(0,32);
-  const body='<!-- devfactory-reviewer-b-native:v1:'+marker+' -->\n'+
+  const body='<!-- devfactory-reviewer-b-comment-only:v1:'+marker+' -->\n'+
     'Reviewer B — protected static preflight (non-authorizing)\n\n'+
     'Result: INCONCLUSIVE; semantic review, independent witness and '+
     'attested report are NOT verified.\n'+
