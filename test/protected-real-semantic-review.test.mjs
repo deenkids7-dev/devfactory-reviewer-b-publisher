@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {inspect} from 'node:util';
+import {readFileSync} from 'node:fs';
 import {canRunRealSemanticReview,prepareRealSemanticComment,
   publishRealSemanticComment,executeProtectedRealSemanticReview}
   from '../scripts/protected-real-semantic-review.mjs';
@@ -172,4 +173,15 @@ test('live HEAD drift, prior bot review, wrong bot and fake APPROVED fail closed
  ];
  for(const [em,pattern] of cases)
   await assert.rejects(()=>publishRealSemanticComment(args(em)),pattern);
+});
+
+test('long Qwen analysis must refresh the short-lived GitHub App JWT before write',()=>{
+ const src=readFileSync(new URL('../scripts/protected-real-semantic-review.mjs',
+   import.meta.url),'utf8');
+ const analysis=src.indexOf('await executeCompleteLocalSemanticReview(');
+ const refresh=src.indexOf('const writerNow=Date.now();');
+ assert.ok(analysis>0 && refresh>analysis);
+ assert.match(src,/const writerJwt=createReviewerBAppJwt\(\{privateKeyPem:pem,now:writerNow\}\)/);
+ assert.match(src,/appJwt:writerJwt,purpose:'publish',now:writerNow/);
+ assert.doesNotMatch(src,/appJwt:jwt,purpose:'publish',now,fetchImpl/);
 });
