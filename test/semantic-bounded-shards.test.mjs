@@ -4,8 +4,8 @@ import {createHash} from 'node:crypto';
 import {inspect} from 'node:util';
 import {deriveAddedLinesFromDiff} from '../candidate/diff-added-lines.mjs';
 import {prepareBoundedSemanticReview} from '../candidate/semantic-review-request.mjs';
-import {partitionRealSemanticDiff,executeCompleteLocalSemanticReview}
- from '../candidate/semantic-bounded-shards.mjs';
+import {partitionRealSemanticDiff,chooseCompleteSemanticPartition,
+ executeCompleteLocalSemanticReview} from '../candidate/semantic-bounded-shards.mjs';
 const sha=x=>createHash('sha256').update(x).digest('hex');
 const HEAD='a'.repeat(40),BASE='b'.repeat(40);
 const RUN='gh-38140023698-1';
@@ -117,9 +117,47 @@ test('security: changed-file encounter order is binding and cannot be sorted awa
  assert.throws(()=>partitionRealSemanticDiff({plan:reordered}),
    /SEMANTIC_SHARD_FILE_MISMATCH/);
 });
+test('adaptive model batching preserves ALL diff lines, with fewer or equal requests',()=>{
+ const legacy=partitionRealSemanticDiff({plan:plan(),maxChunkBytes:1536});
+ const fast=chooseCompleteSemanticPartition({plan:plan()});
+ const manual=chooseCompleteSemanticPartition({plan:plan(),fastMode:false});
+ assert.equal(manual.shardCount,legacy.shardCount);
+ assert.ok(fast.shardCount<=legacy.shardCount);
+ assert.ok(fast.shardCount>=2); // both separately authenticated changed files
+ assert.equal(fast.originalDiffSha256,sha(diff));
+ assert.equal(fast.originalByteCount,diff.length);
+ assert.equal(fast.rawByteCoverageProven,true);
+ const expected=deriveAddedLinesFromDiff({diffBytes:diff});
+ const reconstructed={};
+ for(const shard of fast.shards){
+   assert.ok(shard.byteCount<=3072);
+   const loc=deriveAddedLinesFromDiff({diffBytes:shard.privateDiffBytes});
+   reconstructed[shard.path]??=[];
+   reconstructed[shard.path].push(...loc[shard.path]);
+ }
+ assert.deepEqual(reconstructed,expected);
+ assert.equal(fast.approvalAuthorized,false);
+ assert.equal(fast.independentReviewVerified,false);
+ assert.doesNotMatch(JSON.stringify(fast),/changed_0_xxx/);
+ assert.doesNotMatch(inspect(fast),/changed_0_xxx/);
+});
+test('adaptive sizing rejects untrusted input, unknown model, or badly sized budget',()=>{
+ for(const invalid of [
+  {model:'external-cloud'},
+  {fastMode:'true'},
+  {maxOutputTokens:5000},
+  {maxOutputTokens:0},
+  {plan:null},
+  {plan:{...plan(),exactScope:{...plan().exactScope,headSha:'x'}}}
+ ]){
+  assert.throws(()=>chooseCompleteSemanticPartition({
+    plan:plan(),...invalid
+  }),/SEMANTIC_/);
+ }
+});
 test('real semantic model called once per exact bounded shard, then one bound report',async()=>{
  const model=mockModel();
- const p=partitionRealSemanticDiff({plan:plan()});
+ const p=chooseCompleteSemanticPartition({plan:plan()});
  const r=await executeCompleteLocalSemanticReview({
    plan:plan(),runId:RUN,fetchImpl:model.fetchImpl});
  assert.equal(model.count(),p.shardCount);
