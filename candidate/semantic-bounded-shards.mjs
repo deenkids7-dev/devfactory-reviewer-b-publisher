@@ -12,6 +12,7 @@ import {canonicalJson} from '../src/canonical.mjs';
 import {deriveAddedLinesFromDiff} from './diff-added-lines.mjs';
 import {prepareBoundedSemanticReview} from './semantic-review-request.mjs';
 import {executeLocalOllamaReview} from './local-ollama-executor.mjs';
+import {prepareOfflineOllamaCandidate} from './ollama-offline-contract.mjs';
 
 const REPO='deenkids7-dev/deenkids',MODEL='qwen2.5-coder:7b';
 const sha=x=>createHash('sha256').update(x).digest('hex');
@@ -165,6 +166,42 @@ export function partitionRealSemanticDiff({plan,maxChunkBytes=1536}={}){
  });
  return Object.freeze(safe);
 }
+/**
+ * Choose larger shards only when EVERY independently validated fragment fits
+ * the existing Ollama request/schema context bound, before any model request.
+ * No source line, changed file or review pass is skipped; model and protected
+ * local-only transport are unchanged. A capacity failure selects smaller
+ * fragments; all other validation errors fail closed.
+ */
+export function chooseCompleteSemanticPartition({
+ plan,model=MODEL,maxOutputTokens=1024,fastMode=true
+}={}){
+ if(typeof fastMode!=='boolean'||model!==MODEL||
+   !Number.isSafeInteger(maxOutputTokens)||maxOutputTokens<128||
+   maxOutputTokens>4096)deny('SEMANTIC_BATCH_INPUT_INVALID');
+ const widths=fastMode?[3072,2688,2304,1920,1536]:[1536];
+ for(const maxChunkBytes of widths){
+   const parts=partitionRealSemanticDiff({plan,maxChunkBytes});
+   let capacityExceeded=false;
+   for(const chunk of parts.shards){
+     const bytes=chunk.privateDiffBytes;
+     const scoped=prepareBoundedSemanticReview({
+       snapshot:snapFor(plan,bytes),rawDiffBytes:bytes
+     });
+     try{
+       // EXACT SAME strict context admission as the real model call.
+       prepareOfflineOllamaCandidate({plan:scoped,model,
+         maxOutputTokens,protectedEphemeralKeepAlive:true});
+     }catch(err){
+       if(err?.message!=='OLLAMA_CONTEXT_CAPACITY_UNVERIFIED')throw err;
+       capacityExceeded=true;
+       break;
+     }
+   }
+   if(!capacityExceeded)return parts;
+ }
+ deny('SEMANTIC_BATCH_CONTEXT_CAPACITY_UNVERIFIED');
+}
 /** Every shard is re-bound to the exact PR and its original private SHA.
  * No incomplete/model-error path yields a result. Global disposition is
  * provisional; model findings are NOT merge authority.
@@ -174,7 +211,7 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
 }={}){
  if(model!==MODEL||typeof runId!=='string'||typeof fetchImpl!=='function')
    deny('SEMANTIC_BATCH_INPUT_INVALID');
- const parts=partitionRealSemanticDiff({plan});
+ const parts=chooseCompleteSemanticPartition({plan,model,maxOutputTokens});
  const original=Buffer.from(plan.privateDiffText,'utf8');
  if(parts.originalDiffSha256!==sha(original))
    deny('SEMANTIC_BATCH_ORIGINAL_DRIFT');
