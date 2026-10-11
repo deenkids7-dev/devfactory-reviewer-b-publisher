@@ -58,15 +58,23 @@ export async function executeLocalOllamaReview({
   if(digest!==req.diffSha256||
      trustedDiffBytes.toString('utf8')!==plan.privateDiffText)
     deny('LOCAL_MODEL_DIFF_SCOPE_MISMATCH');
+  // GitHub's CPU-only Qwen 7B inference may exceed 90 seconds on one
+  // bounded shard. Keep a finite 210-second per-shard deadline, still
+  // subordinate to the protected workflow's 45-minute overall deadline.
+  // Never retry, fall back to a remote model or accept partial output.
+  const modelSignal=AbortSignal.timeout(210000);
   let response;
   try{
     response=await fetchImpl(LOCAL_URL,{
       method:'POST',redirect:'error',cache:'no-store',
-      signal:AbortSignal.timeout(90000),
+      signal:modelSignal,
       headers:{'Content-Type':'application/json','Accept':'application/json'},
       body:req.privateRequestJson
     });
-  }catch{deny('LOCAL_MODEL_REQUEST_FAILED');}
+  }catch{
+    if(modelSignal.aborted)deny('LOCAL_MODEL_REQUEST_TIMEOUT');
+    deny('LOCAL_MODEL_REQUEST_FAILED');
+  }
   // Production fetch supplies a real Headers object. Reject malformed
   // custom clients instead of accepting an ambiguous object header bag.
   let contentType,length;
