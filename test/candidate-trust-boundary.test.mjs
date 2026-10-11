@@ -28,7 +28,17 @@ test('candidate source cannot execute OS commands, log secrets or acquire ambien
 test('candidate network requests are restricted to scoped GitHub adapters',()=>{
   for(const filename of names){
     const content=readFileSync(path.join(candidate,filename),'utf8');
-    if(!networkFiles.has(filename)){
+    if(filename==='local-ollama-executor.mjs'){
+      // One explicit LOCAL-ONLY model interface, never reachable from public
+      // CI or untrusted PR code. No remote inference endpoint may be added.
+      assert.match(content,/const LOCAL_URL='http:\/\/127\.0\.0\.1:11434\/api\/chat'/);
+      assert.match(content,/approvedLocalPrivateProcessing!==true/);
+      assert.match(content,/redirect:'error'/);
+      assert.match(content,/response\.url!==LOCAL_URL/);
+      assert.match(content,/MAX_RESPONSE_BYTES=256\*1024/);
+      assert.match(content,/approvalAuthorized:false,publishEvent:null/);
+      assert.doesNotMatch(content,/https?:\/\/(?!127\.0\.0\.1:11434\/api\/chat)/);
+    } else if(!networkFiles.has(filename)){
       assert.doesNotMatch(content,/\b(?:fetchImpl|globalThis\.fetch|fetch)\s*\(/,
         filename+' must not access the network');
     } else {

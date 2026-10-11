@@ -3,14 +3,16 @@ import { inspect } from 'node:util';
 import { createReadOnlyGitHubTransport } from './github-read-only.mjs';
 import { observePrSnapshot } from '../src/github-pr-observer.mjs';
 import { runFailOnlyStaticDiffAudit } from './fail-only-static-audit.mjs';
+import { prepareBoundedSemanticReview } from './semantic-review-request.mjs';
 
 function deny(code) { throw new Error(code); }
 
 /**
  * Secret-free orchestrator, to be executed ONLY in a future privileged job
  * with an independently provisioned installation token. Does no write, no
- * model inference and no publication. The raw private diff never appears in
- * the returned object: all private bytes are kept inside this call.
+ * model inference and no publication. The raw private diff is available only
+ * via a NONENUMERABLE privateSemanticPlan getter for a separately authorized
+ * protected LOCAL model, never by default JSON, spread, or Node inspection.
  *
  * Caller must separately approve exposure before ANY use of the model
  * interface. This preflight is not a code review or an approval.
@@ -47,6 +49,10 @@ export async function runReadOnlyReviewPreflight({
     diffSha256:snapshot.diff_sha256
   });
   const report=Buffer.from(audit.reportBytes);
+  // Future protected local inference can reuse the exact same authenticated
+  // private diff without fetching an unverified second copy. This creates
+  // NO model call, grant of private-source processing, or review authority.
+  const localPlan=prepareBoundedSemanticReview({snapshot,rawDiffBytes});
   // Private file names remain sensitive even when no code line is echoed.
   const output={
     target:summary,staticDisposition:audit.provisionalState,
@@ -57,6 +63,8 @@ export async function runReadOnlyReviewPreflight({
   Object.defineProperties(output,{
     staticReportBytes:{enumerable:false,configurable:false,
       get:()=>Buffer.from(report)},
+    privateSemanticPlan:{enumerable:false,configurable:false,
+      get:()=>localPlan},
     toJSON:{enumerable:false,configurable:false,
       value:()=>({...Object.fromEntries(Object.entries(output)),
         staticReportBytes:'[REDACTED_PRIVATE_REPORT]'})},
