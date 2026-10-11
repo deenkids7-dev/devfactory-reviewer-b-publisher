@@ -1,7 +1,7 @@
 name: Reviewer B - protected PRIVATE local semantic review
 
-# Protected-main execution ONLY. One bounded R56 activation via an audited marker
-# merge on main by the service account; still subject to environment approval.
+# Protected-main execution ONLY. Service-owned issue #21 request or a
+# reviewed marker/dispatch, each subject to separate environment approval.
 # No PR-triggered execution, untrusted PR code checkout, elevated token, or retry.
 on:
   workflow_dispatch:
@@ -15,6 +15,8 @@ on:
       - main
     paths:
       - docs/reviewer-b-semantic-live-899-20261011.marker
+  issue_comment:
+    types: [created]
 
 permissions: {}
 
@@ -25,7 +27,7 @@ concurrency:
 jobs:
   protected-private-local-semantic:
     name: Real Qwen PRIVATE analysis - native COMMENT only
-    if: ${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.actor == 'devfactory-reviewer-service' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push') }}
+    if: ${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.actor == 'devfactory-reviewer-service' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'issue_comment' && github.event.action == 'created' && github.event.issue.number == 21 && !github.event.issue.pull_request)) }}
     environment: reviewer-b-publish
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -48,6 +50,15 @@ jobs:
             --output "$RUNNER_TEMP/publisher.tar.gz"
           tar -xzf "$RUNNER_TEMP/publisher.tar.gz" -C source --strip-components=1
           test -f source/scripts/protected-real-semantic-review.mjs
+          test -f source/scripts/protected-review-request.mjs
+      - name: Authenticate one review request BEFORE PRIVATE credentials
+        id: review_request
+        shell: bash
+        env:
+          REVIEWER_B_DISPATCH_PR: ${{ inputs.pr_number }}
+        run: |
+          set -euo pipefail
+          node source/scripts/protected-review-request.mjs
       - name: Install checksum-pinned Ollama BEFORE loading PRIVATE credentials
         shell: bash
         run: |
@@ -86,7 +97,8 @@ jobs:
         shell: bash
         env:
           REVIEWER_B_GITHUB_APP_PRIVATE_KEY_PEM: ${{ secrets.REVIEWER_B_GITHUB_APP_PRIVATE_KEY_PEM }}
-          REVIEWER_B_TARGET_PR: ${{ github.event_name == 'push' && '899' || inputs.pr_number }}
+          REVIEWER_B_TARGET_PR: ${{ steps.review_request.outputs.pr_number }}
+          REVIEWER_B_EXPECTED_HEAD: ${{ steps.review_request.outputs.expected_head }}
           REVIEWER_B_EXPECTED_MODEL: 'qwen2.5-coder:7b'
           OLLAMA_HOST: '127.0.0.1:11434'
           OLLAMA_NO_CLOUD: '1'
