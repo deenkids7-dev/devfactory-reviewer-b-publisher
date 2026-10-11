@@ -83,6 +83,31 @@ test('real LOCAL response is represented as COMMENT, never approval',()=>{
  assert.match(p.body,/NO automated PASS/);
  assert.doesNotMatch(p.body,/event:\s*APPROVE/);
 });
+test('protected native Qwen report declares QUICK or DEEP and Gemini is NEVER a required gate',()=>{
+ const quick=prepareRealSemanticComment({
+  preflight:preflight(),local:{...local(),reviewMode:'QUICK',
+   geminiAdvisoryRecommended:false},runId:RUN
+ });
+ assert.match(quick.body,/Local review lane: QUICK/);
+ assert.match(quick.body,/Gemini supplemental review: NOT_REQUIRED/);
+ const deep=prepareRealSemanticComment({
+  preflight:preflight(),local:{...local(),reviewMode:'DEEP',
+   geminiAdvisoryRecommended:true},runId:RUN
+ });
+ assert.match(deep.body,/Local review lane: DEEP/);
+ assert.match(deep.body,/Gemini supplemental review: SUGGESTED_NON_BLOCKING/);
+ assert.match(deep.body,/NO automated PASS or merge authority/);
+ assert.equal(quick.approvalAuthorized,false);
+ assert.equal(deep.independentReviewVerified,false);
+ for(const patch of [
+  {reviewMode:'SKIP'},
+  {reviewMode:['DEEP']},
+  {geminiAdvisoryRecommended:'true'},
+  {reviewMode:'QUICK',geminiAdvisoryRecommended:true},
+ ])assert.throws(()=>prepareRealSemanticComment({
+  preflight:preflight(),local:{...local(),...patch},runId:RUN
+ }),/REAL_SEMANTIC_PROOF_INVALID/);
+});
 test('actual model finding is bounded, attributed to changed file, still not PASS',()=>{
  const p=prepareRealSemanticComment({preflight:preflight(),
    local:local([finding()]),runId:RUN});
