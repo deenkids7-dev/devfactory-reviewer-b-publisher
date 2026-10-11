@@ -31,6 +31,7 @@ const report=(findings=[])=>Buffer.from(JSON.stringify({
 }));
 const local=(findings=[])=>({
  model:'qwen2.5-coder:7b',localModelExecuted:true,
+ rawByteCoverageProven:true,originalDiffSha256:DIFF,processedShardCount:2,
  provisionalState:findings.length?'FAIL':'INCONCLUSIVE',
  findingCount:findings.length,localResponseSha256:'d'.repeat(64),
  privateCanonicalReportBytes:report(findings),
@@ -66,6 +67,7 @@ test('real LOCAL response is represented as COMMENT, never approval',()=>{
  assert.equal(p.approvalAuthorized,false);
  assert.equal(p.independentReviewVerified,false);
  assert.match(p.body,/INCONCLUSIVE/);
+ assert.match(p.body,/Full-diff local model parts completed: 2/);
  assert.match(p.body,/Real local response SHA-256/);
  assert.match(p.body,/NO automated PASS/);
  assert.doesNotMatch(p.body,/event:\s*APPROVE/);
