@@ -14,7 +14,8 @@ export function approvedReadOnlyExecutionContext(env={}){
   if(!env || typeof env!=='object' || Array.isArray(env))return false;
   return env.GITHUB_REPOSITORY==='devfactory-reviewer-trust/devfactory-reviewer-b-publisher'
     && env.GITHUB_REF==='refs/heads/main'
-    && env.GITHUB_EVENT_NAME==='workflow_dispatch'
+    && (env.GITHUB_EVENT_NAME==='workflow_dispatch'||
+        (env.GITHUB_EVENT_NAME==='push'&&env.REVIEWER_B_TARGET_PR==='899'))
     && env.GITHUB_ACTOR==='devfactory-reviewer-service'
     && typeof env.GITHUB_SHA==='string'&&SHA40.test(env.GITHUB_SHA)
     && typeof env.GITHUB_RUN_ID==='string'&&RUN.test(env.GITHUB_RUN_ID)

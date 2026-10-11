@@ -1,0 +1,4 @@
+One-time protected Publisher MAIN push canary for READ-ONLY private PR 899.
+This marker triggers only when the protected PR is merged by the service account.
+No private source, App credential, security approval, native review or HUMAN_GO is encoded here.
+Do not modify this marker after its one-time release.

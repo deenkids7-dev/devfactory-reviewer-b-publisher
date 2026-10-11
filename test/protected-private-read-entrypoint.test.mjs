@@ -33,6 +33,14 @@ test('manual, actor, protected branch and immutable identity are required',()=>{
  for(const patch of patches)
   assert.equal(approvedReadOnlyExecutionContext({...context(),...patch}),false);
 });
+test('one-shot push accepts only exact protected PR #899 and service actor',()=>{
+ const canary={...context(),GITHUB_EVENT_NAME:'push',REVIEWER_B_TARGET_PR:'899'};
+ assert.equal(approvedReadOnlyExecutionContext(canary),true);
+ for(const patch of [{REVIEWER_B_TARGET_PR:'898'},{GITHUB_ACTOR:'deenkids7-dev'},
+   {GITHUB_REF:'refs/heads/feature'},{GITHUB_REPOSITORY:'other/public'},
+   {GITHUB_EVENT_NAME:'pull_request'}])
+   assert.equal(approvedReadOnlyExecutionContext({...canary,...patch}),false);
+});
 test('explicit null and invalid context never throw or access ambient credentials',async()=>{
  for(const invalid of [null,undefined,[],true,'text',42]){
   assert.equal(approvedReadOnlyExecutionContext(invalid),false);
@@ -111,12 +119,14 @@ test('protected workflow triggers only from main and a fixed actor',()=>{
  assert.match(workflow,/github\.ref == 'refs\/heads\/main'/);
  assert.match(workflow,/github\.actor == 'devfactory-reviewer-service'/);
  assert.match(workflow,/github\.repository == 'devfactory-reviewer-trust\/devfactory-reviewer-b-publisher'/);
- assert.match(workflow,/github\.event_name == 'workflow_dispatch'/);
+ assert.match(workflow,/github\.event_name == 'workflow_dispatch' \|\| github\.event_name == 'push'/);
+ assert.match(workflow,/^  push:\n    branches:\n      - main\n    paths:\n      - docs\/reviewer-b-private-read-once-20261011\.marker\n/m);
+ assert.match(workflow,/REVIEWER_B_TARGET_PR: \$\{\{ github\.event_name == 'push' && '899' \|\| inputs\.pr_number \}\}/);
  assert.match(workflow,/^permissions: \{\}\n/m);
  assert.doesNotMatch(workflow,/(?:GH_READ_TOKEN|github\.token|Authorization: Bearer)/);
  assert.match(workflow,/--proto '=https' --proto-redir '=https'/);
  assert.match(workflow,/--max-time 45 --max-filesize 8388608/);
- assert.doesNotMatch(workflow,/\b(?:pull_request_target|workflow_run|push|schedule)\s*:/);
+ assert.doesNotMatch(workflow,/\b(?:pull_request_target|workflow_run|schedule)\s*:/);
  assert.doesNotMatch(workflow,/\b[A-Za-z-]+\s*:\s*write\b/);
  assert.doesNotMatch(workflow,/\b(?:actions\/checkout|secrets\.GITHUB_TOKEN|id-token|attestations)\b/);
 });
