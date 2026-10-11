@@ -1,0 +1,30 @@
+name: Reviewer B - Keyless synthetic provenance proof
+
+# Manual, protected-main-only, human-held public synthetic probe.
+# Does NOT process private source or authorize reviews or merges.
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  attestations: write
+
+jobs:
+  synthetic-provenance:
+    name: Sign public synthetic provenance only
+    if: ${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.actor == 'devfactory-reviewer-service' }}
+    environment: reviewer-b-publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Create static non-private proof subject
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$RUNNER_ENVIRONMENT" = "github-hosted"
+          printf '%s\n' '{"schema":"devfactory.synthetic-provenance.v1","not_a_review":true,"private_code":false}' > reviewer-b-synthetic-proof.json
+      - name: Obtain GitHub/Sigstore attestation
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: reviewer-b-synthetic-proof.json
+          create-storage-record: false

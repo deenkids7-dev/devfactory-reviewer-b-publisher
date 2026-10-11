@@ -32,6 +32,30 @@ test('no workflow has access to private App secrets, write token or privileged t
     // Permit exactly one root permissions mapping; reject ANY nested one.
     assert.equal((contents.match(/^permissions\s*:/gm)||[]).length,1);
     assert.doesNotMatch(contents,/^[ \t]+permissions\s*:/m);
+    if(filename==='reviewer-b-keyless-synthetic-proof.yml'){
+      // One audited manual synthetic OIDC probe: no PR trigger or private
+      // source, pinned official action, no publisher signing credentials.
+      const granted=contents.match(/^permissions:\n((?: {2}[^\n]+\n)+)/m)?.[1];
+      assert.equal(granted,'  id-token: write\n  attestations: write\n');
+      assert.match(contents,/workflow_dispatch\s*:/);
+      assert.match(contents,/environment:\s*reviewer-b-publish/);
+      assert.match(contents,/github\.ref == 'refs\/heads\/main'/);
+      assert.match(contents,/github\.event_name == 'workflow_dispatch'/);
+      assert.match(contents,/github\.actor == 'devfactory-reviewer-service'/);
+      assert.match(contents,/github\.repository == 'devfactory-reviewer-trust\/devfactory-reviewer-b-publisher'/);
+      const events=contents.match(/^on:\n((?: {2}[^\n]+\n)+)/m)?.[1];
+      assert.equal(events,'  workflow_dispatch:\n');
+      const gate=contents.match(/^    if: (.+)$/m)?.[1];
+      assert.equal(gate,"\${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.actor == 'devfactory-reviewer-service' }}");
+      assert.match(contents,/actions\/attest@1e69f48acb82d1966a394da916b4c1698aa569d6/);
+      assert.equal((contents.match(/^      - name:/gm)||[]).length,2);
+      assert.match(contents,/create-storage-record:\s*false/);
+      assert.match(contents,/not_a_review/);
+      assert.doesNotMatch(contents,/\b(?:pull_request|pull_request_target|workflow_run|workflow_call|schedule|push)\s*:/);
+      assert.doesNotMatch(contents,/\b(?:secrets\.|GITHUB_TOKEN|GH_TOKEN|checkout|curl|wget|gh api)\b/);
+      assert.doesNotMatch(contents,/\b(?:contents|pull-requests|issues|actions|checks|administration)\s*:\s*write\b/);
+      continue;
+    }
     assert.doesNotMatch(contents,/\b[A-Za-z][A-Za-z-]*\s*:\s*write\b/);
     assert.doesNotMatch(contents,/\bpermissions\s*:\s*write-all\b/);
     if(filename==='reviewer-b-environment-hold-probe.yml'){
