@@ -32,6 +32,25 @@ test('manual, actor, protected branch and immutable identity are required',()=>{
  for(const patch of patches)
   assert.equal(approvedReadOnlyExecutionContext({...context(),...patch}),false);
 });
+test('explicit null and invalid context never throw or access ambient credentials',async()=>{
+ for(const invalid of [null,undefined,[],true,'text',42]){
+  assert.equal(approvedReadOnlyExecutionContext(invalid),false);
+  assert.deepEqual(await executeProtectedReadOnlyPreflight(invalid),{
+   code:'CONTEXT_DENIED',ok:false
+  });
+  assert.deepEqual(await executeProtectedReadOnlyPreflight({env:invalid}),{
+   code:'CONTEXT_DENIED',ok:false
+  });
+ }
+});
+test('null options with a valid protected context are denied before PEM access',async()=>{
+ const values=[{...context(),REVIEWER_B_GITHUB_APP_PRIVATE_KEY_PEM:null},context()];
+ for(const env of values){
+  const result=await executeProtectedReadOnlyPreflight({env,fetchImpl:null});
+  assert.equal(result.code,'CREDENTIAL_NOT_PROVISIONED');
+  assert.equal(result.ok,false);
+ }
+});
 test('no secret refuses and invokes neither HTTP nor model',async()=>{
  let calls=0;
  const result=await executeProtectedReadOnlyPreflight({

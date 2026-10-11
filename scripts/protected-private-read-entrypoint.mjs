@@ -11,6 +11,7 @@ const SHA40=/^[0-9a-f]{40}$/;
 const RUN=/^[1-9][0-9]{0,18}$/;
 const PR=/^[1-9][0-9]{0,9}$/;
 export function approvedReadOnlyExecutionContext(env={}){
+  if(!env || typeof env!=='object' || Array.isArray(env))return false;
   return env.GITHUB_REPOSITORY==='devfactory-reviewer-trust/devfactory-reviewer-b-publisher'
     && env.GITHUB_REF==='refs/heads/main'
     && env.GITHUB_EVENT_NAME==='workflow_dispatch'
@@ -22,9 +23,12 @@ export function approvedReadOnlyExecutionContext(env={}){
     && Number.isSafeInteger(Number(env.REVIEWER_B_TARGET_PR))
     && Number(env.REVIEWER_B_TARGET_PR)<=2147483647;
 }
-export async function executeProtectedReadOnlyPreflight({
-  env={},fetchImpl=fetch,now=Date.now()
-}={}){
+export async function executeProtectedReadOnlyPreflight(options={}){
+  // Untrusted optional argument objects must never throw before the
+  // context check. The CLI can only run in one exact trusted workflow.
+  const safeOptions=options && typeof options==='object' && !Array.isArray(options)
+    ?options:{};
+  const {env={},fetchImpl=fetch,now=Date.now()}=safeOptions;
   if(!approvedReadOnlyExecutionContext(env))
     return Object.freeze({code:'CONTEXT_DENIED',ok:false});
   const privateKeyPem=env.REVIEWER_B_GITHUB_APP_PRIVATE_KEY_PEM;
@@ -52,7 +56,13 @@ export async function executeProtectedReadOnlyPreflight({
 }
 
 if(process.argv[1] && fileURLToPath(import.meta.url)===resolve(process.argv[1])){
-  const result=await executeProtectedReadOnlyPreflight({env:process.env});
-  console.log(PREFIX+'_'+result.code);
-  if(!result.ok)process.exitCode=1;
+  try{
+    const result=await executeProtectedReadOnlyPreflight({env:process.env});
+    console.log(PREFIX+'_'+result.code);
+    if(!result.ok)process.exitCode=1;
+  }catch{
+    // Fail closed without exposing unexpected error messages or secrets.
+    console.log(PREFIX+'_READ_PROOF_FAILED');
+    process.exitCode=1;
+  }
 }
