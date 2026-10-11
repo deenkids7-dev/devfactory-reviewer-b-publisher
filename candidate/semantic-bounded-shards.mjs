@@ -242,26 +242,54 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
  if(parts.originalDiffSha256!==sha(original))
    deny('SEMANTIC_BATCH_ORIGINAL_DRIFT');
  const findings=[],responses=[],seen=new Set();
- let modelCalls=0;
- for(const chunk of parts.shards){
+ let modelCalls=0,attempts=0,fallbacks=0,coveredOriginalParts=0;
+ // A single transient localhost failure is recoverable by reviewing the
+ // SAME authenticated source fragment in smaller, independently validated
+ // parts. This is not a re-review or PASS: every fragment must complete.
+ // Never retry unchanged input; no remote model, new identity, or extra job.
+ async function reviewChunk(chunk,allowSplit){
    const bytes=chunk.privateDiffBytes;
    const chunkPlan=prepareBoundedSemanticReview({
      snapshot:snapFor(plan,bytes),rawDiffBytes:bytes});
-   const result=await executeLocalOllamaReview({
-     plan:chunkPlan,trustedDiffBytes:bytes,runId,
-     model,approvedLocalPrivateProcessing:true,
-     // Reuse only on the approved ephemeral LOCAL model runner. This is
-     // strictly within the one protected process; NEVER an external cache.
-     protectedEphemeralKeepAlive:true,
-     fetchImpl,maxOutputTokens});
+   if(++attempts>128)deny('SEMANTIC_BATCH_ATTEMPT_LIMIT');
+   let result;
+   try{
+     result=await executeLocalOllamaReview({
+       plan:chunkPlan,trustedDiffBytes:bytes,runId,
+       model,approvedLocalPrivateProcessing:true,
+       protectedEphemeralKeepAlive:true,
+       fetchImpl,maxOutputTokens
+     });
+   }catch(error){
+     // Only a transport failure or local CPU deadline, never a malformed
+     // response, unsafe scope, wrong model, bad content or failed proof.
+     if(!allowSplit||fallbacks!==0||
+        !['LOCAL_MODEL_REQUEST_FAILED','LOCAL_MODEL_REQUEST_TIMEOUT']
+          .includes(error?.message))throw error;
+     let smaller;
+     try{
+       smaller=partitionRealSemanticDiff({
+         plan:chunkPlan,maxChunkBytes:768});
+     }catch{throw error;}
+     if(smaller.originalDiffSha256!==sha(bytes)||
+        smaller.originalByteCount!==bytes.length||
+        smaller.shardCount<2||smaller.shardCount>10||
+        smaller.shards.some(x=>x.byteCount>=bytes.length))
+       throw error;
+     fallbacks++;
+     // Do not consume or publish a failed partial inference; subshards
+     // cover the entire original fragment in order with no line loss.
+     for(const part of smaller.shards)await reviewChunk(part,false);
+     return;
+   }
    if(result.localModelExecuted!==true||
-     result.approvalAuthorized!==false||
-     result.independentReviewVerified!==false)
+      result.approvalAuthorized!==false||
+      result.independentReviewVerified!==false)
      deny('SEMANTIC_BATCH_LOCAL_NOT_VERIFIED');
    const report=JSON.parse(result.privateCanonicalReportBytes.toString('utf8'));
    if(report.run_id!==runId||!Array.isArray(report.findings)||
-     report.findings.length!==result.findingCount)
-      deny('SEMANTIC_BATCH_INVALID_REPORT');
+      report.findings.length!==result.findingCount)
+     deny('SEMANTIC_BATCH_INVALID_REPORT');
    for(const f of report.findings){
      if(!f||typeof f!=='object'||Array.isArray(f)||
        typeof f.fingerprint!=='string'||!/^[0-9a-f]{64}$/.test(f.fingerprint))
@@ -273,7 +301,13 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
    responses.push(chunk.diffSha256+':'+result.localResponseSha256);
    modelCalls++;
  }
- if(modelCalls!==parts.shardCount)deny('SEMANTIC_BATCH_INCOMPLETE');
+ for(const chunk of parts.shards){
+   await reviewChunk(chunk,true);
+   coveredOriginalParts++;
+ }
+ if(coveredOriginalParts!==parts.shardCount||modelCalls<parts.shardCount||
+    attempts>128||fallbacks>1)
+   deny('SEMANTIC_BATCH_INCOMPLETE');
  const complete=Buffer.from(canonicalJson({
    schema:'devfactory.reviewer-b.findings.v1',
    run_id:runId,
