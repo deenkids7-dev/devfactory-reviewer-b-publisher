@@ -22,6 +22,8 @@ test('native COMMENT contains only non-authorizing digests and fixed facts',()=>
  assert.equal(x.approvalAuthorized,false);
  assert.equal(x.independentReviewVerified,false);
  assert.match(x.body,/Result: INCONCLUSIVE/);
+ assert.match(x.body,/^<!-- devfactory-reviewer-b-comment-only:v1:/);
+ assert.doesNotMatch(x.body,/devfactory-reviewer-b-native:v1:/);
  assert.match(x.body,/HUMAN_GO/);
  assert.match(x.body,new RegExp(sha));
  assert.ok(x.body.includes(createHash('sha256').update(report).digest('hex')));
