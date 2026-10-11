@@ -21,7 +21,7 @@ const WORKFLOW=PUB+'/.github/workflows/reviewer-b-private-semantic.yml@refs/head
 const digest=x=>createHash('sha256').update(x).digest('hex');
 function deny(code){throw Error(code);}
 function fail(code){return Object.freeze({ok:false,code});}
-const SAFE_DIAGNOSTIC_CODES=new Set(["LOCAL_MODEL_REQUEST_FAILED","LOCAL_MODEL_REQUEST_TIMEOUT","LOCAL_MODEL_RESPONSE_REJECTED","LOCAL_MODEL_ENDPOINT_UNVERIFIED","LOCAL_MODEL_INVALID_JSON","LOCAL_MODEL_RESPONSE_OVERSIZED","LOCAL_MODEL_ENCODING_INVALID","LOCAL_MODEL_DIFF_SCOPE_MISMATCH","OLLAMA_COMPLETION_UNVERIFIED","OLLAMA_OUTPUT_TRUNCATED","OLLAMA_CONTEXT_CAPACITY_UNVERIFIED","OLLAMA_CONTEXT_LIMIT_EXCEEDED","OLLAMA_INVALID_JSON","OLLAMA_FINDINGS_SCHEMA_INVALID","OLLAMA_FINDING_PATH_MISMATCH","OLLAMA_FINDING_LINE_INVALID","OLLAMA_FINDING_NOT_ADDED_LINE","OLLAMA_FINDING_DUPLICATE","SEMANTIC_SHARD_SOURCE_INVALID","SEMANTIC_SHARD_SCOPE_MISMATCH","SEMANTIC_SHARD_FILE_MISMATCH","SEMANTIC_SHARD_BAD_SOURCE_LINE","SEMANTIC_BATCH_INVALID_REPORT","SEMANTIC_BATCH_DUPLICATE_FINDING","SEMANTIC_BATCH_INCOMPLETE","REAL_SEMANTIC_PROOF_INVALID","REAL_SEMANTIC_REPORT_MISMATCH","SEMANTIC_POST_FAILED","SEMANTIC_POST_REJECTED","SEMANTIC_POST_UNVERIFIED","SEMANTIC_READBACK_INVALID","SEMANTIC_ALREADY_REVIEWED","APP_AUTH_API_REQUEST_FAILED","APP_AUTH_INSTALLATION_SCOPE_UNVERIFIED","PREFLIGHT_DIFF_MISMATCH","READ_PROOF_FAILED","REVIEW_REQUEST_HEAD_CHANGED"]);
+const SAFE_DIAGNOSTIC_CODES=new Set(["LOCAL_MODEL_REQUEST_FAILED","LOCAL_MODEL_REQUEST_TIMEOUT","LOCAL_MODEL_RESPONSE_REJECTED","LOCAL_MODEL_ENDPOINT_UNVERIFIED","LOCAL_MODEL_INVALID_JSON","LOCAL_MODEL_RESPONSE_OVERSIZED","LOCAL_MODEL_ENCODING_INVALID","LOCAL_MODEL_DIFF_SCOPE_MISMATCH","OLLAMA_COMPLETION_UNVERIFIED","OLLAMA_OUTPUT_TRUNCATED","OLLAMA_CONTEXT_CAPACITY_UNVERIFIED","OLLAMA_CONTEXT_LIMIT_EXCEEDED","OLLAMA_INVALID_JSON","OLLAMA_FINDINGS_SCHEMA_INVALID","OLLAMA_FINDING_PATH_MISMATCH","OLLAMA_FINDING_LINE_INVALID","OLLAMA_FINDING_NOT_ADDED_LINE","OLLAMA_FINDING_DUPLICATE","SEMANTIC_SHARD_SOURCE_INVALID","SEMANTIC_SHARD_SCOPE_MISMATCH","SEMANTIC_SHARD_FILE_MISMATCH","SEMANTIC_SHARD_BAD_SOURCE_LINE","SEMANTIC_BATCH_INVALID_REPORT","SEMANTIC_BATCH_DUPLICATE_FINDING","SEMANTIC_BATCH_INCOMPLETE","REAL_SEMANTIC_PROOF_INVALID","REAL_SEMANTIC_PRIVATE_REPORT_OVERSIZED","REAL_SEMANTIC_REPORT_MISMATCH","SEMANTIC_POST_FAILED","SEMANTIC_POST_REJECTED","SEMANTIC_POST_UNVERIFIED","SEMANTIC_READBACK_INVALID","SEMANTIC_ALREADY_REVIEWED","APP_AUTH_API_REQUEST_FAILED","APP_AUTH_INSTALLATION_SCOPE_UNVERIFIED","PREFLIGHT_DIFF_MISMATCH","READ_PROOF_FAILED","REVIEW_REQUEST_HEAD_CHANGED"]);
 const SAFE_STAGES=new Set(['TOKEN_READ','PRIVATE_PREFLIGHT','LOCAL_MODEL','PRIVATE_REPORT','TOKEN_WRITE','NATIVE_POST']);
 /** PUBLIC log may contain ONLY a static stage plus an exact audited code.
  * Never print error strings, HTTP payloads, stack traces, PRIVATE source,
@@ -54,6 +54,13 @@ export function canRunRealSemanticReview(env){
 }
 export function prepareRealSemanticComment({preflight,local,runId}={}){
  const t=preflight?.target,bytes=local?.privateCanonicalReportBytes;
+ // The full PRIVATE report can legitimately exceed the historical 16 KiB
+ // display budget after exhaustive bounded local Qwen shard analysis.
+ // Never mistake a complete report for a fake/incomplete model proof.
+ // The separately bounded native GitHub comment below remains <= 12,000
+ // chars, lists EVERY finding, and discloses compact excerpts explicitly.
+ if(Buffer.isBuffer(bytes)&&bytes.length>96*1024)
+   deny('REAL_SEMANTIC_PRIVATE_REPORT_OVERSIZED');
  if(t?.repository!==REPO||t.repositoryId!==1282086207||
    !Number.isSafeInteger(t.prNumber)||t.prNumber<1||
    typeof t.headSha!=='string'||!SHA40.test(t.headSha)||
@@ -75,7 +82,7 @@ export function prepareRealSemanticComment({preflight,local,runId}={}){
    local.approvalAuthorized!==false||
    local.independentReviewVerified!==false||local.publishEvent!==null||
    typeof local.localResponseSha256!=='string'||!SHA64.test(local.localResponseSha256)||
-   !Buffer.isBuffer(bytes)||bytes.length<40||bytes.length>16384)
+   !Buffer.isBuffer(bytes)||bytes.length<40)
     deny('REAL_SEMANTIC_PROOF_INVALID');
  let report;
  try{report=JSON.parse(bytes.toString('utf8'));}catch{deny('REPORT_JSON_INVALID');}
@@ -112,7 +119,7 @@ export function prepareRealSemanticComment({preflight,local,runId}={}){
  const marker=digest(Buffer.from([t.prNumber,t.headSha,runId,reportSha].join(':'))).slice(0,32);
  const outcome=local.provisionalState==='FAIL'||preflight.staticDisposition==='FAIL'
    ? 'PROVISIONAL_FINDINGS':'INCONCLUSIVE';
- const body=[
+ const bodyLines=[
    '<!-- devfactory-reviewer-b-semantic-comment:v1:'+marker+' -->',
    'Reviewer B real LOCAL Qwen analysis — COMMENT ONLY (not approved)',
    '', 'Result: '+outcome+'; NO automated PASS or merge authority.',
@@ -132,7 +139,36 @@ export function prepareRealSemanticComment({preflight,local,runId}={}){
    ...lines,'',
    'Manual verification required. This native COMMENTED report has no independent',
    'attestation, reviewer PASS, HUMAN_GO, MERGE_GO or merge authorization.'
- ].join('\n');
+ ];
+ let body=bodyLines.join('\n');
+ if(body.length>12000 && report.findings.length){
+   // A long valid model report must not be rejected solely because source
+   // evidence prose is verbose. Report EVERY concrete finding with exact
+   // severity/path/line and a digest of its full evidence; explicitly mark
+   // excerpts as abbreviated. Never erase a finding, grant PASS or claim
+   // the review has complete repository context.
+   const opening=bodyLines.slice(0,bodyLines.indexOf('Model summary: '+text(report.summary,2000)));
+   const concise=(value,limit,max)=>{
+     const safe=text(value,max);
+     return safe.length>limit?safe.slice(0,limit-1)+'…':safe;
+   };
+   for(const cap of [140,80,36]){
+     const compact=report.findings.map(f=>'- '+f.severity.toUpperCase()+
+       ' '+text(f.path,300)+':'+f.line+
+       ' — '+concise(f.message,cap,500)+
+       ' [full evidence SHA-256: '+digest(Buffer.from(f.evidence,'utf8'))+']');
+     body=[...opening,
+       'Model summary: '+text(report.summary,2000),'',
+       'COMPACT FINDING EXCERPTS: '+report.findings.length+
+       ' of '+report.findings.length+' authentic local Qwen findings listed;'+
+       ' descriptions abbreviated. Full canonical report is bound by SHA-256 above.',
+       ...compact,'',
+       'Manual verification required. This native COMMENTED report has no independent',
+       'attestation, reviewer PASS, HUMAN_GO, MERGE_GO or merge authorization.'
+     ].join('\n');
+     if(body.length<=12000)break;
+   }
+ }
  if(body.length>12000)deny('REPORT_BODY_TOO_LARGE');
  return Object.freeze({event:'COMMENT',body,prNumber:t.prNumber,
    headSha:t.headSha,evidenceClass:'NATIVE_SEMANTIC_COMMENT_ONLY',
