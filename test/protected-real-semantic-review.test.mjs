@@ -108,6 +108,37 @@ test('protected native Qwen report declares QUICK or DEEP and Gemini is NEVER a 
   preflight:preflight(),local:{...local(),...patch},runId:RUN
  }),/REAL_SEMANTIC_PROOF_INVALID/);
 });
+test('exhaustive large real Qwen report still lists every finding as a bounded COMMENT',()=>{
+ const alerts=Array.from({length:45},(_,i)=>({
+   severity:'high',path:'src/a.mjs',line:4,
+   message:'Concrete behavior regression '+String(i).padStart(2,'0')+' '+('m'.repeat(420)),
+   evidence:'Actual input and failing outcome '+i+' '+('e'.repeat(850)),
+   fingerprint:i.toString(16).padStart(64,'0')
+ }));
+ const large=report(alerts);
+ assert.ok(large.length>16384&&large.length<96*1024);
+ const result=prepareRealSemanticComment({
+   preflight:preflight(),
+   local:{...local(alerts),privateCanonicalReportBytes:large},
+   runId:RUN
+ });
+ assert.equal(result.event,'COMMENT');
+ assert.ok(result.body.length<=12000);
+ assert.match(result.body,/45 of 45 authentic local Qwen findings listed/);
+ assert.match(result.body,/COMPACT FINDING EXCERPTS/);
+ assert.match(result.body,/full evidence SHA-256/);
+ for(let i=0;i<45;i++)
+   assert.match(result.body,new RegExp('Concrete behavior regression '+String(i).padStart(2,'0')));
+ assert.equal(result.approvalAuthorized,false);
+ assert.equal(result.independentReviewVerified,false);
+ assert.doesNotMatch(result.body,/APPROVED|automated PASS granted/);
+});
+test('oversized full Qwen report remains fail-closed instead of silently dropping findings',()=>{
+ const over={...local(),privateCanonicalReportBytes:Buffer.alloc(96*1024+1,65)};
+ assert.throws(()=>prepareRealSemanticComment({
+   preflight:preflight(),local:over,runId:RUN
+ }),/REAL_SEMANTIC_PRIVATE_REPORT_OVERSIZED/);
+});
 test('actual model finding is bounded, attributed to changed file, still not PASS',()=>{
  const p=prepareRealSemanticComment({preflight:preflight(),
    local:local([finding()]),runId:RUN});
