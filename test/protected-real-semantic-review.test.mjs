@@ -215,6 +215,12 @@ test('live HEAD drift, prior bot review, wrong bot and fake APPROVED fail closed
   await assert.rejects(()=>publishRealSemanticComment(args(em)),pattern);
 });
 
+test('security: protected workflow never logs raw credentials, model errors or source',()=>{
+ const source=readFileSync(new globalThis.URL(
+  '../scripts/protected-real-semantic-review.mjs',import.meta.url),'utf8');
+ assert.doesNotMatch(source,/console\.(?:error|warn|debug|info)\s*\(/);
+ assert.match(source,/catch\s*\{\s*return fail\('REAL_REVIEW_FAILED_CLOSED'\);\s*\}/);
+});
 test('long Qwen analysis must refresh the short-lived GitHub App JWT before write',()=>{
  const src=readFileSync(new globalThis.URL('../scripts/protected-real-semantic-review.mjs',
    import.meta.url),'utf8');
