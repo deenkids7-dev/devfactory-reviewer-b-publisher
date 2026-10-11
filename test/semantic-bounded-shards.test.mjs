@@ -149,12 +149,54 @@ test('real HIGH finding survives complete local shard aggregation, never PASS',a
  assert.equal(report.findings[0].path,'src/alpha.mjs');
  assert.equal(r.approvalAuthorized,false);
 });
-test('one incomplete LOCAL model call rejects full review instead of partial acceptance',async()=>{
+test('one transient LOCAL failure is recovered by complete smaller authenticated fragments',async()=>{
  const model=mockModel({failAt:2});
+ const src=plan();
+ const original=planAdaptiveSemanticShards({plan:src}).partitions;
+ const done=await executeCompleteLocalSemanticReview({
+   plan:src,runId:RUN,fetchImpl:model.fetchImpl
+ });
+ assert.ok(model.count()>original.shardCount);
+ assert.ok(done.processedShardCount>original.shardCount);
+ assert.equal(done.rawByteCoverageProven,true);
+ assert.equal(done.originalDiffSha256,sha(diff));
+ assert.equal(done.localModelExecuted,true);
+ assert.equal(done.approvalAuthorized,false);
+ assert.equal(done.independentReviewVerified,false);
+ const received={};
+ for(const item of model.seen){
+   const loc=deriveAddedLinesFromDiff({diffBytes:item.bytes});
+   (received[item.path]??=[]).push(...loc[item.path]);
+ }
+ assert.equal(JSON.stringify(received),
+   JSON.stringify(deriveAddedLinesFromDiff({diffBytes:diff})));
+ assert.doesNotMatch(JSON.stringify(done),/changed_0_xxx/);
+});
+test('persistent local failure rejects ALL review output after one bounded split',async()=>{
+ const model=mockModel();
+ let attempts=0;
+ const fetchImpl=async(...args)=>{
+   attempts++;
+   if(attempts>=2)throw Error('SIMULATED_LOCAL_TRANSPORT_LOSS');
+   return model.fetchImpl(...args);
+ };
  await assert.rejects(()=>executeCompleteLocalSemanticReview({
-   plan:plan(),runId:RUN,fetchImpl:model.fetchImpl
+   plan:plan(),runId:RUN,fetchImpl
  }),/LOCAL_MODEL_REQUEST_FAILED/);
- assert.equal(model.count(),2);
+ assert.ok(attempts>=3);
+ assert.ok(attempts<=6,'must not spin indefinitely');
+});
+test('malformed local response is never retried or accepted as a model PASS',async()=>{
+ let requests=0;
+ const fetchImpl=async()=>{
+   requests++;
+   return {status:302,redirected:true,url:'https://example.invalid/',
+     headers:{get:()=> 'text/html'},body:null};
+ };
+ await assert.rejects(()=>executeCompleteLocalSemanticReview({
+   plan:plan(),runId:RUN,fetchImpl
+ }),/LOCAL_MODEL_ENDPOINT_UNVERIFIED/);
+ assert.equal(requests,1);
 });
 test('invalid diff source, changing digest, CRLF or huge line cannot be silently skipped',()=>{
  const original=plan();
