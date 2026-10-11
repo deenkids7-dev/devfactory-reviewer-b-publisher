@@ -60,6 +60,27 @@ test('no workflow has access to private App secrets, write token or privileged t
       assert.doesNotMatch(contents,/\b(?:pull_request|pull_request_target|workflow_run|schedule|workflow_dispatch)\s*:/);
       continue;
     }
+    if(filename==='reviewer-b-native-comment-once.yml'){
+      // Exactly one protected-main service-actor native COMMENTED proof.
+      // It has no GITHUB_TOKEN write access; GitHub App identity is separate.
+      assert.match(contents,/^on:\n  push:\n    branches:\n      - main\n    paths:\n      - docs\/reviewer-b-native-comment-once-20261011\.marker\n/m);
+      assert.match(contents,/^permissions: \{\}\n/m);
+      assert.match(contents,/environment:\s*reviewer-b-publish/);
+      assert.match(contents,/^concurrency:\n  group: reviewer-b-native-comment-only-pr899\n  cancel-in-progress: false\n/m);
+      const guard=contents.match(/^    if: (.+)$/m)?.[1];
+      assert.equal(guard,"\${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.actor == 'devfactory-reviewer-service' && github.event_name == 'push' }}");
+      assert.equal((contents.match(/secrets\./g)||[]).length,1);
+      assert.match(contents,/secrets\.REVIEWER_B_GITHUB_APP_PRIVATE_KEY_PEM/);
+      assert.match(contents,/REVIEWER_B_TARGET_PR: '899'/);
+      assert.match(contents,/node scripts\/protected-native-comment-entrypoint\.mjs/);
+      assert.equal((contents.match(/^      - name:/gm)||[]).length,2);
+      assert.doesNotMatch(contents,/(?:github\.token|GITHUB_TOKEN|GH_TOKEN|Authorization: Bearer)/);
+      assert.match(contents,/--proto '=https' --proto-redir '=https'/);
+      assert.match(contents,/--max-time 45 --max-filesize 8388608/);
+      assert.doesNotMatch(contents,/\b(?:pull_request|pull_request_target|workflow_dispatch|workflow_run|workflow_call|schedule)\s*:/);
+      assert.doesNotMatch(contents,/\b[A-Za-z-]+\s*:\s*write\b/);
+      continue;
+    }
     if(filename==='reviewer-b-private-readonly-preflight.yml'){
       // A distinct manual-only future privileged PRIVATE-read probe,
       // guarded by actor, protected main and the existing environment.
