@@ -279,3 +279,23 @@ test('Qwen3-Coder 30B is an explicit local-only model, never an approval',()=>{
  assert.equal(x.independentReviewVerified,false);
  assert.doesNotMatch(JSON.stringify(x),/SYNTHETIC_ONLY_PRIVATE_DIFF_EXAMPLE/);
 });
+
+test('only an internally consistent model length stop yields recoverable truncation',()=>{
+ const valid=completion('{"summary":"unfinished',{
+   done_reason:'length',eval_count:1024,prompt_eval_count:1200
+ });
+ assert.throws(()=>parse(valid,{maxCompletionTokens:1024}),
+   /OLLAMA_OUTPUT_TRUNCATED/);
+ for(const extra of [
+   {model:'remote-model'},
+   {done:false},
+   {error:'untrusted'},
+   {message:{role:'tool',content:'bad'}},
+   {eval_count:0},
+   {prompt_eval_count:8500},
+   {eval_count:5000}
+ ]){
+   assert.throws(()=>parse({...valid,...extra},{maxCompletionTokens:1024}),
+     e=>e.message!=='OLLAMA_OUTPUT_TRUNCATED');
+ }
+});
