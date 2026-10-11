@@ -135,7 +135,7 @@ test('adaptive model batching preserves ALL diff lines, with fewer or equal requ
    reconstructed[shard.path]??=[];
    reconstructed[shard.path].push(...loc[shard.path]);
  }
- assert.deepEqual(reconstructed,expected);
+ assert.deepEqual({...reconstructed},{...expected});
  assert.equal(fast.approvalAuthorized,false);
  assert.equal(fast.independentReviewVerified,false);
  assert.doesNotMatch(JSON.stringify(fast),/changed_0_xxx/);
