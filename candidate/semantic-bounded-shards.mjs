@@ -261,11 +261,14 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
        fetchImpl,maxOutputTokens
      });
    }catch(error){
-     // Only a transport failure or local CPU deadline, never a malformed
-     // response, unsafe scope, wrong model, bad content or failed proof.
+     // A valid local completion with done_reason=length is NOT acceptable:
+     // discard every byte of the incomplete model output, then independently
+     // reanalyze the SAME entire authenticated diff fragment in smaller parts.
+     // Only one such fallback total; malformed/wrong-model responses, source
+     // drift, invalid JSON/schema, and unsafe proof are never recoverable.
      if(!allowSplit||fallbacks!==0||
-        !['LOCAL_MODEL_REQUEST_FAILED','LOCAL_MODEL_REQUEST_TIMEOUT']
-          .includes(error?.message))throw error;
+        !['LOCAL_MODEL_REQUEST_FAILED','LOCAL_MODEL_REQUEST_TIMEOUT',
+          'OLLAMA_OUTPUT_TRUNCATED'].includes(error?.message))throw error;
      let smaller;
      try{
        smaller=partitionRealSemanticDiff({
