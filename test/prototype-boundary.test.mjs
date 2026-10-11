@@ -68,7 +68,9 @@ test('no workflow has access to private App secrets, write token or privileged t
       assert.match(contents,/--proto '=https' --proto-redir '=https'/);
       assert.match(contents,/--max-time 45 --max-filesize 8388608/);
       const guard=contents.match(/^    if: (.+)$/m)?.[1];
-      assert.equal(guard,"\${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.actor == 'devfactory-reviewer-service' && github.event_name == 'workflow_dispatch' }}");
+      assert.equal(guard,"\${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.actor == 'devfactory-reviewer-service' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push') }}");
+      assert.match(contents,/^on:\n  workflow_dispatch:[\s\S]*?  push:\n    branches:\n      - main\n    paths:\n      - docs\/reviewer-b-private-read-once-20261011\.marker\n/m);
+      assert.match(contents,/REVIEWER_B_TARGET_PR: \$\{\{ github\.event_name == 'push' && '899' \|\| inputs\.pr_number \}\}/);
       assert.match(contents,/^on:\n  workflow_dispatch:/m);
       assert.match(contents,/environment:\s*reviewer-b-publish/);
       assert.equal((contents.match(/secrets\./g)||[]).length,1);
@@ -76,7 +78,7 @@ test('no workflow has access to private App secrets, write token or privileged t
       assert.match(contents,/tarball\/\$\{GH_SHA\}/);
       assert.match(contents,/node scripts\/protected-private-read-entrypoint\.mjs/);
       assert.equal((contents.match(/^      - name:/gm)||[]).length,2);
-      assert.doesNotMatch(contents,/\b(?:pull_request|pull_request_target|workflow_run|workflow_call|push|schedule)\s*:/);
+      assert.doesNotMatch(contents,/\b(?:pull_request|pull_request_target|workflow_run|workflow_call|schedule)\s*:/);
       assert.doesNotMatch(contents,/\b[A-Za-z-]+\s*:\s*write\b/);
       assert.doesNotMatch(contents,/\b(?:actions\/checkout|id-token|attestations)\b/);
       continue;
