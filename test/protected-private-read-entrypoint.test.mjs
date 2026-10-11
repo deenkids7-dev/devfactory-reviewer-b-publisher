@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
-import {approvedReadOnlyExecutionContext,executeProtectedReadOnlyPreflight}
+import {approvedReadOnlyExecutionContext,executeProtectedReadOnlyPreflight,
+  assessProtectedReadOnlyResult}
   from '../scripts/protected-private-read-entrypoint.mjs';
 const workflow=readFileSync(resolve(import.meta.dirname,
  '../.github/workflows/reviewer-b-private-readonly-preflight.yml'),'utf8');
@@ -50,6 +51,35 @@ test('null options with a valid protected context are denied before PEM access',
   assert.equal(result.code,'CREDENTIAL_NOT_PROVISIONED');
   assert.equal(result.ok,false);
  }
+});
+test('malformed or contradictory dependency proof cannot claim release',()=>{
+ for(const result of [null,undefined,0,[],{}, {approvalAuthorized:false,
+    publishEvent:null,independentReviewVerified:false,
+    blockingFindings:'0',staticDisposition:'INCONCLUSIVE'},
+    {approvalAuthorized:false,publishEvent:null,independentReviewVerified:false,
+    blockingFindings:0,staticDisposition:'FAIL'},
+    {approvalAuthorized:false,publishEvent:null,independentReviewVerified:false,
+    blockingFindings:1,staticDisposition:'INCONCLUSIVE'}]){
+   const verdict=assessProtectedReadOnlyResult(result);
+   assert.equal(verdict.code,'READ_PROOF_FAILED');
+   assert.equal(verdict.ok,false);
+ }
+ const unauthorized=assessProtectedReadOnlyResult({
+   approvalAuthorized:true,publishEvent:'APPROVE',
+   independentReviewVerified:false,blockingFindings:0,
+   staticDisposition:'INCONCLUSIVE'
+ });
+ assert.deepEqual(unauthorized,{code:'FORBIDDEN_AUTHORITY',ok:false});
+ assert.deepEqual(assessProtectedReadOnlyResult({
+   approvalAuthorized:false,publishEvent:null,
+   independentReviewVerified:false,blockingFindings:0,
+   staticDisposition:'INCONCLUSIVE'
+ }),{code:'INCONCLUSIVE_NOT_REVIEWED',ok:true,reviewApproved:false});
+ assert.deepEqual(assessProtectedReadOnlyResult({
+   approvalAuthorized:false,publishEvent:null,
+   independentReviewVerified:false,blockingFindings:1,
+   staticDisposition:'FAIL'
+ }),{code:'STATIC_FINDINGS_BLOCK',ok:false,reviewApproved:false});
 });
 test('no secret refuses and invokes neither HTTP nor model',async()=>{
  let calls=0;

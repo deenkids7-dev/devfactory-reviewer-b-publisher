@@ -23,6 +23,26 @@ export function approvedReadOnlyExecutionContext(env={}){
     && Number.isSafeInteger(Number(env.REVIEWER_B_TARGET_PR))
     && Number(env.REVIEWER_B_TARGET_PR)<=2147483647;
 }
+// A malformed dependency is an unreadable proof, never a reviewer PASS.
+// Exposed only to test the safety boundary with synthetic values.
+export function assessProtectedReadOnlyResult(result){
+  if(!result || typeof result!=='object' || Array.isArray(result)||
+     !['approvalAuthorized','publishEvent','independentReviewVerified',
+       'blockingFindings','staticDisposition'].every(k=>Object.hasOwn(result,k)))
+    return Object.freeze({code:'READ_PROOF_FAILED',ok:false});
+  if(result.approvalAuthorized!==false||result.publishEvent!==null||
+     result.independentReviewVerified!==false)
+    return Object.freeze({code:'FORBIDDEN_AUTHORITY',ok:false});
+  const count=result.blockingFindings;
+  if(!Number.isSafeInteger(count)||count<0||
+     (count===0&&result.staticDisposition!=='INCONCLUSIVE')||
+     (count>0&&result.staticDisposition!=='FAIL'))
+    return Object.freeze({code:'READ_PROOF_FAILED',ok:false});
+  return Object.freeze({
+    code:count>0?'STATIC_FINDINGS_BLOCK':'INCONCLUSIVE_NOT_REVIEWED',
+    ok:count===0,reviewApproved:false
+  });
+}
 export async function executeProtectedReadOnlyPreflight(options={}){
   // Untrusted optional argument objects must never throw before the
   // context check. The CLI can only run in one exact trusted workflow.
@@ -40,14 +60,7 @@ export async function executeProtectedReadOnlyPreflight(options={}){
       runId:'gh-'+env.GITHUB_RUN_ID+'-'+env.GITHUB_RUN_ATTEMPT,
       appPrivateKeyPem:privateKeyPem,now,fetchImpl
     });
-    if(result?.approvalAuthorized!==false||result?.publishEvent!==null||
-       result?.independentReviewVerified!==false)
-      return Object.freeze({code:'FORBIDDEN_AUTHORITY',ok:false});
-    return Object.freeze({
-      code:result.blockingFindings>0?'STATIC_FINDINGS_BLOCK':'INCONCLUSIVE_NOT_REVIEWED',
-      ok:result.blockingFindings===0,
-      reviewApproved:false
-    });
+    return assessProtectedReadOnlyResult(result);
   }catch{
     // Reject all unauthorized HTTP/credential/diff errors without revealing
     // a token, private source, or underlying sensitive exception message.
