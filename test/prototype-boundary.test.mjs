@@ -80,7 +80,13 @@ test('no workflow has access to private App secrets, write token or privileged t
       assert.match(contents,/127\.0\.0\.1:11434/);
       assert.match(contents,/sha256sum -c -/);
       assert.match(contents,/node scripts\/protected-real-semantic-review\.mjs/);
-      assert.match(contents,/REVIEWER_B_TARGET_PR: \$\{\{ github\.event_name == 'push' && '899' \|\| inputs\.pr_number \}\}/);
+      assert.match(contents,/^  issue_comment:\n    types: \[created\]\n/m);
+      assert.match(contents,/github\.event\.issue\.number == 21/);
+      assert.match(contents,/github\.event\.action == 'created'/);
+      assert.match(contents,/!github\.event\.issue\.pull_request/);
+      assert.match(contents,/node source\/scripts\/protected-review-request\.mjs/);
+      assert.match(contents,/REVIEWER_B_TARGET_PR: \$\{\{ steps\.review_request\.outputs\.pr_number \}\}/);
+      assert.match(contents,/REVIEWER_B_EXPECTED_HEAD: \$\{\{ steps\.review_request\.outputs\.expected_head \}\}/);
       assert.match(contents,/github\.event_name == 'workflow_dispatch' \|\| github\.event_name == 'push'/);
       assert.match(contents,/--proto '=https' --proto-redir '=https'/);
       assert.doesNotMatch(contents,/\b(?:pull_request|pull_request_target|workflow_run|workflow_call|schedule)\s*:/);

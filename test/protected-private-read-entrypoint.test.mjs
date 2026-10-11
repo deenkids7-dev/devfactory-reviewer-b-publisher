@@ -41,6 +41,18 @@ test('one-shot push accepts only exact protected PR #899 and service actor',()=>
    {GITHUB_EVENT_NAME:'pull_request'}])
    assert.equal(approvedReadOnlyExecutionContext({...canary,...patch}),false);
 });
+test('service issue command requires a valid pinned head in protected context',()=>{
+ const cmd={...context(),GITHUB_EVENT_NAME:'issue_comment',
+   REVIEWER_B_TARGET_PR:'901',REVIEWER_B_EXPECTED_HEAD:'b'.repeat(40)};
+ assert.equal(approvedReadOnlyExecutionContext(cmd),true);
+ for(const patch of [
+   {GITHUB_ACTOR:'deenkids7-dev'},
+   {REVIEWER_B_EXPECTED_HEAD:null},
+   {REVIEWER_B_EXPECTED_HEAD:''},
+   {REVIEWER_B_EXPECTED_HEAD:'A'.repeat(40)},
+   {REVIEWER_B_TARGET_PR:'0'}
+ ])assert.equal(approvedReadOnlyExecutionContext({...cmd,...patch}),false);
+});
 test('explicit null and invalid context never throw or access ambient credentials',async()=>{
  for(const invalid of [null,undefined,[],true,'text',42]){
   assert.equal(approvedReadOnlyExecutionContext(invalid),false);
