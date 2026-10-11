@@ -183,6 +183,17 @@ test('real PRIVATE semantic report is published exactly as native COMMENTED',asy
  assert.doesNotMatch(JSON.stringify(result),/PRIVATE_TEST_SECRET/);
  assert.doesNotMatch(inspect(result),/PRIVATE_TEST_SECRET/);
 });
+test('Gemini: null or malformed native POST response fails closed',async()=>{
+ for(const invalid of [null,undefined,{}]){
+  const em=emulator();
+  await assert.rejects(()=>publishRealSemanticComment(args(em,{
+   fetchImpl:async(url,opt)=>{
+    if(url===URL+'/reviews'&&opt.method==='POST')return invalid;
+    return em.fetchImpl(url,opt);
+   }
+  })),/SEMANTIC_POST_REJECTED/);
+ }
+});
 test('cannot POST when human protected environment authorization is absent',async()=>{
  const em=emulator();
  for(const value of [undefined,false,'true',1,null]){
