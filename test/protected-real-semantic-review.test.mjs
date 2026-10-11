@@ -44,9 +44,12 @@ const finding=()=>({severity:'high',path:'src/a.mjs',line:4,
 const prepared=()=>prepareRealSemanticComment({preflight:preflight(),local:local(),runId:RUN});
 test('protected execution requires exact trusted main, workflow, actor and MODEL',()=>{
  assert.equal(canRunRealSemanticReview(env()),true);
+ assert.equal(canRunRealSemanticReview({...env(),GITHUB_EVENT_NAME:'push',
+  REVIEWER_B_TARGET_PR:'899'}),true);
  for(const patch of [
   {GITHUB_ACTOR:'deenkids7-dev'},{GITHUB_REF:'refs/heads/dev'},
-  {GITHUB_EVENT_NAME:'pull_request'},{GITHUB_EVENT_NAME:'push'},
+  {GITHUB_EVENT_NAME:'pull_request'},
+  {GITHUB_EVENT_NAME:'push',REVIEWER_B_TARGET_PR:'898'},
   {GITHUB_WORKFLOW_REF:'attacker/other'},
   {REVIEWER_B_TARGET_PR:'0'},{REVIEWER_B_TARGET_PR:'899;rm'},
   {REVIEWER_B_EXPECTED_MODEL:'gemini-expensive'},

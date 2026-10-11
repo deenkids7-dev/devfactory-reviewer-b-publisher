@@ -1,0 +1,9 @@
+Reviewer B PRIVATE LIVE canary R56 — operator one-shot activation marker
+Published from protected Publisher main by devfactory-reviewer-service.
+Target private repository: deenkids7-dev/deenkids
+Target PR: 899
+Expected observed PR head at preparation: c4f8b0cf6bdcce4a92309c2e535b43b29ba2f3dc
+Model: qwen2.5-coder:7b running on localhost within approved Publisher job
+Output: exactly one GitHub App COMMENTED report, not APPROVED.
+Authorization: require reviewer-b-publish environment approval; no GITHUB_TOKEN write access.
+This marker cannot authorize a merge, HUMAN_GO, independent PASS, or private source disclosure.
