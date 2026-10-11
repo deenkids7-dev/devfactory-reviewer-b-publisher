@@ -133,7 +133,8 @@ function extractMetadata(document, requestedPr) {
       document.base.repo.id !== REPO_ID ||
       document.head.repo.full_name !== REPO ||
       document.head.repo.id !== REPO_ID ||
-      !SHA40.test(document.head.sha) || !SHA40.test(document.base.sha) ||
+      (typeof document.head.sha!=='string'||!SHA40.test(document.head.sha)) ||
+      (typeof document.base.sha!=='string'||!SHA40.test(document.base.sha)) ||
       !Number.isSafeInteger(document.changed_files) ||
       document.changed_files < 1 || document.changed_files > MAX_CHANGED_FILES) {
     deny('GITHUB_PR_NOT_ELIGIBLE');
