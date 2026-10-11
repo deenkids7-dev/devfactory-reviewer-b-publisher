@@ -32,6 +32,25 @@ test('no workflow has access to private App secrets, write token or privileged t
     // Permit exactly one root permissions mapping; reject ANY nested one.
     assert.equal((contents.match(/^permissions\s*:/gm)||[]).length,1);
     assert.doesNotMatch(contents,/^[ \t]+permissions\s*:/m);
+    if(filename==='reviewer-b-private-readonly-preflight.yml'){
+      // ONLY this separately reviewed, operator-held job may receive
+      // a private App PEM, and it can only read the PRIVATE target.
+      const granted=contents.match(/^permissions:\n((?: {2}[^\n]+\n)+)/m)?.[1];
+      assert.equal(granted,'  contents: read\n');
+      const guard=contents.match(/^    if: (.+)$/m)?.[1];
+      assert.equal(guard,"\${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.actor == 'devfactory-reviewer-service' && github.event_name == 'workflow_dispatch' }}");
+      assert.match(contents,/^on:\n  workflow_dispatch:/m);
+      assert.match(contents,/environment:\s*reviewer-b-publish/);
+      assert.equal((contents.match(/secrets\./g)||[]).length,1);
+      assert.match(contents,/secrets\.REVIEWER_B_GITHUB_APP_PRIVATE_KEY_PEM/);
+      assert.match(contents,/tarball\/\$\{GH_SHA\}/);
+      assert.match(contents,/node scripts\/protected-private-read-entrypoint\.mjs/);
+      assert.equal((contents.match(/^      - name:/gm)||[]).length,2);
+      assert.doesNotMatch(contents,/\b(?:pull_request|pull_request_target|workflow_run|workflow_call|push|schedule)\s*:/);
+      assert.doesNotMatch(contents,/\b[A-Za-z-]+\s*:\s*write\b/);
+      assert.doesNotMatch(contents,/\b(?:actions\/checkout|id-token|attestations)\b/);
+      continue;
+    }
     if(filename==='reviewer-b-keyless-synthetic-proof.yml'){
       // One audited manual synthetic OIDC probe: no PR trigger or private
       // source, pinned official action, no publisher signing credentials.
