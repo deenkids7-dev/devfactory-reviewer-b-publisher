@@ -18,7 +18,14 @@ const sha=x=>createHash('sha256').update(x).digest('hex');
 const HUNK=/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@[^\n]*\n$/;
 function deny(code){throw Error(code);}
 function lines(s){return s.match(/[^\n]*\n|[^\n]+$/g)||[];}
-function keysEqual(a,b){return JSON.stringify(a)===JSON.stringify(b);}
+// Object.keys() hoists integer-like filenames ahead of insertion order.
+// Compare anchor membership only; exact Git diff FILE ORDER is separately
+// checked against starts[] below, so reordering private source still fails.
+function keysEqual(a,b){
+ if(!Array.isArray(a)||!Array.isArray(b)||a.length!==b.length)return false;
+ const expected=new Set(b);
+ return expected.size===b.length&&a.every(x=>expected.has(x));
+}
 function snapFor(plan,bytes){
  const s=plan.exactScope;
  return {repository:REPO,repository_id:1282086207,pr_number:s.prNumber,
