@@ -78,7 +78,8 @@ export function partitionRealSemanticDiff({plan,maxChunkBytes=1536}={}){
    const hunkMarkers=[...file.matchAll(/^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@[^\n]*\n/gm)];
    if(!hunkMarkers.length)deny('SEMANTIC_SHARD_NO_HUNKS');
    const prefix=file.slice(0,hunkMarkers[0].index);
-   if(prefix.length>512||!prefix.startsWith('diff --git a/'+path+' b/'+path+'\n'))
+   if(Buffer.byteLength(prefix,'utf8')>1024||
+     !prefix.startsWith('diff --git a/'+path+' b/'+path+'\n'))
      deny('SEMANTIC_SHARD_BAD_HEADER');
    let rebuilt=prefix;
    for(let i=0;i<hunkMarkers.length;i++){
@@ -106,7 +107,7 @@ export function partitionRealSemanticDiff({plan,maxChunkBytes=1536}={}){
        }
      }
      if(!units.length)deny('SEMANTIC_SHARD_EMPTY_HUNK');
-     let consumedOld=0,consumedNew=0,chunkLines=[],blockOld=0,blockNew=0;
+     let consumedOld=0,consumedNew=0,chunkLines=[],blockOld=0,blockNew=0,chunkBytes=0;
      const maxData=maxChunkBytes-Buffer.byteLength(prefix,'utf8')-64;
      function flush(){
        if(!chunkLines.length)return;
@@ -116,15 +117,16 @@ export function partitionRealSemanticDiff({plan,maxChunkBytes=1536}={}){
        if(Buffer.byteLength(fragment,'utf8')>maxChunkBytes)
          deny('SEMANTIC_SHARD_CHUNK_TOO_LARGE');
        shards.push(makeShard(plan,fragment,path,fileIndex));
-       chunkLines=[];blockOld=0;blockNew=0;
+       chunkLines=[];blockOld=0;blockNew=0;chunkBytes=0;
      }
      for(const unit of units){
        const size=Buffer.byteLength(unit,'utf8');
        if(size>maxData)deny('SEMANTIC_SHARD_LINE_TOO_LARGE');
        if(chunkLines.length &&
-          Buffer.byteLength(chunkLines.join(''),'utf8')+size>maxData)
+          chunkBytes+size>maxData)
           flush();
        chunkLines.push(unit);
+       chunkBytes+=size;
        const c=unit[0];
        if(c!=='+' ) {blockOld++;consumedOld++;}
        if(c!=='-' ) {blockNew++;consumedNew++;}
@@ -187,6 +189,9 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
      report.findings.length!==result.findingCount)
       deny('SEMANTIC_BATCH_INVALID_REPORT');
    for(const f of report.findings){
+     if(!f||typeof f!=='object'||Array.isArray(f)||
+       typeof f.fingerprint!=='string'||!/^[0-9a-f]{64}$/.test(f.fingerprint))
+       deny('SEMANTIC_BATCH_INVALID_REPORT');
      if(seen.has(f.fingerprint))deny('SEMANTIC_BATCH_DUPLICATE_FINDING');
      seen.add(f.fingerprint);
      findings.push(f);
