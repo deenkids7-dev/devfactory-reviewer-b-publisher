@@ -40,9 +40,9 @@ To reconstitute the public subject byte-for-byte for an authorized
 post-run verification on a trusted local machine:
 
 ```sh
-printf '%s\\n' '{"schema":"devfactory.synthetic-provenance.v1","not_a_review":true,"private_code":false}' > reviewer-b-synthetic-proof.json
-gh attestation verify reviewer-b-synthetic-proof.json \\
-  -R devfactory-reviewer-trust/devfactory-reviewer-b-publisher \\
+printf '%s\n' '{"schema":"devfactory.synthetic-provenance.v1","not_a_review":true,"private_code":false}' > reviewer-b-synthetic-proof.json
+gh attestation verify reviewer-b-synthetic-proof.json \
+  -R devfactory-reviewer-trust/devfactory-reviewer-b-publisher \
   --signer-workflow devfactory-reviewer-trust/devfactory-reviewer-b-publisher/.github/workflows/reviewer-b-keyless-synthetic-proof.yml
 ```
 
