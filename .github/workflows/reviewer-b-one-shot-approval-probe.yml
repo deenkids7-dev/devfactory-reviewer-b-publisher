@@ -1,0 +1,36 @@
+name: Reviewer B - One-shot no-secret protected-environment hold
+# A single operator-authorized bootstrapping proof; NEVER a code review.
+# A push to the one frozen marker file starts a protected-main job exactly
+# once on merge. No token, secret, network or private source.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - docs/reviewer-b-one-shot-approval-20261011.marker
+
+permissions: {}
+
+jobs:
+  verify-environment-hold:
+    name: Verify operator-held environment without secrets
+    if: ${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.event_name == 'push' && github.actor == 'devfactory-reviewer-service' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    environment: reviewer-b-publish
+    steps:
+      - name: Confirm explicitly approved protected-main execution
+        shell: bash
+        env:
+          EXPECT_REPO: ${{ github.repository }}
+          EXPECT_REF: ${{ github.ref }}
+          EXPECT_EVENT: ${{ github.event_name }}
+          EXPECT_ACTOR: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          test "$EXPECT_REPO" = "devfactory-reviewer-trust/devfactory-reviewer-b-publisher"
+          test "$EXPECT_REF" = "refs/heads/main"
+          test "$EXPECT_EVENT" = "push"
+          test "$EXPECT_ACTOR" = "devfactory-reviewer-service"
+          test "$RUNNER_ENVIRONMENT" = "github-hosted"
+          echo "NO_SECRETS_APPROVAL_GATE_RELEASED"
