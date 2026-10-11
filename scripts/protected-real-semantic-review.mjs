@@ -101,6 +101,13 @@ export function prepareRealSemanticComment({preflight,local,runId}={}){
    return '- '+f.severity.toUpperCase()+' '+text(f.path,300)+
      ':'+f.line+' — '+text(f.message,500)+' (Evidence: '+text(f.evidence,1000)+')';
  });
+ const reviewMode=local.reviewMode??'DEEP';
+ if(!['QUICK','DEEP'].includes(reviewMode)||
+    (local.geminiAdvisoryRecommended!==undefined &&
+     typeof local.geminiAdvisoryRecommended!=='boolean')||
+    (reviewMode==='QUICK' && local.geminiAdvisoryRecommended===true))
+   deny('REAL_SEMANTIC_PROOF_INVALID');
+ const advisory=local.geminiAdvisoryRecommended===true;
  const reportSha=digest(bytes);
  const marker=digest(Buffer.from([t.prNumber,t.headSha,runId,reportSha].join(':'))).slice(0,32);
  const outcome=local.provisionalState==='FAIL'||preflight.staticDisposition==='FAIL'
@@ -117,7 +124,10 @@ export function prepareRealSemanticComment({preflight,local,runId}={}){
    'Protected run: '+runId,
    'Static blockers: '+preflight.blockingFindings,
    'Semantic findings: '+local.findingCount,
-   'Full-diff local model parts completed: '+local.processedShardCount,'',
+   'Full-diff local model parts completed: '+local.processedShardCount,
+   'Local review lane: '+reviewMode,
+   'Gemini supplemental review: '+(advisory
+     ?'SUGGESTED_NON_BLOCKING':'NOT_REQUIRED'),'',
    'Model summary: '+text(report.summary,2000),'',
    ...lines,'',
    'Manual verification required. This native COMMENTED report has no independent',
