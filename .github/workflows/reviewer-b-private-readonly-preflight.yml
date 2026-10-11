@@ -1,0 +1,50 @@
+name: Reviewer B - PRIVATE read-only approval-held preflight
+
+# DO NOT MERGE until the workflow, environment policy and App scopes are
+# reviewed. This can NEVER post a review or merge a PR.
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Explicit PRIVATE deenkids PR number (non-draft only)"
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  approved-private-read:
+    name: Manual PRIVATE read-only preflight (NO REVIEW)
+    if: ${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.actor == 'devfactory-reviewer-service' && github.event_name == 'workflow_dispatch' }}
+    environment: reviewer-b-publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read trusted Publisher source at protected main commit
+        shell: bash
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$GH_REPO" = "devfactory-reviewer-trust/devfactory-reviewer-b-publisher"
+          [[ "$GH_SHA" =~ ^[0-9a-f]{40}$ ]]
+          mkdir source
+          # PUBLIC source: never attach an ambient token to a redirect.
+          # HTTPS-only, bounded archive from the exact protected commit.
+          curl --fail --silent --show-error --location --retry 2 \
+            --proto '=https' --proto-redir '=https' \
+            --max-time 45 --max-filesize 8388608 \
+            --header 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/${GH_REPO}/tarball/${GH_SHA}" \
+            --output trusted-source.tar.gz
+          tar -xzf trusted-source.tar.gz -C source --strip-components=1
+      - name: Bounded immutable PRIVATE read, no code or secrets in logs
+        shell: bash
+        env:
+          REVIEWER_B_GITHUB_APP_PRIVATE_KEY_PEM: ${{ secrets.REVIEWER_B_GITHUB_APP_PRIVATE_KEY_PEM }}
+          REVIEWER_B_TARGET_PR: ${{ inputs.pr_number }}
+        run: |
+          set -euo pipefail
+          cd source
+          node scripts/protected-private-read-entrypoint.mjs

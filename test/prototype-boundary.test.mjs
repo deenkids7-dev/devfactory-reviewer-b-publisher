@@ -60,6 +60,27 @@ test('no workflow has access to private App secrets, write token or privileged t
       assert.doesNotMatch(contents,/\b(?:pull_request|pull_request_target|workflow_run|schedule|workflow_dispatch)\s*:/);
       continue;
     }
+    if(filename==='reviewer-b-private-readonly-preflight.yml'){
+      // A distinct manual-only future privileged PRIVATE-read probe,
+      // guarded by actor, protected main and the existing environment.
+      assert.match(contents,/^permissions: \{\}\n/m);
+      assert.doesNotMatch(contents,/(?:GH_READ_TOKEN|github\.token|Authorization: Bearer)/);
+      assert.match(contents,/--proto '=https' --proto-redir '=https'/);
+      assert.match(contents,/--max-time 45 --max-filesize 8388608/);
+      const guard=contents.match(/^    if: (.+)$/m)?.[1];
+      assert.equal(guard,"\${{ github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.ref == 'refs/heads/main' && github.actor == 'devfactory-reviewer-service' && github.event_name == 'workflow_dispatch' }}");
+      assert.match(contents,/^on:\n  workflow_dispatch:/m);
+      assert.match(contents,/environment:\s*reviewer-b-publish/);
+      assert.equal((contents.match(/secrets\./g)||[]).length,1);
+      assert.match(contents,/secrets\.REVIEWER_B_GITHUB_APP_PRIVATE_KEY_PEM/);
+      assert.match(contents,/tarball\/\$\{GH_SHA\}/);
+      assert.match(contents,/node scripts\/protected-private-read-entrypoint\.mjs/);
+      assert.equal((contents.match(/^      - name:/gm)||[]).length,2);
+      assert.doesNotMatch(contents,/\b(?:pull_request|pull_request_target|workflow_run|workflow_call|push|schedule)\s*:/);
+      assert.doesNotMatch(contents,/\b[A-Za-z-]+\s*:\s*write\b/);
+      assert.doesNotMatch(contents,/\b(?:actions\/checkout|id-token|attestations)\b/);
+      continue;
+    }
     if(filename==='reviewer-b-keyless-synthetic-proof.yml'){
       // One audited manual synthetic OIDC probe: no PR trigger or private
       // source, pinned official action, no publisher signing credentials.
