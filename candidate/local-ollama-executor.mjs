@@ -45,14 +45,15 @@ async function consumeBounded(response){
 export async function executeLocalOllamaReview({
   plan,trustedDiffBytes,runId,model='qwen2.5-coder:7b',
   approvedLocalPrivateProcessing=false,fetchImpl=globalThis.fetch,
-  maxOutputTokens=2048
+  maxOutputTokens=2048,protectedEphemeralKeepAlive=false
 }={}){
   if(approvedLocalPrivateProcessing!==true)
     deny('LOCAL_PRIVATE_PROCESSING_NOT_AUTHORIZED');
-  if(typeof fetchImpl!=='function'||!Buffer.isBuffer(trustedDiffBytes))
+  if(typeof protectedEphemeralKeepAlive!=='boolean'||
+     typeof fetchImpl!=='function'||!Buffer.isBuffer(trustedDiffBytes))
     deny('LOCAL_MODEL_INPUT_UNVERIFIED');
   const req=prepareOfflineOllamaCandidate({
-    plan,model,maxOutputTokens
+    plan,model,maxOutputTokens,protectedEphemeralKeepAlive
   });
   const digest=createHash('sha256').update(trustedDiffBytes).digest('hex');
   if(digest!==req.diffSha256||
