@@ -9,3 +9,5 @@ Authorization: require reviewer-b-publish environment approval; no GITHUB_TOKEN 
 This marker cannot authorize a merge, HUMAN_GO, independent PASS, or private source disclosure.
 
 R57 one-shot diagnostic retry: the prior protected run 38154396284 failed closed after real local model processing. This protected merge invokes the existing service-only marker workflow once more for PR899. The new public error code is a static allowlisted stage and cause; no PRIVATE source, credentials, model output, or stack traces are exposed.
+
+R58 protected canary: after run 38155073087 rejected a model finding outside its GitHub NEW-side added-line scope (OLLAMA_FINDING_NOT_ADDED_LINE), constrain Qwen structured response line enum to authenticated allowed added lines in each bounded shard. Final strict independent line validation stays enabled; fail closed if the model violates it. Re-arm only the existing one-shot service marker, separate protected environment approval required.
