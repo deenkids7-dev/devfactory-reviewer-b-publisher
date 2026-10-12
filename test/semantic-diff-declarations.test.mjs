@@ -101,7 +101,7 @@ test('R74 unchanged context declarations are present on HEAD, removed declaratio
 test('R77 rejects a cross-shard declaration index from another SHA-256 diff with the SAME HEAD/BASE',()=>{
  const originalPlan=plan();
  const index=makeBoundedDiffDeclarationIndex({plan:originalPlan});
- const changed=Buffer.from(file('src/usage.mjs',' old\\n+differentCall();\\n',1,2));
+ const changed=Buffer.from(file('src/usage.mjs',' old\n+differentCall();\n',1,2));
  const syntheticSameHead=plan(changed);
  assert.equal(syntheticSameHead.exactScope.headSha,originalPlan.exactScope.headSha);
  assert.equal(syntheticSameHead.exactScope.baseSha,originalPlan.exactScope.baseSha);
