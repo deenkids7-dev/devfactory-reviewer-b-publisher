@@ -73,7 +73,7 @@ test('R58 constraints forbid citing removed lines in single-file model grammar',
  assert.throws(()=>parse(completion(invalid)),
   /OLLAMA_FINDING_NOT_ADDED_LINE/);
 });
-test('R70 removed-only auth check cannot generate an empty allegedly complete review',()=>{
+test('R75 pure removal supports real OLD-side findings, never a fake NEW line',()=>{
  const onlyDeleted=Buffer.from(
   'diff --git a/src/deleted.mjs b/src/deleted.mjs\n'+
   'index 1234567..abcdef0 100644\n--- a/src/deleted.mjs\n'+
@@ -84,17 +84,40 @@ test('R70 removed-only auth check cannot generate an empty allegedly complete re
   pr_number:898,head_sha:'a'.repeat(40),base_sha:'b'.repeat(40),
   diff_sha256:createHash('sha256').update(onlyDeleted).digest('hex')
  },rawDiffBytes:onlyDeleted});
- assert.throws(()=>prepareOfflineOllamaCandidate({plan:p}),
-  /DIFF_DELETION_ONLY_UNANCHORED/);
- assert.throws(()=>validateOfflineOllamaCompletion({
-  response:{model:'qwen2.5-coder:7b',done:true,done_reason:'stop',
-   message:{role:'assistant',content:noIssues},
-   prompt_eval_count:400,eval_count:100},
-  expectedModel:'qwen2.5-coder:7b',runId:'test-run-R70',
+ const request=JSON.parse(prepareOfflineOllamaCandidate({plan:p}).privateRequestJson);
+ const spec=request.format.properties.findings.items;
+ assert.deepEqual(spec.properties.line.enum,[1]);
+ assert.deepEqual(spec.properties.side.enum,['OLD']);
+ assert.ok(spec.required.includes('side'));
+ assert.notEqual(request.format.properties.findings.maxItems,0);
+ const opts={
+  expectedModel:'qwen2.5-coder:7b',runId:'test-run-R75',
   trustedChangedPaths:['src/deleted.mjs'],trustedDiffBytes:onlyDeleted,
   expectedDiffSha256:createHash('sha256').update(onlyDeleted).digest('hex'),
   maxCompletionTokens:2048
- }),/DIFF_DELETION_ONLY_UNANCHORED/);
+ };
+ const responseFor=f=>({model:'qwen2.5-coder:7b',
+  done:true,done_reason:'stop',message:{role:'assistant',
+   content:JSON.stringify({summary:'Actual auth guard removed',findings:[f]})},
+  prompt_eval_count:400,eval_count:100});
+ const found={side:'OLD',severity:'critical',path:'src/deleted.mjs',line:1,
+  message:'Removing the authorization guard lets an unauthenticated input through',
+  evidence:'Before rejected unauthenticated input; after no check remains'};
+ const result=validateOfflineOllamaCompletion({...opts,response:responseFor(found)});
+ assert.equal(result.findingCount,1);
+ assert.equal(result.provisionalState,'FAIL');
+ const decoded=JSON.parse(result.privateCanonicalReportBytes.toString('utf8'));
+ assert.equal(decoded.findings[0].side,'OLD');
+ assert.equal(decoded.findings[0].line,1);
+ assert.throws(()=>validateOfflineOllamaCompletion({
+  ...opts,response:responseFor({...found,side:'NEW'})
+ }),/OLLAMA_FINDING_NOT_ADDED_LINE/);
+ assert.throws(()=>validateOfflineOllamaCompletion({
+  ...opts,response:responseFor({...found,line:99})
+ }),/OLLAMA_FINDING_NOT_REMOVED_LINE/);
+ assert.throws(()=>validateOfflineOllamaCompletion({
+  ...opts,response:responseFor((({side,...rest})=>rest)(found))
+ }),/OLLAMA_FINDING_SIDE_REQUIRED/);
 });
 test('protected ephemeral model reuse is explicit, time-limited and off by default',()=>{
  const legacy=JSON.parse(prepareOfflineOllamaCandidate({plan:plan()}).privateRequestJson);
