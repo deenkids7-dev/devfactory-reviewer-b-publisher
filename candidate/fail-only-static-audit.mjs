@@ -62,7 +62,10 @@ export function runFailOnlyStaticDiffAudit({diffBytes,runId}={}){
     }
     if(line.startsWith('@@ ')){
       newLine=newLineFromHunk(line);
-      if(newLine===null||newLine<1)deny('STATIC_AUDIT_HUNK_INVALID');
+      // New-side start=0 is valid only for a deletion-only hunk. The
+      // independently authenticated Git diff parser below rejects a
+      // positive new-side span starting at zero, so no finding can cite 0.
+      if(newLine===null||newLine<0)deny('STATIC_AUDIT_HUNK_INVALID');
       continue;
     }
     if(!currentPath||newLine===null)continue;
