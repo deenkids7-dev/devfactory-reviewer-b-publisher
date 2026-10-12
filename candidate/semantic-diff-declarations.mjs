@@ -115,6 +115,10 @@ export function verifiedDiffDeclarationSummary({index,plan}={}){
    index.prNumber!==plan.exactScope.prNumber||
    index.headSha!==plan.exactScope.headSha||
    index.baseSha!==plan.exactScope.baseSha||
+   // The original immutable diff identity must be exact, not inferred only
+   // from HEAD/BASE. A synthetic or stale cross-shard index can never add
+   // declarations from a different authenticated diff.
+   index.originalDiffSha256!==plan.exactScope.diffSha256||
    !Array.isArray(plan.changedPaths)||
    plan.changedPaths.some(path=>typeof path!=='string'))
    deny();
