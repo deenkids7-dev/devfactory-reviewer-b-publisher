@@ -304,13 +304,22 @@ export async function executeProtectedRealSemanticReview({
    // LOCAL inference may run longer than the initial App JWT's 8-minute TTL.
    // Mint the purpose-separated WRITE token with a fresh App JWT only AFTER
    // the complete PRIVATE model report is validated. No bearer survives a retry.
+   // The initial READ installation token lasts at most one hour; full CPU
+   // analysis can exceed that. Re-mint after inference, with READ-only scope.
+   // Native uniqueness and exact HEAD are then rechecked with this token
+   // both before and after the COMMENTED POST, fail closed on any mismatch.
+   stage='TOKEN_READ_REFRESH';
+   const refreshedReadNow=Date.now();
+   const refreshedReadJwt=createReviewerBAppJwt({privateKeyPem:pem,now:refreshedReadNow});
+   const refreshedRead=await createScopedReviewerBInstallationToken({
+     appJwt:refreshedReadJwt,purpose:'reviewRead',now:refreshedReadNow,fetchImpl});
    stage='TOKEN_WRITE';
    const writerNow=Date.now();
    const writerJwt=createReviewerBAppJwt({privateKeyPem:pem,now:writerNow});
    const writer=await createScopedReviewerBInstallationToken({
      appJwt:writerJwt,purpose:'publish',now:writerNow,fetchImpl});
    stage='NATIVE_POST';
-   return await publishRealSemanticComment({plan,readToken:read.token,
+   return await publishRealSemanticComment({plan,readToken:refreshedRead.token,
      writeToken:writer.token,approvedProtectedPublication:true,fetchImpl});
  }catch(error){
    return fail(classifyProtectedReviewFailure(stage,error));
