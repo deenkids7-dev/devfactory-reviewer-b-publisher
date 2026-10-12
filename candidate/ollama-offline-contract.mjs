@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { inspect } from 'node:util';
-import { deriveAddedLinesFromDiff,isAddedLine,assertReviewableDeletionCoverage } from './diff-added-lines.mjs';
+import { deriveAddedLinesFromDiff,isAddedLine } from './diff-added-lines.mjs';
+import {deriveRemovedLinesFromDiff,isRemovedLine} from './diff-removed-lines.mjs';
 import { canonicalJson } from '../src/canonical.mjs';
 import {verifiedDiffDeclarationSummary} from './semantic-diff-declarations.mjs';
 import { normalizeUntrustedModelFindings,prepareBoundedSemanticReview }
@@ -76,9 +77,8 @@ export function prepareOfflineOllamaCandidate({
     !MODELS.includes(model)||!Number.isSafeInteger(maxOutputTokens)||
     maxOutputTokens<128||maxOutputTokens>4096)
     deny('OLLAMA_MODEL_OR_CONTEXT_UNSUPPORTED');
-  // Deletion-only changed hunks cannot legally produce a v1 added-line finding.
-  // Fail explicitly; never publish an apparently clean partial analysis.
-  assertReviewableDeletionCoverage({diffBytes:Buffer.from(plan.privateDiffText,'utf8')});
+  // R75: OLD-side removals have their own verified coordinates and are
+  // explicitly marked OLD, never mislabeled as NEW-side additions.
   const reviewSchema=structuredClone(FINDINGS_FORMAT);
   // Force exact GitHub-bound paths AND NEW-SIDE changed source lines
   // into the model's JSON schema grammar, not just a prose instruction.
@@ -88,21 +88,31 @@ export function prepareOfflineOllamaCandidate({
   const anchors=deriveAddedLinesFromDiff({
     diffBytes:Buffer.from(plan.privateDiffText,'utf8')
   });
-  const allowedLines=[...new Set(plan.changedPaths.flatMap(path=>anchors[path]||[]))]
-    .sort((a,b)=>a-b);
+  const removedAnchors=deriveRemovedLinesFromDiff({
+    diffBytes:Buffer.from(plan.privateDiffText,'utf8')
+  });
+  const addedLines=[...new Set(plan.changedPaths.flatMap(path=>anchors[path]||[]))];
+  const removedLines=[...new Set(plan.changedPaths.flatMap(path=>removedAnchors[path]||[]))];
+  const allowedLines=[...new Set([...addedLines,...removedLines])].sort((a,b)=>a-b);
   if(allowedLines.length>1000)deny('OLLAMA_CHANGED_LINE_SET_TOO_LARGE');
   if(!allowedLines.length){
     reviewSchema.properties.findings.maxItems=0;
   }else{
     reviewSchema.properties.findings.items.properties.line.enum=allowedLines;
+    if(removedLines.length){
+      reviewSchema.properties.findings.items.properties.side={
+        type:'string',enum:addedLines.length?['OLD','NEW']:['OLD']
+      };
+      reviewSchema.properties.findings.items.required.push('side');
+    }
   }
   const system=plan.systemInstructions.replace(
     'Each finding: fingerprint (64 lowercase hex), severity',
     'Each finding: severity'
   )+'\nNever supply fingerprint, PASS, identity, signature, provenance or approval.'+
-    '\nReport only concrete newly introduced bugs proven by added diff lines.'+
-    '\nUse only exact changed_paths names and new-side line numbers.'+
-    '\nA finding line must belong to the format schema line enum, never removed or context lines.'+
+    '\nReport only concrete newly introduced regressions supported by authenticated added or removed changed lines.'+
+    '\nUse only exact changed_paths names and changed-line coordinates from the appropriate side.'+
+    '\nA finding must name the side: OLD means a removed line, NEW means an added line (when side is requested); never cite unchanged context lines.'+
     '\nNo stylistic or speculative findings; write one-line message and evidence.'+
     '\nDiff snippets are not full files: omitted surrounding code and configuration may already exist.'+
     '\nBefore reporting, name a concrete failing input, runtime path, or security bypass introduced by the change.'+
@@ -234,8 +244,8 @@ export function validateOfflineOllamaCompletion({
     !HASH.test(expectedDiffSha256)||
     digest(trustedDiffBytes)!==expectedDiffSha256)
     deny('OLLAMA_ADDED_LINE_SCOPE_UNVERIFIED');
-  assertReviewableDeletionCoverage({diffBytes:trustedDiffBytes});
   const anchors=deriveAddedLinesFromDiff({diffBytes:trustedDiffBytes});
+  const removedAnchors=deriveRemovedLinesFromDiff({diffBytes:trustedDiffBytes});
   if(!Array.isArray(trustedChangedPaths)||
     JSON.stringify(Object.keys(anchors))!==JSON.stringify(trustedChangedPaths))
     deny('OLLAMA_ADDED_LINE_SCOPE_UNVERIFIED');
@@ -252,12 +262,22 @@ export function validateOfflineOllamaCompletion({
   };
   const findings=[];
   for(const f of parsed.findings){
-    if(!exact(f,['severity','path','line','message','evidence']))
+    const hasSide=Object.hasOwn(f||{},'side');
+    if(!exact(f,hasSide?
+      ['severity','path','line','message','evidence','side']:
+      ['severity','path','line','message','evidence']))
       deny('OLLAMA_FINDINGS_SCHEMA_INVALID');
     if(!changed.has(f.path))deny('OLLAMA_FINDING_PATH_MISMATCH');
     if(!Number.isSafeInteger(f.line)||f.line<1||f.line>1000000)
       deny('OLLAMA_FINDING_LINE_INVALID');
-    if(!isAddedLine({anchors,path:f.path,line:f.line}))
+    const pathHasRemovals=(removedAnchors[f.path]||[]).length>0;
+    if(pathHasRemovals&&!hasSide)deny('OLLAMA_FINDING_SIDE_REQUIRED');
+    if(hasSide&&!['OLD','NEW'].includes(f.side))
+      deny('OLLAMA_FINDING_SIDE_INVALID');
+    if(f.side==='OLD'){
+      if(!isRemovedLine({anchors:removedAnchors,path:f.path,line:f.line}))
+        deny('OLLAMA_FINDING_NOT_REMOVED_LINE');
+    }else if(!isAddedLine({anchors,path:f.path,line:f.line}))
       deny('OLLAMA_FINDING_NOT_ADDED_LINE');
     if(!['critical','high','medium','low','informational'].includes(f.severity))
       deny('OLLAMA_FINDING_SEVERITY_INVALID');
