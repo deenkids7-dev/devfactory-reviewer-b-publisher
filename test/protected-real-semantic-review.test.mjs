@@ -126,12 +126,32 @@ test('exhaustive large real Qwen report still lists every finding as a bounded C
  assert.ok(result.body.length<=12000);
  assert.match(result.body,/45 of 45 authentic local Qwen findings listed/);
  assert.match(result.body,/COMPACT FINDING EXCERPTS/);
- assert.match(result.body,/full evidence SHA-256/);
+ assert.match(result.body,/Evidence excerpt:/);
+ assert.match(result.body,/Actual input and failing outcome/);
  for(let i=0;i<45;i++)
    assert.match(result.body,new RegExp('Concrete behavior regression '+String(i).padStart(2,'0')));
  assert.equal(result.approvalAuthorized,false);
  assert.equal(result.independentReviewVerified,false);
  assert.doesNotMatch(result.body,/APPROVED|automated PASS granted/);
+});
+test('R69 noisy 47-finding native review contains readable evidence and no authority',()=>{
+ const alerts=Array.from({length:47},(_,i)=>({
+  severity:i%4===0?'critical':'high',path:'src/a.mjs',line:4,
+  message:'Undefined symbol finding '+i+' requires checking imported declarations '+('m'.repeat(380)),
+  evidence:'Claim based on isolated shard '+i+'; inspect complete source scope '+('e'.repeat(700)),
+  fingerprint:i.toString(16).padStart(64,'0')
+ }));
+ const result=prepareRealSemanticComment({preflight:preflight(),
+  local:{...local(alerts),privateCanonicalReportBytes:report(alerts)},runId:RUN});
+ assert.equal(result.event,'COMMENT');
+ assert.ok(result.body.length<=12000);
+ assert.match(result.body,/47 of 47 authentic local Qwen findings listed/);
+ assert.match(result.body,/Evidence excerpt:/);
+ assert.match(result.body,/Undefined symbol finding/);
+ assert.match(result.body,/Claim based on isolated shard/);
+ for(let i=1;i<=47;i++)assert.ok(result.body.includes('- #'+i+' '));
+ assert.equal(result.approvalAuthorized,false);
+ assert.equal(result.independentReviewVerified,false);
 });
 test('oversized full Qwen report remains fail-closed instead of silently dropping findings',()=>{
  const over={...local(),privateCanonicalReportBytes:Buffer.alloc(96*1024+1,65)};

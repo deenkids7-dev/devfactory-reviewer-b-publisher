@@ -152,16 +152,18 @@ export function prepareRealSemanticComment({preflight,local,runId}={}){
      const safe=text(value,max);
      return safe.length>limit?safe.slice(0,limit-1)+'…':safe;
    };
-   for(const cap of [140,80,36]){
-     const compact=report.findings.map(f=>'- '+f.severity.toUpperCase()+
-       ' '+text(f.path,300)+':'+f.line+
+   // Preserve readable excerpts of BOTH each claim and its evidence;
+   // a digest alone cannot support operator triage of a large Qwen report.
+   for(const cap of [120,80,48,24]){
+     const compact=report.findings.map((f,i)=>'- #'+(i+1)+' '+
+       f.severity.toUpperCase()+' '+text(f.path,300)+':'+f.line+
        ' — '+concise(f.message,cap,500)+
-       ' [full evidence SHA-256: '+digest(Buffer.from(f.evidence,'utf8'))+']');
+       ' | Evidence excerpt: '+concise(f.evidence,cap,1000));
      body=[...opening,
        'Model summary: '+text(report.summary,2000),'',
        'COMPACT FINDING EXCERPTS: '+report.findings.length+
        ' of '+report.findings.length+' authentic local Qwen findings listed;'+
-       ' descriptions abbreviated. Full canonical report is bound by SHA-256 above.',
+       ' messages and evidence abbreviated. Full canonical report is bound by SHA-256 above.',
        ...compact,'',
        'Manual verification required. This native COMMENTED report has no independent',
        'attestation, reviewer PASS, HUMAN_GO, MERGE_GO or merge authorization.'
