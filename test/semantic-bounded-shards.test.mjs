@@ -412,3 +412,21 @@ test('LARGE diffs and too many files keep exhaustive DEEP lane and do not skip G
  assert.equal(r.partitions.changedFileCount,5);
  assert.equal(r.partitions.rawByteCoverageProven,true);
 });
+
+test('R71 deletion-only late hunk fails at planning before any local model call',async()=>{
+ const bytes=Buffer.from(
+  'diff --git a/src/alpha.mjs b/src/alpha.mjs\n'+
+  'index 1234567..abcdef0 100644\n--- a/src/alpha.mjs\n'+
+  '+++ b/src/alpha.mjs\n@@ -1 +1 @@\n-old\n+new\n'+
+  '@@ -11 +11,0 @@\n-if (!user.authorized) return false;\n'
+ );
+ const trusted=plan(bytes);
+ let calls=0;
+ const fetchImpl=async()=>{calls++;throw Error('UNEXPECTED_NETWORK');};
+ assert.throws(()=>planAdaptiveSemanticShards({plan:trusted}),
+  /DIFF_DELETION_ONLY_UNANCHORED/);
+ await assert.rejects(()=>executeCompleteLocalSemanticReview({
+  plan:trusted,runId:RUN,fetchImpl
+ }),/DIFF_DELETION_ONLY_UNANCHORED/);
+ assert.equal(calls,0);
+});
