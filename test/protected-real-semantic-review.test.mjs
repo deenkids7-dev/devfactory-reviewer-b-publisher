@@ -392,3 +392,60 @@ test('R75 a deleted OLD-side finding is explicitly labelled in native COMMENTED'
  assert.equal(prepared.approvalAuthorized,false);
  assert.equal(prepared.independentReviewVerified,false);
 });
+
+test('R97 a long Qwen analysis refreshes read AND write credentials before native publication',()=>{
+ const src=readFileSync(new globalThis.URL('../scripts/protected-real-semantic-review.mjs',
+   import.meta.url),'utf8');
+ const model=src.indexOf('await executeCompleteLocalSemanticReview(');
+ const prepare=src.indexOf('const plan=prepareRealSemanticComment(',model);
+ const readStage=src.indexOf("stage='TOKEN_READ_REFRESH';",prepare);
+ const readJwt=src.indexOf('const refreshedReadJwt=createReviewerBAppJwt(',readStage);
+ const scopedRead=src.indexOf("appJwt:refreshedReadJwt,purpose:'reviewRead'",readJwt);
+ const writeStage=src.indexOf("stage='TOKEN_WRITE';",scopedRead);
+ const writeJwt=src.indexOf('const writerJwt=createReviewerBAppJwt(',writeStage);
+ const post=src.indexOf('return await publishRealSemanticComment(',writeJwt);
+ assert.ok(model>=0&&prepare>model&&readStage>prepare&&readJwt>readStage&&
+   scopedRead>readJwt&&writeStage>scopedRead&&writeJwt>writeStage&&post>writeJwt);
+ assert.match(src,/const refreshedReadNow=Date\.now\(\);/);
+ assert.match(src,/appJwt:refreshedReadJwt,purpose:'reviewRead',now:refreshedReadNow,fetchImpl/);
+ assert.match(src,/publishRealSemanticComment\(\{plan,readToken:refreshedRead\.token,/);
+ assert.doesNotMatch(src,/publishRealSemanticComment\(\{plan,readToken:read\.token,/);
+ assert.match(src,/const read=\(\)=>readNativeReviews\(\{prNumber:plan\.prNumber,/);
+ assert.match(src,/const before=await read\(\);/);
+ assert.match(src,/const after=await read\(\);/);
+});
+
+test('R97 native publication uses fresh read-only credential and still denies drift or duplicate',async()=>{
+ const freshRead='fresh-scoped-read-credential-1234567';
+ const normal=emulator();
+ const ok=await publishRealSemanticComment(args(normal,{readToken:freshRead}));
+ assert.equal(ok.code,'REAL_REVIEW_COMMENT_VERIFIED');
+ assert.equal(normal.posts(),1);
+ assert.equal(normal.calls.filter(c=>c.method==='GET').length>0,true);
+ assert.ok(normal.calls.filter(c=>c.method==='GET')
+   .every(c=>c.auth==='Bearer '+freshRead));
+ assert.ok(normal.calls.filter(c=>c.method==='POST')
+   .every(c=>c.auth==='Bearer '+WRITE));
+ const drift=emulator({changedHead:true});
+ await assert.rejects(
+   ()=>publishRealSemanticComment(args(drift,{readToken:freshRead})),
+   /REVIEWS_HEAD_CHANGED/);
+ assert.equal(drift.posts(),0);
+ const duplicate=emulator({existing:{id:99,commit_id:HEAD,state:'COMMENTED',
+   user:{id:340237276,login:'devfactory-reviewer-b[bot]'},
+   pull_request_url:URL,body:'prior bot review',submitted_at:null}});
+ await assert.rejects(
+   ()=>publishRealSemanticComment(args(duplicate,{readToken:freshRead})),
+   /SEMANTIC_ALREADY_REVIEWED/);
+ assert.equal(duplicate.posts(),0);
+});
+
+test('R97 scoped READ refresh failure has an audited secret-free diagnostic',()=>{
+ const code=classifyProtectedReviewFailure('TOKEN_READ_REFRESH',
+   Error('APP_AUTH_API_REQUEST_FAILED'));
+ assert.equal(code,'REAL_REVIEW_TOKEN_READ_REFRESH_APP_AUTH_API_REQUEST_FAILED');
+ const unknown=classifyProtectedReviewFailure('TOKEN_READ_REFRESH',
+   Error('secret PRIVATE_KEY accidentally in upstream error'));
+ assert.equal(unknown,'REAL_REVIEW_TOKEN_READ_REFRESH_FAILED_CLOSED');
+ assert.doesNotMatch(code+' '+unknown,/PRIVATE_KEY|secret|Bearer|ghs_/);
+});
