@@ -430,3 +430,46 @@ test('R71 deletion-only late hunk fails at planning before any local model call'
  }),/DIFF_DELETION_ONLY_UNANCHORED/);
  assert.equal(calls,0);
 });
+
+test('R73 actual bounded inference passes immutable full-diff declaration hints to later shards',async()=>{
+ const addFile=(path,body,newCount)=>'diff --git a/'+path+' b/'+path+'\n'+
+  'index 1234567..abcdef0 100644\n--- a/'+path+'\n'+
+  '+++ b/'+path+'\n@@ -1,1 +1,'+newCount+' @@\n old\n'+body;
+ const full=Buffer.from(
+  addFile('src/declarations.mjs',
+    '+function exactCI() {return true;}\n'+
+    '+import {assessOperatorDualReview} from "./policy.mjs";\n',3)+
+  addFile('src/usage.mjs',
+    '+exactCI();\n',2)
+ );
+ let calls=0,verified=false;
+ const fetchImpl=async(url,options)=>{
+  calls++;
+  assert.equal(url,'http://127.0.0.1:11434/api/chat');
+  const request=JSON.parse(options.body);
+  const input=JSON.parse(request.messages[1].content);
+  if(input.changed_paths.includes('src/usage.mjs')){
+   verified=true;
+   assert.match(input.authenticated_full_diff_declarations,
+     /declarations\.mjs:function exactCI/);
+   assert.match(input.authenticated_full_diff_declarations,
+     /declarations\.mjs:import assessOperatorDualReview/);
+   assert.ok(!input.authenticated_full_diff_declarations.includes('return true'));
+   assert.match(request.messages[0].content,/lexical scope and imports are not proven/);
+  }
+  return fakeReply({model:'qwen2.5-coder:7b',done:true,done_reason:'stop',
+   message:{role:'assistant',content:JSON.stringify({
+    summary:'No demonstrated regression for this synthetic fixture',
+    findings:[]})},
+   prompt_eval_count:1000,eval_count:100});
+ };
+ const result=await executeCompleteLocalSemanticReview({
+  plan:plan(full),runId:RUN,fetchImpl
+ });
+ assert.ok(calls>=2);
+ assert.equal(verified,true);
+ assert.equal(result.findingCount,0);
+ assert.equal(result.provisionalState,'INCONCLUSIVE');
+ assert.equal(result.independentReviewVerified,false);
+ assert.equal(result.approvalAuthorized,false);
+});

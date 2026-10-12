@@ -12,6 +12,7 @@ import {canonicalJson} from '../src/canonical.mjs';
 import {deriveAddedLinesFromDiff,assertReviewableDeletionCoverage} from './diff-added-lines.mjs';
 import {prepareBoundedSemanticReview} from './semantic-review-request.mjs';
 import {prepareOfflineOllamaCandidate} from './ollama-offline-contract.mjs';
+import {makeBoundedDiffDeclarationIndex} from './semantic-diff-declarations.mjs';
 import {executeLocalOllamaReview} from './local-ollama-executor.mjs';
 
 const REPO='deenkids7-dev/deenkids',MODEL='qwen2.5-coder:7b';
@@ -245,6 +246,9 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
  const original=Buffer.from(plan.privateDiffText,'utf8');
  if(parts.originalDiffSha256!==sha(original))
    deny('SEMANTIC_BATCH_ORIGINAL_DRIFT');
+ // Trusted lexical names from the entire immutable PR diff accompany each
+ // fragment; no unchanged source, remote model or new GitHub permission.
+ const trustedDeclarationIndex=makeBoundedDiffDeclarationIndex({plan});
  const findings=[],responses=[],seen=new Set();
  let modelCalls=0,attempts=0,transportFallbacks=0,outputFallbacks=0;
  let coveredOriginalParts=0;
@@ -262,7 +266,8 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
        plan:chunkPlan,trustedDiffBytes:bytes,runId,
        model,approvedLocalPrivateProcessing:true,
        protectedEphemeralKeepAlive:true,
-       fetchImpl,maxOutputTokens:tokenBudget
+       fetchImpl,maxOutputTokens:tokenBudget,
+       trustedDeclarationIndex
      });
    }catch(error){
      const code=error?.message;
