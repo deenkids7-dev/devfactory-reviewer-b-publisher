@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   synthetic-local-ollama:
-    if: github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.event.pull_request.head.repo.full_name == github.repository && (contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark') || contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark-qwen3'))
+    if: github.repository == 'devfactory-reviewer-trust/devfactory-reviewer-b-publisher' && github.event.pull_request.head.repo.full_name == github.repository && (contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark') || contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark-qwen3') || contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark-7b'))
     name: Synthetic Ollama ${{ matrix.model }} - NO secrets or private code
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -23,7 +23,7 @@ jobs:
       fail-fast: false
       matrix:
         # Third-model-only opt-in avoids rerunning already-failed 7B/14B.
-        include: ${{ fromJSON(contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark-qwen3') && '[{"model":"qwen3:8b","cli_arg":"--qwen3-synthetic"}]' || '[{"model":"qwen2.5-coder:7b","cli_arg":""},{"model":"qwen2.5-coder:14b","cli_arg":"--large-synthetic"},{"model":"qwen3:8b","cli_arg":"--qwen3-synthetic"}]') }}
+        include: ${{ fromJSON(contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark-7b') && '[{"model":"qwen2.5-coder:7b","cli_arg":""}]' || contains(github.event.pull_request.labels.*.name, 'reviewer-b-benchmark-qwen3') && '[{"model":"qwen3:8b","cli_arg":"--qwen3-synthetic"}]' || '[{"model":"qwen2.5-coder:7b","cli_arg":""},{"model":"qwen2.5-coder:14b","cli_arg":"--large-synthetic"},{"model":"qwen3:8b","cli_arg":"--qwen3-synthetic"}]') }}
     steps:
       - name: Checkout exact PUBLIC PR HEAD without third-party actions
         shell: bash
@@ -96,16 +96,16 @@ jobs:
             const r=JSON.parse(readFileSync(process.argv[1],"utf8"));
             if(r.syntheticQualityGatePassed===false)
               throw Error("MODEL_QUALITY_GATE_FAILED_NOT_PRODUCTION_READY");
-            if(r.benchmark!=="synthetic-local-ollama-v1" ||
-              r.model!==process.argv[2] || r.testsCompleted!==10 ||
-              r.seededSemanticBugs!==4 || r.cleanFixtures!==4 ||
+            if(r.benchmark!=="synthetic-local-ollama-v2" ||
+              r.model!==process.argv[2] || r.testsCompleted!==12 ||
+              r.seededSemanticBugs!==5 || r.cleanFixtures!==5 ||
               !Number.isSafeInteger(r.cleanFixtureBlockingFalseAlerts) ||
               !Array.isArray(r.qualityGate?.blockers) ||
               r.syntheticQualityGatePassed!==true ||
               r.approvalAuthorized!==false ||
               r.independentReviewerProvenanceVerified!==false ||
               r.privateSourceReviewed!==false ||
-              !Array.isArray(r.cases) || r.cases.length!==10)process.exit(1);
+              !Array.isArray(r.cases) || r.cases.length!==12)process.exit(1);
             process.stdout.write("SYNTHETIC_MODEL_EXECUTION_VERIFIED_NOT_INDEPENDENT_REVIEW\n");
             if(!r.syntheticQualityGatePassed)
               throw Error("MODEL_QUALITY_GATE_FAILED_NOT_PRODUCTION_READY");
