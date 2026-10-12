@@ -1,3 +1,30 @@
+# Reviewer B — verified operating status (2026-10-12)
+
+**Live protected local Qwen advisor, not an independent security approval.**
+The Publisher reviewed private DevFactory PR #904 in protected workflow
+38177985665, publishing the native GitHub App COMMENTED review 5485263428.
+That run processed 34 model chunks and returned 47 **provisional** findings,
+including confirmed false positives. No automatic PASS, merge, HUMAN_GO or
+signed independent human-attestation authority is conferred.
+
+The real Publisher uses two narrowly scoped GitHub App tokens (read versus
+COMMENTED publication), immutable PR HEAD/BASE binding, a protected
+environment, and no external paid inference. The October 12 R70 hardening
+candidate explicitly blocks unverifiable deletion-only shards, deterministic
+static violations and external Markdown links embedded in model messages.
+Such blocked fragments are **not silently skipped** or declared safe.
+
+Current limitations: Qwen 7B did not pass the strict 10-case quality gate;
+the model lacks whole-file context, some large or binary PRs are not supported,
+and protected-environment approval is still manual. An operator must triage
+remaining findings with the source before any exact-head owner acceptance.
+No new scheduler, third account, cloud model or paid API is involved.
+
+The original historical design notes below describe the earlier prototype
+state and must not be treated as the current deployment status.
+
+---
+
 # DevFactory Reviewer B — Independent Publisher foundation
 
 **PROTOTYPE ONLY — NO REAL REVIEWER, NO PUBLISHER, NO APPROVAL.**
