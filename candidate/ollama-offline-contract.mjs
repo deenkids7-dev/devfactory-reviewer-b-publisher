@@ -112,7 +112,7 @@ export function prepareOfflineOllamaCandidate({
   )+'\nNever supply fingerprint, PASS, identity, signature, provenance or approval.'+
     '\nReport only concrete newly introduced regressions supported by authenticated added or removed changed lines.'+
     '\nUse only exact changed_paths names and changed-line coordinates from the appropriate side.'+
-    '\nA finding must name the side: OLD means a removed line, NEW means an added line (when side is requested); never cite unchanged context lines.'+
+    '\nA finding line must belong to the format schema line enum: OLD means a removed line, NEW means an added line (when side is requested); never cite unchanged context lines.'+
     '\nNo stylistic or speculative findings; write one-line message and evidence.'+
     '\nDiff snippets are not full files: omitted surrounding code and configuration may already exist.'+
     '\nBefore reporting, name a concrete failing input, runtime path, or security bypass introduced by the change.'+
@@ -271,7 +271,12 @@ export function validateOfflineOllamaCompletion({
     if(!Number.isSafeInteger(f.line)||f.line<1||f.line>1000000)
       deny('OLLAMA_FINDING_LINE_INVALID');
     const pathHasRemovals=(removedAnchors[f.path]||[]).length>0;
-    if(pathHasRemovals&&!hasSide)deny('OLLAMA_FINDING_SIDE_REQUIRED');
+    // Legacy v1 additions without 'side' remain NEW, but only when
+    // independently anchored to a genuine added line. Unanchored deletions
+    // still require explicit OLD and cannot impersonate NEW.
+    if(pathHasRemovals&&!hasSide&&
+       !isAddedLine({anchors,path:f.path,line:f.line}))
+      deny('OLLAMA_FINDING_SIDE_REQUIRED');
     if(hasSide&&!['OLD','NEW'].includes(f.side))
       deny('OLLAMA_FINDING_SIDE_INVALID');
     if(f.side==='OLD'){
