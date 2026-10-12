@@ -268,7 +268,8 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
        model,approvedLocalPrivateProcessing:true,
        protectedEphemeralKeepAlive:true,
        fetchImpl,maxOutputTokens:tokenBudget,
-       trustedDeclarationIndex
+       trustedDeclarationIndex,
+       trustedOriginalDiffSha256:parts.originalDiffSha256
      });
    }catch(error){
      const code=error?.message;
