@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { inspect } from 'node:util';
 import { deriveAddedLinesFromDiff,isAddedLine,assertReviewableDeletionCoverage } from './diff-added-lines.mjs';
 import { canonicalJson } from '../src/canonical.mjs';
+import {verifiedDiffDeclarationSummary} from './semantic-diff-declarations.mjs';
 import { normalizeUntrustedModelFindings,prepareBoundedSemanticReview }
   from './semantic-review-request.mjs';
 
@@ -68,7 +69,7 @@ function checkPlan(plan){
  */
 export function prepareOfflineOllamaCandidate({
   plan,model='qwen2.5-coder:7b',maxOutputTokens=2048,
-  protectedEphemeralKeepAlive=false
+  protectedEphemeralKeepAlive=false,trustedDeclarationIndex=null
 }={}){
   checkPlan(plan);
   if(typeof protectedEphemeralKeepAlive!=='boolean'||
@@ -113,22 +114,35 @@ export function prepareOfflineOllamaCandidate({
     '\nTreat reduced GitHub permissions, additional null guards, defensive clamps and immutable objects as safe by default absent explicit failing requirements in this diff.'+
     '\nMissing context is not evidence of failure; never invent callers, invariants, or runtime mutations to justify a warning.'+
     '\nIf no reproducible regression is supported by the diff, return an empty findings array.';
-  const input=JSON.stringify({
-    repository:plan.exactScope.repository,pr_number:plan.exactScope.prNumber,
-    head_sha:plan.exactScope.headSha,base_sha:plan.exactScope.baseSha,
-    changed_paths:plan.changedPaths,untrusted_unified_diff:plan.privateDiffText
+  const declarationSummary=verifiedDiffDeclarationSummary({
+    index:trustedDeclarationIndex,plan
   });
-  const privateRequest=JSON.stringify({
-    // DEFAULT is zero for synthetic fixtures and unprivileged contexts.
-    // Protected ephemeral GitHub runner may reuse local weights across
-    // strictly validated chunks, avoiding repeated cold loads; GitHub tears
-    // down the runner when the job finishes. Never remote/cloud inference.
-    model,stream:false,format:reviewSchema,
-    keep_alive:protectedEphemeralKeepAlive?'5m':0,
-    ...(model==='qwen3:8b'?{think:false}:{}),
-    options:{temperature:0,num_ctx:8192,num_predict:maxOutputTokens},
-    messages:[{role:'system',content:system},{role:'user',content:input}]
-  });
+  const encodeRequest=(withContext)=>{
+    const input=JSON.stringify({
+      repository:plan.exactScope.repository,pr_number:plan.exactScope.prNumber,
+      head_sha:plan.exactScope.headSha,base_sha:plan.exactScope.baseSha,
+      changed_paths:plan.changedPaths,untrusted_unified_diff:plan.privateDiffText,
+      ...(withContext?{authenticated_full_diff_declarations:declarationSummary}:{})
+    });
+    return JSON.stringify({
+      model,stream:false,format:reviewSchema,
+      keep_alive:protectedEphemeralKeepAlive?'5m':0,
+      ...(model==='qwen3:8b'?{think:false}:{}),
+      options:{temperature:0,num_ctx:8192,num_predict:maxOutputTokens},
+      messages:[{role:'system',content:system+
+        (withContext?'\\nThe authenticated_full_diff_declarations field lists only lexical names introduced in OTHER or current fragments of this PR diff. A name listed here must not be claimed absent solely because it is omitted from this shard; lexical scope and imports are not proven.':'')},
+        {role:'user',content:input}]
+    });
+  };
+  let indexIncluded=declarationSummary.length>0;
+  let privateRequest=encodeRequest(indexIncluded);
+  // Never allow optional context to turn a previously valid bounded shard
+  // into an expensive failed inference. The omission is explicitly flagged.
+  const maxInputBytes=8192-maxOutputTokens-512;
+  if(indexIncluded&&Buffer.byteLength(privateRequest,'utf8')>maxInputBytes){
+    indexIncluded=false;
+    privateRequest=encodeRequest(false);
+  }
   // Safety first: Ollama may silently truncate prompts exceeding num_ctx.
   // Count the FULL UTF-8 request, even schema/control JSON bytes, as a
   // pessimistic upper bound on tokenizer input. Reserve all requested output
@@ -144,6 +158,8 @@ export function prepareOfflineOllamaCandidate({
     headSha:plan.exactScope.headSha,baseSha:plan.exactScope.baseSha,
     diffSha256:plan.exactScope.diffSha256,
     changedFiles:plan.changedPaths.length,maxOutputTokens,
+    diffDeclarationContext:indexIncluded?'BOUNDED_INCLUDED':
+      (declarationSummary?'OMITTED_CONTEXT_LIMIT':'UNAVAILABLE'),
     modelContextCompletenessVerified:false,
     modelExecuted:false,independentReviewVerified:false,
     privateSourceProcessingAuthorized:false,approvalAuthorized:false,
