@@ -137,8 +137,8 @@ test('exhaustive large real Qwen report still lists every finding as a bounded C
 test('R69 noisy 47-finding native review contains readable evidence and no authority',()=>{
  const alerts=Array.from({length:47},(_,i)=>({
   severity:i%4===0?'critical':'high',path:'src/a.mjs',line:4,
-  message:'Undefined symbol finding '+i+' requires checking imported declarations',
-  evidence:'Claim based on isolated shard '+i+'; inspect complete source scope',
+  message:'Undefined symbol finding '+i+' requires checking imported declarations '+('m'.repeat(380)),
+  evidence:'Claim based on isolated shard '+i+'; inspect complete source scope '+('e'.repeat(700)),
   fingerprint:i.toString(16).padStart(64,'0')
  }));
  const result=prepareRealSemanticComment({preflight:preflight(),
