@@ -92,27 +92,59 @@ export function prepareOfflineOllamaCandidate({
   const removedAnchors=deriveRemovedLinesFromDiff({
     diffBytes:Buffer.from(plan.privateDiffText,'utf8')
   });
+  // R86: unioned numeric anchors were insufficient. Ollama could output
+  // side=NEW with a real OLD-only line from the same authenticated shard.
+  // Build coupled path/side/line schemas instead of independently enumerated
+  // side and line; retain v1 form for the simple one-file additions-only path.
   const addedLines=[...new Set(plan.changedPaths.flatMap(path=>anchors[path]||[]))];
   const removedLines=[...new Set(plan.changedPaths.flatMap(path=>removedAnchors[path]||[]))];
   const allowedLines=[...new Set([...addedLines,...removedLines])].sort((a,b)=>a-b);
   if(allowedLines.length>1000)deny('OLLAMA_CHANGED_LINE_SET_TOO_LARGE');
   if(!allowedLines.length){
     reviewSchema.properties.findings.maxItems=0;
-  }else{
+  }else if(plan.changedPaths.length===1 &&
+           !(addedLines.length&&removedLines.length)){
+    // Backward-compatible, size-minimal single-side grammar.
     reviewSchema.properties.findings.items.properties.line.enum=allowedLines;
     if(removedLines.length){
       reviewSchema.properties.findings.items.properties.side={
-        type:'string',enum:addedLines.length?['OLD','NEW']:['OLD']
+        type:'string',enum:['OLD']
       };
       reviewSchema.properties.findings.items.required.push('side');
     }
+  }else{
+    // Each alternative is a complete exact object. The model cannot choose
+    // a path/side/line triple from incompatible independent enum lists.
+    // Ollama JSON Schema grammar receives only independently Git-proven
+    // positions, and validateOfflineOllamaCompletion rechecks afterward.
+    const strictSide=removedLines.length>0;
+    const variantFor=(path,side,locations)=>{
+      const variant=structuredClone(FINDINGS_FORMAT.properties.findings.items);
+      variant.properties.path.enum=[path];
+      variant.properties.line.enum=[...new Set(locations)].sort((a,b)=>a-b);
+      if(strictSide){
+        variant.properties.side={type:'string',enum:[side]};
+        variant.required.push('side');
+      }
+      return variant;
+    };
+    const variants=[];
+    for(const path of plan.changedPaths){
+      const old=removedAnchors[path]||[];
+      const newer=anchors[path]||[];
+      if(old.length)variants.push(variantFor(path,'OLD',old));
+      if(newer.length)variants.push(variantFor(path,'NEW',newer));
+    }
+    if(!variants.length||variants.length>200)
+      deny('OLLAMA_CHANGED_LINE_SET_TOO_LARGE');
+    reviewSchema.properties.findings.items={anyOf:variants};
   }
   const system=plan.systemInstructions.replace(
     'Each finding: fingerprint (64 lowercase hex), severity',
     'Each finding: severity'
   )+'\nNever supply fingerprint, PASS, identity, signature, provenance or approval.'+
     '\nReport only concrete newly introduced regressions supported by authenticated added or removed changed lines.'+
-    '\nUse only exact changed_paths names and changed-line coordinates from the appropriate side.'+
+    '\nUse only Git-proven path/side/line triples from the format schema. NEVER cite an OLD-only line as NEW.'+
     '\nA finding line must belong to the format schema line enum: OLD means a removed line, NEW means an added line (when side is requested); never cite unchanged context lines.'+
     '\nNo stylistic or speculative findings; write one-line message and evidence.'+
     '\nDiff snippets are not full files: omitted surrounding code and configuration may already exist.'+
