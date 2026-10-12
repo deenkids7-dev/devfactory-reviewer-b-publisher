@@ -54,6 +54,17 @@ const FIXTURES=Object.freeze([
     knownStaticBlocker:false,knownSemanticBug:false}),
   Object.freeze({label:'safe immutable config',path:'src/config-synthetic.mjs',
     before:'return config;',source:'return Object.freeze(config);',
+    knownStaticBlocker:false,knownSemanticBug:false}),
+  // OLD-side-only security defect: formerly impossible to cite using v1.
+  Object.freeze({label:'deleted authorization guard without replacement',
+    path:'src/auth-deletion-synthetic.mjs',
+    before:'if (!user.isAdmin) return false;',source:null,deletionOnly:true,
+    knownStaticBlocker:false,knownSemanticBug:true,
+    oraclePattern:/(?:removed|deleted|missing|absent|bypass(?:ed|es|ing)?|without).{0,60}(?:admin|authoriz|access|guard)|(?:admin|authoriz|access|guard).{0,60}(?:removed|deleted|missing|absent|bypass(?:ed|es|ing)?|without)/i}),
+  // Legitimate OLD-side deletion that must not cause a blocking false alert.
+  Object.freeze({label:'removed inert diagnostic logging',
+    path:'src/diagnostic-synthetic.mjs',
+    before:'console.debug("entered validation");',source:null,deletionOnly:true,
     knownStaticBlocker:false,knownSemanticBug:false})
 ]);
 function deny(code){throw Error(code);}
@@ -104,9 +115,14 @@ export function evaluateSyntheticReviewQuality({
 
 function diff(fixture) {
   const path=fixture.path;
-  return Buffer.from('diff --git a/'+path+' b/'+path+'\n'+
+  const head='diff --git a/'+path+' b/'+path+'\n'+
     'index 1234567..abcdef0 100644\n--- a/'+path+'\n'+
-    '+++ b/'+path+'\n@@ -1 +1 @@\n-'+fixture.before+'\n+'+fixture.source+'\n');
+    '+++ b/'+path+'\n';
+  if(fixture.deletionOnly===true){
+    if(fixture.source!==null)deny('OLLAMA_BENCHMARK_DELETION_FIXTURE_INVALID');
+    return Buffer.from(head+'@@ -1 +0,0 @@\n-'+fixture.before+'\n');
+  }
+  return Buffer.from(head+'@@ -1 +1 @@\n-'+fixture.before+'\n+'+fixture.source+'\n');
 }
 function planFor(bytes) {
   return prepareBoundedSemanticReview({
@@ -218,7 +234,7 @@ export async function runSyntheticLocalOllamaBenchmark({
     cleanFixtureBlockingFalseAlerts:cleanCases.filter(c=>c.combinedBlockingCount>0).length
   });
   return Object.freeze({
-    benchmark:'synthetic-local-ollama-v1',
+    benchmark:'synthetic-local-ollama-v2',
     qualityGate:quality,
     syntheticQualityGatePassed:quality.syntheticQualityGatePassed,
     testsCompleted:cases.length,model,
