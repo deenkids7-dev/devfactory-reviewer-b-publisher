@@ -439,3 +439,13 @@ test('R97 native publication uses fresh read-only credential and still denies dr
    /SEMANTIC_ALREADY_REVIEWED/);
  assert.equal(duplicate.posts(),0);
 });
+
+test('R97 scoped READ refresh failure has an audited secret-free diagnostic',()=>{
+ const code=classifyProtectedReviewFailure('TOKEN_READ_REFRESH',
+   Error('APP_AUTH_API_REQUEST_FAILED'));
+ assert.equal(code,'REAL_REVIEW_TOKEN_READ_REFRESH_APP_AUTH_API_REQUEST_FAILED');
+ const unknown=classifyProtectedReviewFailure('TOKEN_READ_REFRESH',
+   Error('secret PRIVATE_KEY accidentally in upstream error'));
+ assert.equal(unknown,'REAL_REVIEW_TOKEN_READ_REFRESH_FAILED_CLOSED');
+ assert.doesNotMatch(code+' '+unknown,/PRIVATE_KEY|secret|Bearer|ghs_/);
+});
