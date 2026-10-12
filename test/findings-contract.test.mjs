@@ -82,3 +82,14 @@ denies('rejects path with a dot component',
 denies('rejects multiline control characters in findings',
   report({findings:[{...finding(),message:'hello\nworld'}]}),
   'REVIEW_FINDING_INVALID');
+
+test('R75 canonical reviewer report accepts strictly marked OLD-side removal',()=>{
+ const f={...finding(),side:'OLD'};
+ const valid=evaluate(report({findings:[f]}));
+ assert.equal(valid.provisionalState,'FAIL');
+ assert.equal(valid.independenceVerified,false);
+ for(const bad of ['DELETED','LEFT','old','NEWER']){
+  assert.throws(()=>evaluate(report({findings:[{...f,side:bad}]})),
+   /REVIEW_FINDING_INVALID/);
+ }
+});
