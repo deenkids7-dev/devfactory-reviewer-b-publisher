@@ -204,3 +204,18 @@ test('blank context in real Git format keeps security-finding line numbers exact
  const corrupted=valid.replace('\n \n','\n\n');
  assert.throws(()=>run(corrupted),/STATIC_AUDIT_DIFF_STRUCTURE_INVALID/);
 });
+
+test('R76 legitimate deletion-only new-side zero is not a static-audit failure',()=>{
+ const d='diff --git a/src/auth-deletion-synthetic.mjs b/src/auth-deletion-synthetic.mjs\n'+
+  '--- a/src/auth-deletion-synthetic.mjs\n'+
+  '+++ b/src/auth-deletion-synthetic.mjs\n'+
+  '@@ -1 +0,0 @@\n-if (!user.isAdmin) return false;\n';
+ const result=run(d);
+ assert.equal(result.blockingFindings,0);
+ assert.equal(result.provisionalState,'INCONCLUSIVE');
+ assert.equal(result.approvalAuthorized,false);
+ // Added changed text at NEW=0 is structurally invalid and cannot be cited.
+ const invalid=d.replace('@@ -1 +0,0 @@','@@ -1 +0,1 @@')+
+  '+permissions: write-all\n';
+ assert.throws(()=>run(invalid),/STATIC_AUDIT_(?:DIFF_STRUCTURE_INVALID|LINE_COVERAGE_UNVERIFIED)/);
+});
