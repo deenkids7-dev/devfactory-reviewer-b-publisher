@@ -70,7 +70,8 @@ function checkPlan(plan){
  */
 export function prepareOfflineOllamaCandidate({
   plan,model='qwen2.5-coder:7b',maxOutputTokens=2048,
-  protectedEphemeralKeepAlive=false,trustedDeclarationIndex=null
+  protectedEphemeralKeepAlive=false,trustedDeclarationIndex=null,
+  trustedOriginalDiffSha256=null
 }={}){
   checkPlan(plan);
   if(typeof protectedEphemeralKeepAlive!=='boolean'||
@@ -125,7 +126,8 @@ export function prepareOfflineOllamaCandidate({
     '\nMissing context is not evidence of failure; never invent callers, invariants, or runtime mutations to justify a warning.'+
     '\nIf no reproducible regression is supported by the diff, return an empty findings array.';
   const declarationSummary=verifiedDiffDeclarationSummary({
-    index:trustedDeclarationIndex,plan
+    index:trustedDeclarationIndex,plan,
+    originalDiffSha256:trustedOriginalDiffSha256
   });
   const encodeRequest=(withContext)=>{
     const input=JSON.stringify({

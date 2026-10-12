@@ -46,7 +46,7 @@ export async function executeLocalOllamaReview({
   plan,trustedDiffBytes,runId,model='qwen2.5-coder:7b',
   approvedLocalPrivateProcessing=false,fetchImpl=globalThis.fetch,
   maxOutputTokens=2048,protectedEphemeralKeepAlive=false,
-  trustedDeclarationIndex=null
+  trustedDeclarationIndex=null,trustedOriginalDiffSha256=null
 }={}){
   if(approvedLocalPrivateProcessing!==true)
     deny('LOCAL_PRIVATE_PROCESSING_NOT_AUTHORIZED');
@@ -55,7 +55,7 @@ export async function executeLocalOllamaReview({
     deny('LOCAL_MODEL_INPUT_UNVERIFIED');
   const req=prepareOfflineOllamaCandidate({
     plan,model,maxOutputTokens,protectedEphemeralKeepAlive,
-    trustedDeclarationIndex
+    trustedDeclarationIndex,trustedOriginalDiffSha256
   });
   const digest=createHash('sha256').update(trustedDiffBytes).digest('hex');
   if(digest!==req.diffSha256||
