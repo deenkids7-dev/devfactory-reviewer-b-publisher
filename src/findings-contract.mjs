@@ -51,7 +51,11 @@ export function validateReviewerFindings({reportBytes,changedPaths}) {
   const changed=new Set(changedPaths);
   const seen=new Set();
   for(const finding of value.findings){
-    if (!fields(finding,['fingerprint','severity','path','line','message','evidence']) ||
+    const hasSide=Object.hasOwn(finding||{},'side');
+    if (!fields(finding,hasSide?
+      ['fingerprint','severity','path','line','message','evidence','side']:
+      ['fingerprint','severity','path','line','message','evidence']) ||
+        (hasSide&&!['OLD','NEW'].includes(finding.side)) ||
         (typeof finding.fingerprint!=='string' || !HASH.test(finding.fingerprint)) ||
         !SEVERITIES.has(finding.severity) ||
         !PATH.test(finding.path) || !changed.has(finding.path) ||
