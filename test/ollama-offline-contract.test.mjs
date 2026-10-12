@@ -117,7 +117,7 @@ test('R75 pure removal supports real OLD-side findings, never a fake NEW line',(
  }),/OLLAMA_FINDING_NOT_REMOVED_LINE/);
  assert.throws(()=>validateOfflineOllamaCompletion({
   ...opts,response:responseFor((({side,...rest})=>rest)(found))
- }),/OLLAMA_FINDING_SIDE_REQUIRED/);
+ }),/OLLAMA_FINDING_NOT_ADDED_LINE/);
 });
 test('protected ephemeral model reuse is explicit, time-limited and off by default',()=>{
  const legacy=JSON.parse(prepareOfflineOllamaCandidate({plan:plan()}).privateRequestJson);
