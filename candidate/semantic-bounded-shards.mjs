@@ -9,7 +9,8 @@
 import {createHash} from 'node:crypto';
 import {inspect} from 'node:util';
 import {canonicalJson} from '../src/canonical.mjs';
-import {deriveAddedLinesFromDiff,assertReviewableDeletionCoverage} from './diff-added-lines.mjs';
+import {deriveAddedLinesFromDiff} from './diff-added-lines.mjs';
+import {deriveRemovedLinesFromDiff} from './diff-removed-lines.mjs';
 import {prepareBoundedSemanticReview} from './semantic-review-request.mjs';
 import {prepareOfflineOllamaCandidate} from './ollama-offline-contract.mjs';
 import {makeBoundedDiffDeclarationIndex} from './semantic-diff-declarations.mjs';
@@ -152,10 +153,10 @@ export function partitionRealSemanticDiff({plan,maxChunkBytes=1536}={}){
  }
  if(covered!==original.length||!shards.length||shards.length>96||
    coveredLines===0)deny('SEMANTIC_SHARD_LOSSY_RECONSTRUCTION');
- // Check ALL source fragments before the first expensive Qwen call.
- // Deletion-only late shards must not waste CPU or publish partial reports.
+ // Validate BOTH original/new line coordinates for every fragment before
+ // launching a local Qwen request. Deleted-only chunks now remain reviewable.
  for(const shard of shards)
-   assertReviewableDeletionCoverage({diffBytes:shard.privateDiffBytes});
+   deriveRemovedLinesFromDiff({diffBytes:shard.privateDiffBytes});
  const safe={originalDiffSha256:sha(original),
   originalByteCount:original.length,shardCount:shards.length,
   changedFileCount:starts.length,sourceLineCount:coveredLines,
