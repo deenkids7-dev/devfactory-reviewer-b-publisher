@@ -76,3 +76,24 @@ test('R73 declaration index never includes literal variable values or claims ful
  assert.match(summary,/no complete file/);
  assert.equal(index.modelContextCompletenessVerified,false);
 });
+
+test('R74 unchanged context declarations are present on HEAD, removed declarations are not',()=>{
+ const bytes=Buffer.from(file('src/auth.mjs',
+  'function oldName() {}\n',1,1));
+ // Build valid source: one retained function and a nearby new call.
+ const before=Buffer.from(
+  'diff --git a/src/auth.mjs b/src/auth.mjs\n'+
+  'index 1234567..abcdef0 100644\n--- a/src/auth.mjs\n'+
+  '+++ b/src/auth.mjs\n@@ -1,3 +1,3 @@\n'+
+  ' function keptFunction() {}\n'+
+  '-function deletedFunction() {}\n'+
+  '+function introducedFunction() {}\n'+
+  ' original();\n'
+ );
+ const index=makeBoundedDiffDeclarationIndex({plan:plan(before)});
+ const summary=verifiedDiffDeclarationSummary({index,plan:plan(before)});
+ assert.match(summary,/auth\.mjs:function keptFunction/);
+ assert.match(summary,/auth\.mjs:function introducedFunction/);
+ assert.doesNotMatch(summary,/deletedFunction/);
+ assert.doesNotMatch(JSON.stringify(index),/keptFunction|introducedFunction/);
+});

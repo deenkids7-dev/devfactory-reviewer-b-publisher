@@ -19,9 +19,9 @@ const digest=v=>createHash('sha256').update(v).digest('hex');
 
 /**
  * Build only lexical names of declarations, never expressions or source
- * values. False-absence claims about symbols introduced in OTHER diff shards
- * can now be checked against these authenticated names. Omitted names, and
- * existing unchanged source files, remain UNKNOWN and NEVER imply absence.
+ * values. Accept introduced (+) and retained context (space) diff lines:
+ * both are part of the HEAD version, unlike removed (-) lines. Omitted
+ * names and code outside diff hunks remain UNKNOWN, never proof of absence.
  */
 export function makeBoundedDiffDeclarationIndex({plan}={}){
  const scope=plan?.exactScope,source=plan?.privateDiffText;
@@ -64,7 +64,10 @@ export function makeBoundedDiffDeclarationIndex({plan}={}){
    path=m[1];inHunk=false;continue;
   }
   if(line.startsWith('@@ ')){inHunk=true;continue;}
-  if(!inHunk||!JS.test(path)||!line.startsWith('+')||line.startsWith('+++ '))continue;
+  if(!inHunk||!JS.test(path)||!['+',' '].includes(line[0])||
+     line.startsWith('+++ '))continue;
+  // Context lines are on BOTH sides; deleted (-) declarations no longer
+  // exist on HEAD and must NEVER be passed as currently present.
   const added=line.slice(1).trim();
   const decl=added.match(/^(?:export\s+)?(?:default\s+)?(?:async\s+)?(function|class|const|let|var)\s+([A-Za-z_$][\w$]*)\b/);
   if(decl)add(decl[2],decl[1]);
@@ -80,10 +83,10 @@ export function makeBoundedDiffDeclarationIndex({plan}={}){
   if(def)add(def[1],'import');
  }
  const summary=selected.length?[
-  'AUTHENTICATED FULL-DIFF DECLARATIONS (lexical names only, no complete file):',
+  'AUTHENTICATED HEAD-SIDE DIFF DECLARATIONS (added/context lines only, no complete file):',
   ...selected,
   count>selected.length?'TRUNCATED: some declarations omitted; absence never proves undefined.':'',
-  'Names here may be in other shards; check lexical scope and imports before claiming undefined.',
+  'Names here may be in other shards; removed declarations are excluded. Check lexical scope and imports before claiming undefined.',
  ].filter(Boolean).join('\n'):'';
  const safe={repository:REPO,prNumber:scope.prNumber,
   headSha:scope.headSha,baseSha:scope.baseSha,
