@@ -45,13 +45,13 @@ function mock(options={}){
  };
  return {fetchImpl,calls};
 }
-test('free local benchmark runs four FIXED synthetic examples without GitHub or secrets',async()=>{
+test('free local benchmark runs twelve FIXED synthetic examples without GitHub or secrets',async()=>{
  const f=mock();
  const result=await runSyntheticLocalOllamaBenchmark({fetchImpl:f.fetchImpl});
- assert.equal(f.calls.length,10);
- assert.equal(result.testsCompleted,10);
- assert.equal(result.seededSemanticBugs,4);
- assert.equal(result.cleanFixtures,4);
+ assert.equal(f.calls.length,12);
+ assert.equal(result.testsCompleted,12);
+ assert.equal(result.seededSemanticBugs,5);
+ assert.equal(result.cleanFixtures,5);
  assert.equal(result.cleanFixtureBlockingFalseAlerts,0);
  assert.equal(result.modelQualityCertified,false);
  assert.equal(result.syntheticMetricsMeetTargets,false);
@@ -107,7 +107,7 @@ test('optional small public synthetic model is pinned, not a release approval',a
  assert.equal(r.model,'qwen2.5-coder:1.5b');
  assert.equal(r.approvalAuthorized,false);
  assert.equal(r.independentReviewerProvenanceVerified,false);
- assert.equal(f.calls.length,10);
+ assert.equal(f.calls.length,12);
  for(const call of f.calls){
   const req=JSON.parse(call.config.body);
   assert.equal(req.model,'qwen2.5-coder:1.5b');
@@ -130,10 +130,10 @@ test('14B synthetic selection stays bounded, identity-pinned and nonauthorizing'
    fetchImpl:f.fetchImpl,model:'qwen2.5-coder:14b'
  });
  assert.equal(x.model,'qwen2.5-coder:14b');
- assert.equal(x.testsCompleted,10);
+ assert.equal(x.testsCompleted,12);
  assert.equal(x.approvalAuthorized,false);
  assert.equal(x.modelQualityCertified,false);
- assert.equal(f.calls.length,10);
+ assert.equal(f.calls.length,12);
  for(const call of f.calls){
    assert.equal(JSON.parse(call.config.body).model,'qwen2.5-coder:14b');
  }
@@ -142,15 +142,15 @@ test('14B synthetic selection stays bounded, identity-pinned and nonauthorizing'
 test('hosted synthetic gate checks ten cases rather than a stale four-case count',()=>{
  const workflow=readFileSync(new URL('../.github/workflows/reviewer-b-ollama-synthetic-canary.yml',
    import.meta.url),'utf8');
- assert.match(workflow,/r\.testsCompleted!==10/);
- assert.match(workflow,/r\.cases\.length!==10/);
+ assert.match(workflow,/r\.testsCompleted!==12/);
+ assert.match(workflow,/r\.cases\.length!==12/);
  assert.doesNotMatch(workflow,/r\.cases\.length!==4/);
 });
 
 test('model does not earn a detected-bug score for a backwards or generic explanation',async()=>{
  const f=mock({wrongDirection:true});
  const r=await runSyntheticLocalOllamaBenchmark({fetchImpl:f.fetchImpl});
- assert.equal(r.seededSemanticBugs,4);
+ assert.equal(r.seededSemanticBugs,5);
  assert.equal(r.seededSemanticBugsDetected,0);
  const negative=r.cases.find(x=>x.label==='negative amount validation weakened');
  assert.equal(negative.semanticFindingCount,1);
@@ -161,14 +161,14 @@ test('model does not earn a detected-bug score for a backwards or generic explan
 
 test('synthetic quality gate refuses false alerts and missed regressions',()=>{
  const standard={
-  seededSemanticBugs:4,seededSemanticBugsDetected:4,
-  cleanFixtures:4,cleanFixtureFalseAlerts:0,cleanFixtureBlockingFalseAlerts:0
+  seededSemanticBugs:5,seededSemanticBugsDetected:5,
+  cleanFixtures:5,cleanFixtureFalseAlerts:0,cleanFixtureBlockingFalseAlerts:0
  };
  const ok=evaluateSyntheticReviewQuality(standard);
  assert.equal(ok.syntheticQualityGatePassed,true);
  assert.equal(ok.modelQualityCertified,false);
  assert.equal(ok.approvalAuthorized,false);
- const missed=evaluateSyntheticReviewQuality({...standard,seededSemanticBugsDetected:3});
+ const missed=evaluateSyntheticReviewQuality({...standard,seededSemanticBugsDetected:4});
  assert.equal(missed.syntheticQualityGatePassed,false);
  assert.ok(missed.blockers.includes('MISSED_SEEDED_SEMANTIC_DEFECT'));
  const noisy=evaluateSyntheticReviewQuality({...standard,cleanFixtureFalseAlerts:2,
@@ -200,7 +200,7 @@ test('third free Qwen3 8B candidate is strictly local and cannot bypass review q
   fetchImpl:f.fetchImpl,model:'qwen3:8b'
  });
  assert.equal(result.model,'qwen3:8b');
- assert.equal(result.testsCompleted,10);
+ assert.equal(result.testsCompleted,12);
  assert.equal(result.modelQualityCertified,false);
  assert.equal(result.approvalAuthorized,false);
  assert.equal(result.independentReviewerProvenanceVerified,false);
@@ -220,6 +220,7 @@ test('opt-in Qwen3 CI must run only synthetic cases with no privileged permissio
  assert.match(y,/"model":"qwen3:8b"/);
  assert.match(y,/"cli_arg":"--qwen3-synthetic"/);
  assert.match(y,/reviewer-b-benchmark-qwen3/);
+ assert.match(y,/reviewer-b-benchmark-7b/);
  assert.match(y,/contains\(github\.event\.pull_request\.labels\.\*\.name, 'reviewer-b-benchmark'\)/);
  assert.doesNotMatch(y,/security-events:\s*write|secrets\./);
 });
@@ -227,9 +228,10 @@ test('opt-in Qwen3 CI must run only synthetic cases with no privileged permissio
 test('opt-in Qwen3-only benchmark selects only 8B model while preserving full comparison label',()=>{
  const y=readFileSync(new URL('../.github/workflows/reviewer-b-ollama-synthetic-canary.yml',import.meta.url),'utf8');
  const options=[...y.matchAll(/'(\[\{"model":.*?\}\])'/g)].map(x=>JSON.parse(x[1]));
- assert.equal(options.length,2);
- assert.deepEqual(options[0],[{model:'qwen3:8b',cli_arg:'--qwen3-synthetic'}]);
- assert.deepEqual(options[1].map(x=>x.model),
+ assert.equal(options.length,3);
+ assert.deepEqual(options[0],[{model:'qwen2.5-coder:7b',cli_arg:''}]);
+ assert.deepEqual(options[1],[{model:'qwen3:8b',cli_arg:'--qwen3-synthetic'}]);
+ assert.deepEqual(options[2].map(x=>x.model),
   ['qwen2.5-coder:7b','qwen2.5-coder:14b','qwen3:8b']);
  assert.match(y,/contains\(github\.event\.pull_request\.labels\.\*\.name, 'reviewer-b-benchmark-qwen3'\)/);
  assert.match(y,/github\.event\.pull_request\.head\.repo\.full_name == github\.repository/);
@@ -240,11 +242,11 @@ test('30B model can be selected manually for fixed synthetic local benchmark onl
  const f=mock({model:'qwen3-coder:30b'});
  const x=await runSyntheticLocalOllamaBenchmark({fetchImpl:f.fetchImpl,model:'qwen3-coder:30b'});
  assert.equal(x.model,'qwen3-coder:30b');
- assert.equal(x.testsCompleted,10);
+ assert.equal(x.testsCompleted,12);
  assert.equal(x.approvalAuthorized,false);
  assert.equal(x.modelQualityCertified,false);
  assert.equal(x.independentReviewerProvenanceVerified,false);
- assert.equal(f.calls.length,10);
+ assert.equal(f.calls.length,12);
  for(const c of f.calls){
   const req=JSON.parse(c.config.body);
   assert.equal(req.model,'qwen3-coder:30b');
@@ -260,12 +262,41 @@ test('synthetic gate cannot pass on caller-forged zero-case metrics',()=>{
  for(const fake of [
   {seededSemanticBugs:0,seededSemanticBugsDetected:0,cleanFixtures:0,
    cleanFixtureFalseAlerts:0,cleanFixtureBlockingFalseAlerts:0},
-  {seededSemanticBugs:4,seededSemanticBugsDetected:4,cleanFixtures:0,
+  {seededSemanticBugs:5,seededSemanticBugsDetected:5,cleanFixtures:0,
    cleanFixtureFalseAlerts:0,cleanFixtureBlockingFalseAlerts:0},
-  {seededSemanticBugs:0,seededSemanticBugsDetected:0,cleanFixtures:4,
+  {seededSemanticBugs:0,seededSemanticBugsDetected:0,cleanFixtures:5,
    cleanFixtureFalseAlerts:0,cleanFixtureBlockingFalseAlerts:0}
  ]){
   assert.throws(()=>evaluateSyntheticReviewQuality(fake),
    e=>e.message==='OLLAMA_SYNTHETIC_QUALITY_METRICS_INVALID');
  }
+});
+
+test('R76 benchmark exercises OLD-side deletion grammar on both benign and unsafe changes',async()=>{
+ const f=mock();
+ const result=await runSyntheticLocalOllamaBenchmark({fetchImpl:f.fetchImpl});
+ assert.equal(result.testsCompleted,12);
+ assert.equal(result.seededSemanticBugs,5);
+ assert.equal(result.cleanFixtures,5);
+ const cases=f.calls.map(x=>JSON.parse(x.config.body));
+ const old=cases.filter(x=>JSON.parse(x.messages[1].content)
+   .untrusted_unified_diff.includes('@@ -1 +0,0 @@'));
+ assert.equal(old.length,2);
+ for(const item of old){
+  const payload=JSON.parse(item.messages[1].content);
+  assert.equal(payload.untrusted_unified_diff.includes('+null'),false);
+  assert.deepEqual(item.format.properties.findings.items.properties.side.enum,['OLD']);
+  assert.deepEqual(item.format.properties.findings.items.properties.line.enum,[1]);
+  assert.ok(item.format.properties.findings.items.required.includes('side'));
+ }
+ const deleted=result.cases.find(x=>
+  x.label==='deleted authorization guard without replacement');
+ const harmless=result.cases.find(x=>
+  x.label==='removed inert diagnostic logging');
+ assert.equal(deleted.seededSemanticBug,true);
+ assert.equal(deleted.semanticOracleHit,false);
+ assert.equal(harmless.seededSemanticBug,false);
+ assert.equal(harmless.semanticFindingDetected,false);
+ assert.equal(result.syntheticQualityGatePassed,false);
+ assert.equal(result.approvalAuthorized,false);
 });
