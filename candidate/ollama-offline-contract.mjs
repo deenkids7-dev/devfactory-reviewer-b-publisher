@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { inspect } from 'node:util';
-import { deriveAddedLinesFromDiff,isAddedLine } from './diff-added-lines.mjs';
+import { deriveAddedLinesFromDiff,isAddedLine,assertReviewableDeletionCoverage } from './diff-added-lines.mjs';
 import { canonicalJson } from '../src/canonical.mjs';
 import { normalizeUntrustedModelFindings,prepareBoundedSemanticReview }
   from './semantic-review-request.mjs';
@@ -75,6 +75,9 @@ export function prepareOfflineOllamaCandidate({
     !MODELS.includes(model)||!Number.isSafeInteger(maxOutputTokens)||
     maxOutputTokens<128||maxOutputTokens>4096)
     deny('OLLAMA_MODEL_OR_CONTEXT_UNSUPPORTED');
+  // Deletion-only changed hunks cannot legally produce a v1 added-line finding.
+  // Fail explicitly; never publish an apparently clean partial analysis.
+  assertReviewableDeletionCoverage({diffBytes:Buffer.from(plan.privateDiffText,'utf8')});
   const reviewSchema=structuredClone(FINDINGS_FORMAT);
   // Force exact GitHub-bound paths AND NEW-SIDE changed source lines
   // into the model's JSON schema grammar, not just a prose instruction.
@@ -215,6 +218,7 @@ export function validateOfflineOllamaCompletion({
     !HASH.test(expectedDiffSha256)||
     digest(trustedDiffBytes)!==expectedDiffSha256)
     deny('OLLAMA_ADDED_LINE_SCOPE_UNVERIFIED');
+  assertReviewableDeletionCoverage({diffBytes:trustedDiffBytes});
   const anchors=deriveAddedLinesFromDiff({diffBytes:trustedDiffBytes});
   if(!Array.isArray(trustedChangedPaths)||
     JSON.stringify(Object.keys(anchors))!==JSON.stringify(trustedChangedPaths))

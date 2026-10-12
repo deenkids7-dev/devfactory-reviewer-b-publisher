@@ -21,7 +21,7 @@ const WORKFLOW=PUB+'/.github/workflows/reviewer-b-private-semantic.yml@refs/head
 const digest=x=>createHash('sha256').update(x).digest('hex');
 function deny(code){throw Error(code);}
 function fail(code){return Object.freeze({ok:false,code});}
-const SAFE_DIAGNOSTIC_CODES=new Set(["LOCAL_MODEL_REQUEST_FAILED","LOCAL_MODEL_REQUEST_TIMEOUT","LOCAL_MODEL_RESPONSE_REJECTED","LOCAL_MODEL_ENDPOINT_UNVERIFIED","LOCAL_MODEL_INVALID_JSON","LOCAL_MODEL_RESPONSE_OVERSIZED","LOCAL_MODEL_ENCODING_INVALID","LOCAL_MODEL_DIFF_SCOPE_MISMATCH","OLLAMA_COMPLETION_UNVERIFIED","OLLAMA_OUTPUT_TRUNCATED","OLLAMA_CONTEXT_CAPACITY_UNVERIFIED","OLLAMA_CONTEXT_LIMIT_EXCEEDED","OLLAMA_INVALID_JSON","OLLAMA_FINDINGS_SCHEMA_INVALID","OLLAMA_FINDING_PATH_MISMATCH","OLLAMA_FINDING_LINE_INVALID","OLLAMA_FINDING_NOT_ADDED_LINE","OLLAMA_FINDING_DUPLICATE","SEMANTIC_SHARD_SOURCE_INVALID","SEMANTIC_SHARD_SCOPE_MISMATCH","SEMANTIC_SHARD_FILE_MISMATCH","SEMANTIC_SHARD_BAD_SOURCE_LINE","SEMANTIC_BATCH_INVALID_REPORT","SEMANTIC_BATCH_DUPLICATE_FINDING","SEMANTIC_BATCH_INCOMPLETE","REAL_SEMANTIC_PROOF_INVALID","REAL_SEMANTIC_PRIVATE_REPORT_OVERSIZED","REAL_SEMANTIC_REPORT_MISMATCH","SEMANTIC_POST_FAILED","SEMANTIC_POST_REJECTED","SEMANTIC_POST_UNVERIFIED","SEMANTIC_READBACK_INVALID","SEMANTIC_ALREADY_REVIEWED","APP_AUTH_API_REQUEST_FAILED","APP_AUTH_INSTALLATION_SCOPE_UNVERIFIED","PREFLIGHT_DIFF_MISMATCH","READ_PROOF_FAILED","REVIEW_REQUEST_HEAD_CHANGED"]);
+const SAFE_DIAGNOSTIC_CODES=new Set(["LOCAL_MODEL_REQUEST_FAILED","LOCAL_MODEL_REQUEST_TIMEOUT","LOCAL_MODEL_RESPONSE_REJECTED","LOCAL_MODEL_ENDPOINT_UNVERIFIED","LOCAL_MODEL_INVALID_JSON","LOCAL_MODEL_RESPONSE_OVERSIZED","LOCAL_MODEL_ENCODING_INVALID","LOCAL_MODEL_DIFF_SCOPE_MISMATCH","OLLAMA_COMPLETION_UNVERIFIED","OLLAMA_OUTPUT_TRUNCATED","OLLAMA_CONTEXT_CAPACITY_UNVERIFIED","OLLAMA_CONTEXT_LIMIT_EXCEEDED","OLLAMA_INVALID_JSON","OLLAMA_FINDINGS_SCHEMA_INVALID","OLLAMA_FINDING_PATH_MISMATCH","OLLAMA_FINDING_LINE_INVALID","OLLAMA_FINDING_NOT_ADDED_LINE","OLLAMA_FINDING_DUPLICATE","SEMANTIC_SHARD_SOURCE_INVALID","SEMANTIC_SHARD_SCOPE_MISMATCH","SEMANTIC_SHARD_FILE_MISMATCH","SEMANTIC_SHARD_BAD_SOURCE_LINE","SEMANTIC_BATCH_INVALID_REPORT","SEMANTIC_BATCH_DUPLICATE_FINDING","SEMANTIC_BATCH_INCOMPLETE","DIFF_DELETION_ONLY_UNANCHORED","STATIC_FINDINGS_BLOCK","REAL_SEMANTIC_PROOF_INVALID","REAL_SEMANTIC_PRIVATE_REPORT_OVERSIZED","REAL_SEMANTIC_REPORT_MISMATCH","SEMANTIC_POST_FAILED","SEMANTIC_POST_REJECTED","SEMANTIC_POST_UNVERIFIED","SEMANTIC_READBACK_INVALID","SEMANTIC_ALREADY_REVIEWED","APP_AUTH_API_REQUEST_FAILED","APP_AUTH_INSTALLATION_SCOPE_UNVERIFIED","PREFLIGHT_DIFF_MISMATCH","READ_PROOF_FAILED","REVIEW_REQUEST_HEAD_CHANGED"]);
 const SAFE_STAGES=new Set(['TOKEN_READ','PRIVATE_PREFLIGHT','LOCAL_MODEL','PRIVATE_REPORT','TOKEN_WRITE','NATIVE_POST']);
 /** PUBLIC log may contain ONLY a static stage plus an exact audited code.
  * Never print error strings, HTTP payloads, stack traces, PRIVATE source,
@@ -37,7 +37,9 @@ export function classifyProtectedReviewFailure(stage,error){
 function text(v,max){
  if(typeof v!=='string'||!v.trim()||v.length>max||
    /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(v))deny('REPORT_TEXT_UNSAFE');
- return v.replace(/[\r\n\t ]+/g,' ').trim().replace(/[@<>]/g,'_')
+ return v.replace(/(?:https?:\/\/|www\.)[^\s)]+/gi,'external_link_redacted')
+  .replace(/[\r\n\t ]+/g,' ').trim().replace(/[\[\]()!]/g,'_')
+  .replace(/[@<>]/g,'_')
   .replace(/\x60/g,"'").replace(/&/g,'and');
 }
 export function canRunRealSemanticReview(env){
@@ -93,6 +95,10 @@ export function prepareRealSemanticComment({preflight,local,runId}={}){
    report.findings.length!==local.findingCount||report.findings.length>50||
    (local.provisionalState==='FAIL'&&report.findings.length===0))
    deny('REAL_SEMANTIC_REPORT_MISMATCH');
+ // Deterministic security violations cannot be waived by generic owner
+ // acceptance of a Qwen advisory review.
+ if(preflight.staticDisposition==='FAIL'||preflight.blockingFindings>0)
+   deny('STATIC_FINDINGS_BLOCK');
  const paths=new Set(preflight.privateSemanticPlan?.changedPaths||[]);
  if(!paths.size)deny('REPORT_CHANGED_SCOPE_MISSING');
  const lines=report.findings.map(f=>{
@@ -268,6 +274,9 @@ export async function executeProtectedRealSemanticReview({
    if(env.GITHUB_EVENT_NAME==='issue_comment' &&
       env.REVIEWER_B_EXPECTED_HEAD!==preflight.target.headSha)
       deny('REVIEW_REQUEST_HEAD_CHANGED');
+   // A deterministic FAIL must not become a COMMENTED owner-accepted review.
+   if(preflight.staticDisposition==='FAIL'||preflight.blockingFindings>0)
+     deny('STATIC_FINDINGS_BLOCK');
    stage='LOCAL_MODEL';
    const local=await executeCompleteLocalSemanticReview({
      plan:preflight.privateSemanticPlan,runId,model:MODEL,

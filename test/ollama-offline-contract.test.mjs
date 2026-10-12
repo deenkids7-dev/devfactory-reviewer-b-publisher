@@ -73,21 +73,28 @@ test('R58 constraints forbid citing removed lines in single-file model grammar',
  assert.throws(()=>parse(completion(invalid)),
   /OLLAMA_FINDING_NOT_ADDED_LINE/);
 });
-test('R58 no added lines enforces empty model findings, never invent anchors',()=>{
+test('R70 removed-only auth check cannot generate an empty allegedly complete review',()=>{
  const onlyDeleted=Buffer.from(
   'diff --git a/src/deleted.mjs b/src/deleted.mjs\n'+
   'index 1234567..abcdef0 100644\n--- a/src/deleted.mjs\n'+
-  '+++ b/src/deleted.mjs\n@@ -1 +0,0 @@\n-old()\n'
+  '+++ b/src/deleted.mjs\n@@ -1 +0,0 @@\n-if (!authorized) return false;\n'
  );
- const p=prepareBoundedSemanticReview({
-   snapshot:{repository:'deenkids7-dev/deenkids',repository_id:1282086207,
-    pr_number:898,head_sha:'a'.repeat(40),base_sha:'b'.repeat(40),
-    diff_sha256:createHash('sha256').update(onlyDeleted).digest('hex')},
-   rawDiffBytes:onlyDeleted
- });
- const q=JSON.parse(prepareOfflineOllamaCandidate({plan:p}).privateRequestJson);
- assert.equal(q.format.properties.findings.maxItems,0);
- assert.equal(q.format.properties.findings.items.properties.line.enum,undefined);
+ const p=prepareBoundedSemanticReview({snapshot:{
+  repository:'deenkids7-dev/deenkids',repository_id:1282086207,
+  pr_number:898,head_sha:'a'.repeat(40),base_sha:'b'.repeat(40),
+  diff_sha256:createHash('sha256').update(onlyDeleted).digest('hex')
+ },rawDiffBytes:onlyDeleted});
+ assert.throws(()=>prepareOfflineOllamaCandidate({plan:p}),
+  /DIFF_DELETION_ONLY_UNANCHORED/);
+ assert.throws(()=>validateOfflineOllamaCompletion({
+  response:{model:'qwen2.5-coder:7b',done:true,done_reason:'stop',
+   message:{role:'assistant',content:noIssues},
+   prompt_eval_count:400,eval_count:100},
+  expectedModel:'qwen2.5-coder:7b',runId:'test-run-R70',
+  trustedChangedPaths:['src/deleted.mjs'],trustedDiffBytes:onlyDeleted,
+  expectedDiffSha256:createHash('sha256').update(onlyDeleted).digest('hex'),
+  maxCompletionTokens:2048
+ }),/DIFF_DELETION_ONLY_UNANCHORED/);
 });
 test('protected ephemeral model reuse is explicit, time-limited and off by default',()=>{
  const legacy=JSON.parse(prepareOfflineOllamaCandidate({plan:plan()}).privateRequestJson);

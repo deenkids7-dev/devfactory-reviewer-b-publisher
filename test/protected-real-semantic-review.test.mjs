@@ -182,6 +182,29 @@ test('unsafe model message cannot inject mentions, tags or markdown code fences'
  assert.doesNotMatch(p.body,/@everyone|<script>|bad\x60payload/);
  assert.match(p.body,/＠|_everyone/);
 });
+test('R70 static blocker cannot become a publishable model advisory',()=>{
+ const blocked={...preflight(),staticDisposition:'FAIL',blockingFindings:1};
+ assert.throws(()=>prepareRealSemanticComment({
+  preflight:blocked,local:local(),runId:RUN
+ }),/STATIC_FINDINGS_BLOCK/);
+ const src=readFileSync(new globalThis.URL(
+  '../scripts/protected-real-semantic-review.mjs',import.meta.url),'utf8');
+ assert.ok(src.indexOf("deny('STATIC_FINDINGS_BLOCK')")<
+           src.indexOf("await executeCompleteLocalSemanticReview("));
+ assert.equal(classifyProtectedReviewFailure('PRIVATE_PREFLIGHT',
+  Error('STATIC_FINDINGS_BLOCK')),
+  'REAL_REVIEW_PRIVATE_PREFLIGHT_STATIC_FINDINGS_BLOCK');
+});
+test('R70 model text cannot create external Markdown links or images',()=>{
+ const f={...finding(),
+  message:'[click me](https://bad.example/x) ![track](https://bad.example/i)',
+  evidence:'www.attacker.example or [more](javascript:alert(1))'};
+ const p=prepareRealSemanticComment({preflight:preflight(),
+  local:local([f]),runId:RUN});
+ assert.doesNotMatch(p.body,/https?:\/\/bad\.example|www\.attacker\.example/);
+ assert.doesNotMatch(p.body,/\]\(|!\[/);
+ assert.match(p.body,/external_link_redacted/);
+});
 test('reject fake or stale model, body, report, path and authority before publication',()=>{
  const patches=[
   {local:{...local(),localModelExecuted:false}},

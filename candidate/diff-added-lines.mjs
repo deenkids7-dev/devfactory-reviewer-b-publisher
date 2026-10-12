@@ -107,3 +107,33 @@ export function isAddedLine({anchors,path,line}={}){
   return !!(anchors&&Object.hasOwn(anchors,path)&&
     Number.isSafeInteger(line)&&anchors[path].includes(line));
 }
+
+/**
+ * Reject a bounded diff hunk that deletes source but has no new-side added
+ * line where reviewer findings v1 could be anchored. This DOES NOT classify
+ * the deletion as unsafe: it proves only that the current reviewer cannot
+ * safely assert complete semantic coverage of this fragment.
+ *
+ * Call on each individual inference shard (and again on model completion).
+ * Do not borrow a line number from a different hunk or model shard.
+ */
+export function assertReviewableDeletionCoverage({diffBytes}={}){
+  deriveAddedLinesFromDiff({diffBytes});
+  const source=diffBytes.toString('utf8').replace(/\r\n/g,'\n');
+  let inHunk=false,deleted=false,added=false;
+  function finish(){
+    if(inHunk&&deleted&&!added)deny('DIFF_DELETION_ONLY_UNANCHORED');
+  }
+  for(const line of source.split('\n')){
+    if(line.startsWith('diff --git ')||line.startsWith('@@ ')){
+      finish();
+      inHunk=line.startsWith('@@ ');
+      deleted=false;added=false;
+    }else if(inHunk){
+      if(line.startsWith('-'))deleted=true;
+      else if(line.startsWith('+'))added=true;
+    }
+  }
+  finish();
+  return true;
+}
