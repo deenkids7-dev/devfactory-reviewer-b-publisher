@@ -382,3 +382,13 @@ test('R72 duplicate native COMMENTED review is checked BEFORE costly model infer
    Error('SEMANTIC_ALREADY_REVIEWED')),
    'REAL_REVIEW_PRIVATE_PREFLIGHT_SEMANTIC_ALREADY_REVIEWED');
 });
+
+test('R75 a deleted OLD-side finding is explicitly labelled in native COMMENTED',()=>{
+ const f={...finding(),side:'OLD'};
+ const prepared=prepareRealSemanticComment({
+  preflight:preflight(),local:local([f]),runId:RUN
+ });
+ assert.match(prepared.body,/src\/a\.mjs:4 \[REMOVED\/OLD\]/);
+ assert.equal(prepared.approvalAuthorized,false);
+ assert.equal(prepared.independentReviewVerified,false);
+});

@@ -108,11 +108,14 @@ export function prepareRealSemanticComment({preflight,local,runId}={}){
      typeof f.fingerprint!=='string'||!SHA64.test(f.fingerprint)||
      typeof f.severity!=='string'||
      !['critical','high','medium','low','informational'].includes(f.severity)||
+     (f.side!==undefined&&!['OLD','NEW'].includes(f.side))||
      typeof f.message!=='string'||!f.message.trim()||f.message.length>500||
      typeof f.evidence!=='string'||!f.evidence.trim()||f.evidence.length>1000)
      deny('REPORT_FINDING_INVALID');
    return '- '+f.severity.toUpperCase()+' '+text(f.path,300)+
-     ':'+f.line+' — '+text(f.message,500)+' (Evidence: '+text(f.evidence,1000)+')';
+     ':'+f.line+(f.side==='OLD'?' [REMOVED/OLD]':
+       f.side==='NEW'?' [ADDED/NEW]':'')+' — '+
+       text(f.message,500)+' (Evidence: '+text(f.evidence,1000)+')';
  });
  const reviewMode=local.reviewMode??'DEEP';
  if(!['QUICK','DEEP'].includes(reviewMode)||
@@ -163,6 +166,7 @@ export function prepareRealSemanticComment({preflight,local,runId}={}){
    for(const cap of [120,80,48,24]){
      const compact=report.findings.map((f,i)=>'- #'+(i+1)+' '+
        f.severity.toUpperCase()+' '+text(f.path,300)+':'+f.line+
+       (f.side==='OLD'?' [REMOVED/OLD]':f.side==='NEW'?' [ADDED/NEW]':'')+
        ' — '+concise(f.message,cap,500)+
        ' | Evidence excerpt: '+concise(f.evidence,cap,1000));
      body=[...opening,

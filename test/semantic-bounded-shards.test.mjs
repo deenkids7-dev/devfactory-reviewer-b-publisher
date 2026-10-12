@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {inspect} from 'node:util';
 import {deriveAddedLinesFromDiff} from '../candidate/diff-added-lines.mjs';
+import {deriveRemovedLinesFromDiff} from '../candidate/diff-removed-lines.mjs';
 import {prepareBoundedSemanticReview} from '../candidate/semantic-review-request.mjs';
 import {partitionRealSemanticDiff,planAdaptiveSemanticShards,
  executeCompleteLocalSemanticReview}
@@ -413,7 +414,7 @@ test('LARGE diffs and too many files keep exhaustive DEEP lane and do not skip G
  assert.equal(r.partitions.rawByteCoverageProven,true);
 });
 
-test('R71 deletion-only late hunk fails at planning before any local model call',async()=>{
+test('R75 a deletion-only late shard is reviewed with explicit OLD-side provenance',async()=>{
  const bytes=Buffer.from(
   'diff --git a/src/alpha.mjs b/src/alpha.mjs\n'+
   'index 1234567..abcdef0 100644\n--- a/src/alpha.mjs\n'+
@@ -421,16 +422,34 @@ test('R71 deletion-only late hunk fails at planning before any local model call'
   '@@ -11 +11,0 @@\n-if (!user.authorized) return false;\n'
  );
  const trusted=plan(bytes);
- let calls=0;
- const fetchImpl=async()=>{calls++;throw Error('UNEXPECTED_NETWORK');};
- assert.throws(()=>planAdaptiveSemanticShards({plan:trusted}),
-  /DIFF_DELETION_ONLY_UNANCHORED/);
- await assert.rejects(()=>executeCompleteLocalSemanticReview({
-  plan:trusted,runId:RUN,fetchImpl
- }),/DIFF_DELETION_ONLY_UNANCHORED/);
- assert.equal(calls,0);
+ let calls=0,oldSeen=false;
+ const fetchImpl=async(url,options)=>{
+  calls++;const request=JSON.parse(options.body);
+  const input=JSON.parse(request.messages[1].content);
+  const old=deriveRemovedLinesFromDiff({
+    diffBytes:Buffer.from(input.untrusted_unified_diff)
+  })['src/alpha.mjs'];
+  const line=old.includes(11)?11:null;
+  if(line!==null)oldSeen=true;
+  const findings=line===null?[]:[{side:'OLD',severity:'high',
+   path:'src/alpha.mjs',line,
+   message:'A synthetic authorization guard was removed',
+   evidence:'Invalid user accepted after old-side guard deletion'}];
+  return fakeReply({model:'qwen2.5-coder:7b',done:true,done_reason:'stop',
+   message:{role:'assistant',content:JSON.stringify({
+    summary:'Synthetic old-side review',findings})},
+   prompt_eval_count:600,eval_count:120});
+ };
+ const route=planAdaptiveSemanticShards({plan:trusted});
+ assert.ok(route.partitions.shardCount>0);
+ const result=await executeCompleteLocalSemanticReview({plan:trusted,runId:RUN,fetchImpl});
+ assert.ok(calls>0);
+ assert.equal(oldSeen,true);
+ assert.equal(result.findingCount,1);
+ assert.equal(result.provisionalState,'FAIL');
+ assert.equal(JSON.parse(result.privateCanonicalReportBytes).findings[0].side,'OLD');
+ assert.equal(result.independentReviewVerified,false);
 });
-
 test('R73 actual bounded inference passes immutable full-diff declaration hints to later shards',async()=>{
  const addFile=(path,body,newCount)=>'diff --git a/'+path+' b/'+path+'\n'+
   'index 1234567..abcdef0 100644\n--- a/'+path+'\n'+
