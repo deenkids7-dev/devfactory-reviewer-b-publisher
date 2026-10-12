@@ -297,3 +297,55 @@ test('wrong-type and weak RSA App keys preserve precise key-type denial',()=>{
   assert.throws(()=>createReviewerBAppJwt({privateKeyPem:'not-a-key'.repeat(12),now}),
     e=>e.message==='APP_AUTH_INVALID_RSA_PRIVATE_KEY');
 });
+
+test('R97 simulated 170-minute CPU analysis requires fresh scoped READ token',async()=>{
+ const completed=now+170*60*1000;
+ const initialJwt=createReviewerBAppJwt({privateKeyPem:key,now});
+ const renewedJwt=createReviewerBAppJwt({privateKeyPem:key,now:completed});
+ assert.notEqual(initialJwt,renewedJwt);
+ const initialExpiration=Date.parse(exp);
+ assert.ok(completed>initialExpiration);
+ const renewalExpiration=new Date(completed+55*60000).toISOString().replace('.000Z','Z');
+ const f=fakeTransport({body:{
+   expires_at:renewalExpiration,
+   permissions:{pull_requests:'read',contents:'read',metadata:'read'}
+ }});
+ const refreshed=await createScopedReviewerBInstallationToken({
+   appJwt:renewedJwt,fetchImpl:f.fetchImpl,now:completed,purpose:'reviewRead'
+ });
+ assert.equal(refreshed.purpose,'reviewRead');
+ assert.equal(refreshed.expiresAt,renewalExpiration);
+ assert.equal(f.calls.length,1);
+ assert.equal(f.calls[0].config.headers.Authorization,'Bearer '+renewedJwt);
+ assert.deepEqual(JSON.parse(f.calls[0].config.body),{
+   repository_ids:[1282086207],
+   permissions:{pull_requests:'read',contents:'read'}
+ });
+ assert.equal(JSON.stringify(refreshed).includes(TOKEN),false);
+});
+
+test('R97 long-run refresh rejects stale, overprivileged or unavailable READ tokens',async()=>{
+ const completed=now+75*60*1000;
+ const jwt=createReviewerBAppJwt({privateKeyPem:key,now:completed});
+ const stale=fakeTransport({body:{
+   expires_at:exp,
+   permissions:{pull_requests:'read',contents:'read',metadata:'read'}
+ }});
+ await assert.rejects(
+   ()=>createScopedReviewerBInstallationToken({
+     appJwt:jwt,fetchImpl:stale.fetchImpl,now:completed,purpose:'reviewRead'
+   }),/APP_AUTH_INSTALLATION_SCOPE_UNVERIFIED/);
+ const over=fakeTransport({body:{
+   expires_at:new Date(completed+55*60000).toISOString().replace('.000Z','Z'),
+   permissions:{pull_requests:'write',contents:'read',metadata:'read'}
+ }});
+ await assert.rejects(
+   ()=>createScopedReviewerBInstallationToken({
+     appJwt:jwt,fetchImpl:over.fetchImpl,now:completed,purpose:'reviewRead'
+   }),/APP_AUTH_INSTALLATION_SCOPE_UNVERIFIED/);
+ const offline=fakeTransport({error:true});
+ await assert.rejects(
+   ()=>createScopedReviewerBInstallationToken({
+     appJwt:jwt,fetchImpl:offline.fetchImpl,now:completed,purpose:'reviewRead'
+   }),/APP_AUTH_API_REQUEST_FAILED/);
+});
