@@ -38,10 +38,16 @@ test('build local Ollama JSON request, never authorize or publish',()=>{
  assert.equal(input.format.type,'object');
  assert.equal(input.format.additionalProperties,false);
  assert.deepEqual(input.format.required,['summary','findings']);
- assert.equal(input.format.properties.findings.items.additionalProperties,false);
- assert.deepEqual(input.format.properties.findings.items.properties.path.enum,
-  ['src/check.mjs']);
- assert.deepEqual(input.format.properties.findings.items.properties.line.enum,[1]);
+ // A replacement line has BOTH OLD and NEW anchors, and R86 binds them.
+ const variants=input.format.properties.findings.items.anyOf;
+ assert.equal(variants.length,2);
+ for(const branch of variants){
+  assert.equal(branch.additionalProperties,false);
+  assert.deepEqual(branch.properties.path.enum,['src/check.mjs']);
+  assert.deepEqual(branch.properties.line.enum,[1]);
+  assert.ok(branch.required.includes('side'));
+ }
+ assert.deepEqual(variants.map(x=>x.properties.side.enum),[['OLD'],['NEW']]);
  assert.match(input.messages[0].content,/format schema line enum/);
  assert.equal(input.options.num_ctx,8192);
  assert.equal(input.options.temperature,0);
@@ -64,8 +70,9 @@ test('R58 constraints forbid citing removed lines in single-file model grammar',
  const request=JSON.parse(prepareOfflineOllamaCandidate({
   plan:p,maxOutputTokens:1024
  }).privateRequestJson);
- assert.deepEqual(request.format.properties.findings.items.properties.line.enum,[1]);
- assert.equal(request.format.properties.findings.items.properties.line.minimum,1);
+ const branches=request.format.properties.findings.items.anyOf;
+ assert.deepEqual(branches.map(x=>x.properties.line.enum),[[1],[1]]);
+ assert.ok(branches.every(x=>x.properties.line.minimum===1));
  const invalid=JSON.stringify({summary:'Example unsafe claim',findings:[{
    severity:'high',path:'src/check.mjs',line:2,
    message:'Incorrect deleted/context position',evidence:'synthetic input'
@@ -328,4 +335,86 @@ test('only an internally consistent model length stop yields recoverable truncat
    assert.throws(()=>parse({...valid,...extra},{maxCompletionTokens:1024}),
      e=>e.message!=='OLLAMA_OUTPUT_TRUNCATED');
  }
+});
+
+test('R86 authenticated OLD and NEW anchors are paired, not independently enumerated',()=>{
+ const mixed=Buffer.from(
+  'diff --git a/src/guard.mjs b/src/guard.mjs\n'+
+  'index 1234567..abcdef0 100644\n'+
+  '--- a/src/guard.mjs\n+++ b/src/guard.mjs\n'+
+  '@@ -1,2 +1,2 @@\n-oldFunction()\n+newFunction()\n kept\n'+
+  '@@ -11 +10,0 @@\n-if (!authorized) return false;\n'
+ );
+ const p=prepareBoundedSemanticReview({
+  snapshot:{repository:'deenkids7-dev/deenkids',repository_id:1282086207,
+   pr_number:904,head_sha:'a'.repeat(40),base_sha:'b'.repeat(40),
+   diff_sha256:createHash('sha256').update(mixed).digest('hex')},
+  rawDiffBytes:mixed
+ });
+ const request=JSON.parse(prepareOfflineOllamaCandidate({
+  plan:p,maxOutputTokens:1024
+ }).privateRequestJson);
+ const items=request.format.properties.findings.items;
+ assert.ok(Array.isArray(items.anyOf));
+ assert.equal(items.anyOf.length,2);
+ const triples=items.anyOf.map(x=>({
+  path:x.properties.path.enum,side:x.properties.side.enum,
+  lines:x.properties.line.enum,required:x.required,
+  forbidOther:x.additionalProperties
+ }));
+ assert.deepEqual(triples.map(x=>x.side),[['OLD'],['NEW']]);
+ assert.deepEqual(triples.map(x=>x.lines),[[1,11],[1]]);
+ assert.deepEqual(triples.map(x=>x.path),[['src/guard.mjs'],['src/guard.mjs']]);
+ for(const x of triples){
+  assert.ok(x.required.includes('side'));
+  assert.equal(x.forbidOther,false);
+ }
+ assert.equal(request.options.num_ctx,8192);
+ const responseFor=(finding)=>({
+  model:'qwen2.5-coder:7b',done:true,done_reason:'stop',
+  message:{role:'assistant',content:JSON.stringify({
+   summary:'synthetic removal review',findings:[finding]})},
+  prompt_eval_count:500,eval_count:140
+ });
+ const trusted={expectedModel:'qwen2.5-coder:7b',runId:'gh-test-r86-pairing',
+  trustedChangedPaths:['src/guard.mjs'],trustedDiffBytes:mixed,
+  expectedDiffSha256:createHash('sha256').update(mixed).digest('hex')};
+ const f={side:'OLD',path:'src/guard.mjs',line:11,severity:'high',
+  message:'Removal of authorization guard changes behavior',
+  evidence:'An unauthorized request was rejected before removal'};
+ const accepted=validateOfflineOllamaCompletion({...trusted,response:responseFor(f)});
+ assert.equal(accepted.provisionalState,'FAIL');
+ assert.equal(JSON.parse(accepted.privateCanonicalReportBytes).findings[0].side,'OLD');
+ assert.throws(()=>validateOfflineOllamaCompletion({
+  ...trusted,response:responseFor({...f,side:'NEW'})
+ }),/OLLAMA_FINDING_NOT_ADDED_LINE/);
+ assert.throws(()=>validateOfflineOllamaCompletion({
+  ...trusted,response:responseFor((({side,...rest})=>rest)(f))
+ }),/OLLAMA_FINDING_NOT_ADDED_LINE/);
+});
+test('R86 path binding prevents citing another file line even in multi-file schema',()=>{
+ const raw=Buffer.from(
+  'diff --git a/src/a.mjs b/src/a.mjs\n'+
+  'index 1234567..abcdef0 100644\n'+
+  '--- a/src/a.mjs\n+++ b/src/a.mjs\n'+
+  '@@ -4 +4,0 @@\n-deleteOld()\n'+
+  'diff --git a/src/b.mjs b/src/b.mjs\n'+
+  'index 1234567..abcdef0 100644\n'+
+  '--- a/src/b.mjs\n+++ b/src/b.mjs\n'+
+  '@@ -10,0 +11 @@\n+insertNew()\n');
+ const p=prepareBoundedSemanticReview({snapshot:{
+  repository:'deenkids7-dev/deenkids',repository_id:1282086207,
+  pr_number:904,head_sha:'a'.repeat(40),base_sha:'b'.repeat(40),
+  diff_sha256:createHash('sha256').update(raw).digest('hex')},
+  rawDiffBytes:raw});
+ const request=JSON.parse(prepareOfflineOllamaCandidate({
+  plan:p,maxOutputTokens:1024}).privateRequestJson);
+ const opts=request.format.properties.findings.items.anyOf;
+ assert.deepEqual(opts.map(x=>({
+  path:x.properties.path.enum[0],side:x.properties.side.enum[0],
+  lines:x.properties.line.enum})),[
+  {path:'src/a.mjs',side:'OLD',lines:[4]},
+  {path:'src/b.mjs',side:'NEW',lines:[11]}
+ ]);
+ assert.equal(JSON.stringify(request).includes('deenkids7-dev/deenkids'),true);
 });
