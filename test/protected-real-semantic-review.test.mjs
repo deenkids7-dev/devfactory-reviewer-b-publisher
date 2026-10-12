@@ -369,3 +369,16 @@ test('long Qwen analysis must refresh the short-lived GitHub App JWT before writ
  assert.match(src,/appJwt:writerJwt,purpose:'publish',now:writerNow/);
  assert.doesNotMatch(src,/appJwt:jwt,purpose:'publish',now,fetchImpl/);
 });
+
+test('R72 duplicate native COMMENTED review is checked BEFORE costly model inference',()=>{
+ const src=readFileSync(new globalThis.URL(
+  '../scripts/protected-real-semantic-review.mjs',import.meta.url),'utf8');
+ const preflight=src.indexOf("const preflight=await runReadOnlyReviewPreflight({");
+ const existing=src.indexOf("const prior=await readNativeReviews({",preflight);
+ const refusal=src.indexOf("}).blocked)deny('SEMANTIC_ALREADY_REVIEWED');",existing);
+ const model=src.indexOf("const local=await executeCompleteLocalSemanticReview({",preflight);
+ assert.ok(preflight>=0&&existing>preflight&&refusal>existing&&model>refusal);
+ assert.equal(classifyProtectedReviewFailure('PRIVATE_PREFLIGHT',
+   Error('SEMANTIC_ALREADY_REVIEWED')),
+   'REAL_REVIEW_PRIVATE_PREFLIGHT_SEMANTIC_ALREADY_REVIEWED');
+});
