@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { deriveAddedLinesFromDiff,isAddedLine } from '../candidate/diff-added-lines.mjs';
+import { deriveAddedLinesFromDiff,isAddedLine,assertReviewableDeletionCoverage } from '../candidate/diff-added-lines.mjs';
 const hdr=p=>'diff --git a/'+p+' b/'+p+'\n'+
  'index 0123456..abcdef0 100644\n--- a/'+p+'\n+++ b/'+p+'\n';
 const parse=s=>deriveAddedLinesFromDiff({diffBytes:Buffer.from(s)});
@@ -76,4 +76,19 @@ test('actual Git empty context line is a prefixed space, never bare blank',()=>{
  const corrupted=valid.replace('\n \n','\n\n');
  assert.notEqual(corrupted,valid);
  assert.throws(()=>parse(corrupted),/DIFF_ANCHOR_HUNK_MISMATCH/);
+});
+
+test('R70 deletion-only hunks must fail closed instead of yielding false clean coverage',()=>{
+ const pure=Buffer.from(hdr('src/auth.mjs')+
+   '@@ -1 +0,0 @@\n-if (!authorized) return false;\n');
+ assert.throws(()=>assertReviewableDeletionCoverage({diffBytes:pure}),
+   /DIFF_DELETION_ONLY_UNANCHORED/);
+ const mixed=Buffer.from(hdr('src/auth.mjs')+
+   '@@ -1 +1 @@\n-old\n+new\n'+
+   '@@ -8,1 +8,0 @@\n-checkAccess()\n');
+ assert.throws(()=>assertReviewableDeletionCoverage({diffBytes:mixed}),
+   /DIFF_DELETION_ONLY_UNANCHORED/);
+ const good=Buffer.from(hdr('src/auth.mjs')+
+   '@@ -1 +1 @@\n-old\n+new\n');
+ assert.equal(assertReviewableDeletionCoverage({diffBytes:good}),true);
 });
