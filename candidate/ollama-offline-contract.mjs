@@ -270,13 +270,9 @@ export function validateOfflineOllamaCompletion({
     if(!changed.has(f.path))deny('OLLAMA_FINDING_PATH_MISMATCH');
     if(!Number.isSafeInteger(f.line)||f.line<1||f.line>1000000)
       deny('OLLAMA_FINDING_LINE_INVALID');
-    const pathHasRemovals=(removedAnchors[f.path]||[]).length>0;
-    // Legacy v1 additions without 'side' remain NEW, but only when
-    // independently anchored to a genuine added line. Unanchored deletions
-    // still require explicit OLD and cannot impersonate NEW.
-    if(pathHasRemovals&&!hasSide&&
-       !isAddedLine({anchors,path:f.path,line:f.line}))
-      deny('OLLAMA_FINDING_SIDE_REQUIRED');
+    // Backwards-compatible missing side ALWAYS means NEW. The independent
+    // added-line anchor check below rejects unmarked OLD-side findings.
+    // Protected Qwen grammar explicitly requires side on removal shards.
     if(hasSide&&!['OLD','NEW'].includes(f.side))
       deny('OLLAMA_FINDING_SIDE_INVALID');
     if(f.side==='OLD'){
