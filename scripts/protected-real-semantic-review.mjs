@@ -277,6 +277,20 @@ export async function executeProtectedRealSemanticReview({
    // A deterministic FAIL must not become a COMMENTED owner-accepted review.
    if(preflight.staticDisposition==='FAIL'||preflight.blockingFindings>0)
      deny('STATIC_FINDINGS_BLOCK');
+   // Check native GitHub review presence with the short-lived READ token
+   // BEFORE starting costly local inference. Repeated service requests,
+   // workflow reruns and ambiguous prior publication must never spend CPU
+   // only to collide with an already published bot review on the same HEAD.
+   // Malformed prior reviews and GitHub read failures remain fail-closed.
+   const prior=await readNativeReviews({
+     prNumber:preflight.target.prNumber,
+     expectedHeadSha:preflight.target.headSha,
+     installationToken:read.token,fetchImpl
+   });
+   if(assessNativeReviewUniqueness({
+     observed:prior,prNumber:preflight.target.prNumber,
+     currentHeadSha:preflight.target.headSha
+   }).blocked)deny('SEMANTIC_ALREADY_REVIEWED');
    stage='LOCAL_MODEL';
    const local=await executeCompleteLocalSemanticReview({
      plan:preflight.privateSemanticPlan,runId,model:MODEL,
