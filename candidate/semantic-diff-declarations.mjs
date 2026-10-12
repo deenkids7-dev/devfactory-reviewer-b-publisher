@@ -108,13 +108,22 @@ export function makeBoundedDiffDeclarationIndex({plan}={}){
  * Cross-shard context is optional but cannot be forged by a PR, model,
  * synthetic JSON or a caller-supplied source summary.
  */
-export function verifiedDiffDeclarationSummary({index,plan}={}){
+export function verifiedDiffDeclarationSummary({index,plan,originalDiffSha256=null}={}){
+ // An entire authenticated diff has its own SHA. Individual bounded
+ // shards have different SHAs. Only the protected complete-diff runner
+ // can carry the original SHA from its verified partition membership.
+ const expectedOriginal=originalDiffSha256??plan?.exactScope?.diffSha256;
  if(index===undefined||index===null)return '';
  if(!trusted.has(index)||!plan||!plan.exactScope||
    index.repository!==plan.exactScope.repository||
    index.prNumber!==plan.exactScope.prNumber||
    index.headSha!==plan.exactScope.headSha||
    index.baseSha!==plan.exactScope.baseSha||
+   // The original immutable diff identity must be exact, not inferred only
+   // from HEAD/BASE. A synthetic or stale cross-shard index can never add
+   // declarations from a different authenticated diff.
+   typeof expectedOriginal!=='string'||!HASH.test(expectedOriginal)||
+   index.originalDiffSha256!==expectedOriginal||
    !Array.isArray(plan.changedPaths)||
    plan.changedPaths.some(path=>typeof path!=='string'))
    deny();

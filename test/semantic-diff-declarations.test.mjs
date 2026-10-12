@@ -34,7 +34,9 @@ test('R73 full authenticated diff yields names missing from an individual shard'
  assert.equal(index.approvalAuthorized,false);
  const shard=plan(Buffer.from(file('src/use.mjs',' old\n+githubJson();\n',1,2)));
  const req=prepareOfflineOllamaCandidate({
-  plan:shard,trustedDeclarationIndex:index,maxOutputTokens:1024
+  plan:shard,trustedDeclarationIndex:index,
+  trustedOriginalDiffSha256:plan().exactScope.diffSha256,
+  maxOutputTokens:1024
  });
  const request=JSON.parse(req.privateRequestJson);
  const input=JSON.parse(request.messages[1].content);
@@ -96,4 +98,40 @@ test('R74 unchanged context declarations are present on HEAD, removed declaratio
  assert.match(summary,/auth\.mjs:function introducedFunction/);
  assert.doesNotMatch(summary,/deletedFunction/);
  assert.doesNotMatch(JSON.stringify(index),/keptFunction|introducedFunction/);
+});
+
+test('R77 rejects a cross-shard declaration index from another SHA-256 diff with the SAME HEAD/BASE',()=>{
+ const originalPlan=plan();
+ const index=makeBoundedDiffDeclarationIndex({plan:originalPlan});
+ const changed=Buffer.from(file('src/usage.mjs',' old\n+differentCall();\n',1,2));
+ const syntheticSameHead=plan(changed);
+ assert.equal(syntheticSameHead.exactScope.headSha,originalPlan.exactScope.headSha);
+ assert.equal(syntheticSameHead.exactScope.baseSha,originalPlan.exactScope.baseSha);
+ assert.notEqual(syntheticSameHead.exactScope.diffSha256,originalPlan.exactScope.diffSha256);
+ assert.throws(()=>verifiedDiffDeclarationSummary({
+  index,plan:syntheticSameHead
+ }),/DIFF_DECLARATIONS_UNTRUSTED/);
+ assert.throws(()=>prepareOfflineOllamaCandidate({
+  plan:syntheticSameHead,trustedDeclarationIndex:index
+ }),/DIFF_DECLARATIONS_UNTRUSTED/);
+});
+
+test('R77 binds a legitimate shard to parent FULL diff digest, not shard digest',()=>{
+ const full=plan();
+ const index=makeBoundedDiffDeclarationIndex({plan:full});
+ const isolated=plan(Buffer.from(file('src/use.mjs',' old\n+githubJson();\n',1,2)));
+ assert.notEqual(full.exactScope.diffSha256,isolated.exactScope.diffSha256);
+ assert.throws(()=>verifiedDiffDeclarationSummary({
+   index,plan:isolated
+ }),/DIFF_DECLARATIONS_UNTRUSTED/);
+ const summary=verifiedDiffDeclarationSummary({
+   index,plan:isolated,originalDiffSha256:full.exactScope.diffSha256
+ });
+ assert.match(summary,/functions\.mjs:function githubJson/);
+ const result=prepareOfflineOllamaCandidate({
+   plan:isolated,trustedDeclarationIndex:index,
+   trustedOriginalDiffSha256:full.exactScope.diffSha256
+ });
+ assert.equal(result.diffDeclarationContext,'BOUNDED_INCLUDED');
+ assert.equal(result.approvalAuthorized,false);
 });
