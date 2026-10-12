@@ -386,8 +386,19 @@ test('sensitive runtime and security paths retain DEEP model coverage, Gemini re
   assert.equal(route.mode,'DEEP',name);
   assert.equal(route.reason,'SENSITIVE_CHANGE');
   assert.equal(route.geminiAdvisoryRecommended,true);
-  assert.equal(route.partitions.shardCount,baseline.shardCount);
+  assert.ok(route.partitions.shardCount<=baseline.shardCount);
+  assert.equal(route.partitions.rawByteCoverageProven,true);
   assert.equal(route.partitions.originalDiffSha256,baseline.originalDiffSha256);
+  const actualAdded=[],actualRemoved=[];
+  for(const chunk of route.partitions.shards){
+   const a=deriveAddedLinesFromDiff({diffBytes:chunk.privateDiffBytes});
+   const r=deriveRemovedLinesFromDiff({diffBytes:chunk.privateDiffBytes});
+   actualAdded.push(...(a[name]||[]));
+   actualRemoved.push(...(r[name]||[]));
+  }
+  const source=Buffer.from(file(name,65));
+  assert.deepEqual(actualAdded,deriveAddedLinesFromDiff({diffBytes:source})[name]);
+  assert.deepEqual(actualRemoved,deriveRemovedLinesFromDiff({diffBytes:source})[name]);
  }
 });
 test('QUICK never bypasses strict context budget and falls back BEFORE local inference',()=>{
@@ -491,4 +502,56 @@ test('R73 actual bounded inference passes immutable full-diff declaration hints 
  assert.equal(result.provisionalState,'INCONCLUSIVE');
  assert.equal(result.independentReviewVerified,false);
  assert.equal(result.approvalAuthorized,false);
+});
+
+
+test('R87 sensitive DEEP optimization shortens shards but never drops authenticated OLD/NEW coordinates',async()=>{
+ const bytes=Buffer.from(
+   file('devfactory/autonomy/lib/alpha.mjs',88)+
+   file('devfactory/autonomy/lib/beta.mjs',88)
+ );
+ const source=plan(bytes);
+ const baseline=partitionRealSemanticDiff({plan:source,maxChunkBytes:1536});
+ const optimized=planAdaptiveSemanticShards({plan:source,maxOutputTokens:1024});
+ assert.equal(optimized.mode,'DEEP');
+ assert.equal(optimized.geminiAdvisoryRecommended,true);
+ assert.equal(optimized.partitions.rawByteCoverageProven,true);
+ assert.ok(optimized.partitions.shardCount<baseline.shardCount);
+ assert.equal(optimized.partitions.originalDiffSha256,baseline.originalDiffSha256);
+ for(const path of source.changedPaths){
+  const reconstructed=[];
+  for(const part of optimized.partitions.shards){
+   const anchors=deriveAddedLinesFromDiff({diffBytes:part.privateDiffBytes});
+   reconstructed.push(...(anchors[path]||[]));
+  }
+  assert.deepEqual(reconstructed,deriveAddedLinesFromDiff({diffBytes:bytes})[path]);
+ }
+ const urls=[];
+ const mock=mockModel();
+ const result=await executeCompleteLocalSemanticReview({
+   plan:source,runId:RUN,fetchImpl:(url,options)=>{
+    urls.push(url);return mock.fetchImpl(url,options);
+   }
+ });
+ assert.equal(urls.length,optimized.partitions.shardCount);
+ assert.equal(result.rawByteCoverageProven,true);
+ assert.equal(result.reviewMode,'DEEP');
+ assert.equal(result.provisionalState,'INCONCLUSIVE');
+ assert.equal(result.approvalAuthorized,false);
+ assert.equal(result.independentReviewVerified,false);
+});
+
+test('R87 optimizer falls back to deep-sized chunks when max output budget constrains context',()=>{
+ const source=plan(Buffer.from(file('devfactory/autonomy/lib/security.mjs',70)));
+ const baseline=partitionRealSemanticDiff({plan:source,maxChunkBytes:1536});
+ let result;
+ try{result=planAdaptiveSemanticShards({plan:source,maxOutputTokens:4096});}
+ catch(e){
+  assert.equal(e.message,'OLLAMA_CONTEXT_CAPACITY_UNVERIFIED');
+  return;
+ }
+ assert.equal(result.mode,'DEEP');
+ assert.ok(result.partitions.shardCount<=baseline.shardCount);
+ assert.equal(result.partitions.rawByteCoverageProven,true);
+ assert.equal(result.partitions.originalDiffSha256,baseline.originalDiffSha256);
 });

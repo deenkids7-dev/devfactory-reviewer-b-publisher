@@ -183,15 +183,109 @@ export function partitionRealSemanticDiff({plan,maxChunkBytes=1536}={}){
  * Sensitive runtime/security/permissions/release changes remain DEEP.
  */
 const SENSITIVE_REVIEW_PATH=/(?:^\.github\/|^devfactory\/(?:autonomy\/(?:lib\/|scripts\/)|lib\/(?:quality-autonomy\/|merge|ciRun|failure-prevention\/))|(?:^|\/)(?:auth|security|secret|secrets|permission|permissions|payment|payments|billing|pricing|migration|migrations|infra|deploy|release)(?:\/|[._-]|$)|\.(?:ps1|sql|ya?ml)$)/i;
+
+/**
+ * R87: PERF ONLY on the protected CPU runner. Select the smallest number
+ * of fully authenticated, context-preflighted chunks for DEEP changes.
+ * Nothing is omitted: the 1,536 B plan is the immutable baseline; each
+ * candidate is independently reconstructed from the FULL exact diff.
+ * A candidate chunk exceeding context is itself fully verified and
+ * subdivided, not skipped or accepted with truncated model input.
+ *
+ * The caller still invokes local Qwen sequentially for EVERY resulting
+ * shard and requires every completion. No remote model, persisted private
+ * data, weakened review or partial native comment.
+ */
+export function optimizeProtectedDeepPartitions({plan,maxOutputTokens=1024}={}){
+ const original=partitionRealSemanticDiff({plan,maxChunkBytes:1536});
+ const declarations=makeBoundedDiffDeclarationIndex({plan});
+ const scope=original.originalDiffSha256;
+ function preflight(part){
+   const bytes=part.privateDiffBytes;
+   const chunkPlan=prepareBoundedSemanticReview({
+     snapshot:snapFor(plan,bytes),rawDiffBytes:bytes
+   });
+   prepareOfflineOllamaCandidate({
+     plan:chunkPlan,model:MODEL,maxOutputTokens,
+     protectedEphemeralKeepAlive:true,
+     trustedDeclarationIndex:declarations,
+     trustedOriginalDiffSha256:scope
+   });
+ }
+ // An old plan that cannot pass its own public request budget must not
+ // be silently presented as a validated faster plan.
+ for(const part of original.shards)preflight(part);
+ let best=original;
+ for(const cap of [3072,2560,2304,2048,1792]){
+   let candidate;
+   try{candidate=partitionRealSemanticDiff({plan,maxChunkBytes:cap});}
+   catch(error){
+     if(error?.message==='SEMANTIC_SHARD_LINE_TOO_LARGE')continue;
+     throw error;
+   }
+   if(candidate.shardCount>=best.shardCount)continue;
+   const selected=[];
+   let possible=true;
+   for(const part of candidate.shards){
+     try{
+       preflight(part);
+       selected.push(part);
+     }catch(error){
+       if(error?.message!=='OLLAMA_CONTEXT_CAPACITY_UNVERIFIED')
+         throw error;
+       const bytes=part.privateDiffBytes;
+       const chunkPlan=prepareBoundedSemanticReview({
+         snapshot:snapFor(plan,bytes),rawDiffBytes:bytes
+       });
+       let smaller;
+       try{smaller=partitionRealSemanticDiff({
+         plan:chunkPlan,maxChunkBytes:1536
+       });}catch{possible=false;break;}
+       if(smaller.originalDiffSha256!==part.diffSha256||
+          smaller.originalByteCount!==bytes.length||
+          smaller.shardCount<2||smaller.shardCount>8||
+          smaller.shards.some(v=>v.path!==part.path)) {
+         possible=false;break;
+       }
+       try{for(const child of smaller.shards)preflight(child);}
+       catch{possible=false;break;}
+       selected.push(...smaller.shards);
+     }
+     if(selected.length>=best.shardCount){possible=false;break;}
+   }
+   if(!possible||selected.length>=best.shardCount||selected.length>96)
+     continue;
+   // Both levels were full-source reconstructed. The parent source order
+   // is preserved and every child is an exact, full coverage subdivision.
+   const safe={...candidate,shardCount:selected.length,
+     shards:Object.freeze(selected),optimizedFromDeep:true,
+     rawByteCoverageProven:true,inferenceExecuted:false,
+     independentReviewVerified:false,approvalAuthorized:false};
+   Object.defineProperties(safe,{
+     toJSON:{enumerable:false,configurable:false,value:()=>({
+       ...Object.fromEntries(Object.entries(safe)),
+       shards:selected.map(v=>v.toJSON())
+     })},
+     [inspect.custom]:{enumerable:false,configurable:false,
+       value:()=> '[OptimizedPrivateDeepShards: REDACTED; NOT APPROVED]'}
+   });
+   best=Object.freeze(safe);
+ }
+ return best;
+}
+
 export function planAdaptiveSemanticShards({plan,maxOutputTokens=1024}={}){
  const deep=partitionRealSemanticDiff({plan,maxChunkBytes:1536});
  const paths=plan.changedPaths;
  const small=deep.originalByteCount<=12288 && paths.length<=4;
  const sensitive=paths.some(p=>SENSITIVE_REVIEW_PATH.test(p));
- if(!small||sensitive)return Object.freeze({
-   mode:'DEEP',geminiAdvisoryRecommended:sensitive,
-   partitions:deep,reason:sensitive?'SENSITIVE_CHANGE':'LARGE_OR_MANY_FILES'
- });
+ if(!small||sensitive){
+   const optimized=optimizeProtectedDeepPartitions({plan,maxOutputTokens});
+   return Object.freeze({
+     mode:'DEEP',geminiAdvisoryRecommended:sensitive,
+     partitions:optimized,reason:sensitive?'SENSITIVE_CHANGE':'LARGE_OR_MANY_FILES'
+   });
+ }
  // Never attempt to fit a model shard optimistically; preconstruct the same
  // strict LOCAL request that executeLocalOllamaReview will require. A context
  // overflow falls back BEFORE inference. Unexpected validation errors still
