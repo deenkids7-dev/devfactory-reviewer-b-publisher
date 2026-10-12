@@ -130,7 +130,7 @@ export function prepareOfflineOllamaCandidate({
       ...(model==='qwen3:8b'?{think:false}:{}),
       options:{temperature:0,num_ctx:8192,num_predict:maxOutputTokens},
       messages:[{role:'system',content:system+
-        (withContext?'\\nThe authenticated_full_diff_declarations field lists only lexical names introduced in OTHER or current fragments of this PR diff. A name listed here must not be claimed absent solely because it is omitted from this shard; lexical scope and imports are not proven.':'')},
+        (withContext?'\\nThe authenticated_full_diff_declarations field lists only lexical names present on the HEAD side of this PR diff (added or unchanged hunk-context lines), including OTHER fragments. A name listed here must not be claimed absent solely because it is omitted from this shard; lexical scope and imports are not proven.':'')},
         {role:'user',content:input}]
     });
   };
