@@ -213,6 +213,26 @@ test('third free Qwen3 8B candidate is strictly local and cannot bypass review q
   assert.equal(c.url,ENDPOINT);
  }
 });
+test('experimental Qwen 3.5 4B runs the same 12 synthetic fixtures, never private source',async()=>{
+ const f=mock({model:'qwen3.5:4b'});
+ const result=await runSyntheticLocalOllamaBenchmark({fetchImpl:f.fetchImpl,model:'qwen3.5:4b'});
+ assert.equal(result.model,'qwen3.5:4b');
+ assert.equal(result.testsCompleted,12);
+ assert.equal(result.modelQualityCertified,false);
+ assert.equal(result.approvalAuthorized,false);
+ assert.equal(result.independentReviewerProvenanceVerified,false);
+ assert.equal(result.privateSourceReviewed,false);
+ assert.equal(f.calls.length,12);
+ for(const c of f.calls){
+  const req=JSON.parse(c.config.body);
+  assert.equal(req.model,'qwen3.5:4b');
+  assert.equal(req.think,false);
+  assert.equal(req.keep_alive,'5m');
+  assert.equal(req.options.num_ctx,8192);
+  assert.equal(c.url,ENDPOINT);
+ }
+});
+
 test('opt-in Qwen3 CI must run only synthetic cases with no privileged permissions',()=>{
  const y=readFileSync(new URL('../.github/workflows/reviewer-b-ollama-synthetic-canary.yml',
   import.meta.url),'utf8');
@@ -228,11 +248,14 @@ test('opt-in Qwen3 CI must run only synthetic cases with no privileged permissio
 test('opt-in Qwen3-only benchmark selects only 8B model while preserving full comparison label',()=>{
  const y=readFileSync(new URL('../.github/workflows/reviewer-b-ollama-synthetic-canary.yml',import.meta.url),'utf8');
  const options=[...y.matchAll(/'(\[\{"model":.*?\}\])'/g)].map(x=>JSON.parse(x[1]));
- assert.equal(options.length,3);
+ assert.equal(options.length,4);
  assert.deepEqual(options[0],[{model:'qwen2.5-coder:7b',cli_arg:''}]);
  assert.deepEqual(options[1],[{model:'qwen3:8b',cli_arg:'--qwen3-synthetic'}]);
- assert.deepEqual(options[2].map(x=>x.model),
+ assert.deepEqual(options[2],[{model:'qwen3.5:4b',cli_arg:'--qwen35-synthetic'}]);
+ assert.deepEqual(options[3].map(x=>x.model),
   ['qwen2.5-coder:7b','qwen2.5-coder:14b','qwen3:8b']);
+ assert.match(y,/reviewer-b-benchmark-qwen35/);
+ assert.match(y,/--qwen35-synthetic/);
  assert.match(y,/contains\(github\.event\.pull_request\.labels\.\*\.name, 'reviewer-b-benchmark-qwen3'\)/);
  assert.match(y,/github\.event\.pull_request\.head\.repo\.full_name == github\.repository/);
  assert.match(y,/^\s*contents:\s*read\s*$/m);
