@@ -345,7 +345,7 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
  // fragment; no unchanged source, remote model or new GitHub permission.
  const trustedDeclarationIndex=makeBoundedDiffDeclarationIndex({plan});
  const findings=[],responses=[],seen=new Set();
- let modelCalls=0,attempts=0,transportFallbacks=0,outputFallbacks=0;
+ let modelCalls=0,attempts=0,transportFallbacks=0,outputFallbacks=0,duplicateFallbacks=0;
  let coveredOriginalParts=0;
  // Each protected diff part must complete. Length exhaustion can occur on
  // MULTIPLE independent parts, so a single global fallback is insufficient.
@@ -367,6 +367,26 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
      });
    }catch(error){
      const code=error?.message;
+     if(code==='OLLAMA_FINDING_DUPLICATE'&&allowSplit){
+       // Reject the ambiguous completion in full. Re-run the ENTIRE exact
+       // authenticated shard as strictly smaller, fully covered fragments.
+       // No finding is dropped, no partial response is published, and a
+       // persistent duplicate on a child remains a hard failure.
+       if(duplicateFallbacks>=8)throw error;
+       let smaller;
+       try{smaller=partitionRealSemanticDiff({
+         plan:chunkPlan,maxChunkBytes:768});}
+       catch{throw error;}
+       if(smaller.originalDiffSha256!==sha(bytes)||
+          smaller.originalByteCount!==bytes.length||
+          smaller.shardCount<2||smaller.shardCount>10||
+          smaller.shards.some(x=>x.byteCount>=bytes.length))
+         throw error;
+       duplicateFallbacks++;
+       for(const part of smaller.shards)
+         await reviewChunk(part,false,tokenBudget);
+       return;
+     }
      if(code==='OLLAMA_OUTPUT_TRUNCATED'&&allowSplit){
        // The only accepted signal is a validated local Ollama length stop.
        // Never reuse partial JSON. Review the COMPLETE original shard as
@@ -439,7 +459,8 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
    coveredOriginalParts++;
  }
  if(coveredOriginalParts!==parts.shardCount||modelCalls<parts.shardCount||
-    attempts>128||transportFallbacks>1||outputFallbacks>16)
+    attempts>128||transportFallbacks>1||outputFallbacks>16||
+    duplicateFallbacks>8)
    deny('SEMANTIC_BATCH_INCOMPLETE');
  const complete=Buffer.from(canonicalJson({
    schema:'devfactory.reviewer-b.findings.v1',
