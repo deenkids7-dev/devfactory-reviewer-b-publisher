@@ -18,6 +18,9 @@ const REPO='deenkids7-dev/deenkids';
 const PUB='devfactory-reviewer-trust/devfactory-reviewer-b-publisher';
 const MODEL='qwen2.5-coder:7b',BOT_ID=340237276,BOT='devfactory-reviewer-b[bot]';
 const SHA40=/^[0-9a-f]{40}$/,SHA64=/^[0-9a-f]{64}$/;
+// Every local shard is independently bounded to <=50 findings. A complete
+// authenticated multi-shard review can legitimately exceed that per-shard cap.
+const MAX_AGGREGATED_FINDINGS=128;
 const WORKFLOW=PUB+'/.github/workflows/reviewer-b-private-semantic.yml@refs/heads/main';
 const digest=x=>createHash('sha256').update(x).digest('hex');
 function deny(code){throw Error(code);}
@@ -93,7 +96,8 @@ export function prepareRealSemanticComment({preflight,local,runId}={}){
    report.run_id!==runId||typeof report.summary!=='string'||
    !report.summary.trim()||report.summary.length>2000||
    !Array.isArray(report.findings)||
-   report.findings.length!==local.findingCount||report.findings.length>50||
+   report.findings.length!==local.findingCount||
+   report.findings.length>MAX_AGGREGATED_FINDINGS||
    (local.provisionalState==='FAIL'&&report.findings.length===0))
    deny('REAL_SEMANTIC_REPORT_MISMATCH');
  // Deterministic security violations cannot be waived by generic owner
@@ -176,6 +180,45 @@ export function prepareRealSemanticComment({preflight,local,runId}={}){
        ' of '+report.findings.length+' authentic local Qwen findings listed;'+
        ' messages and evidence abbreviated. Full canonical report is bound by SHA-256 above.',
        ...compact,'',
+       'Manual verification required. This native COMMENTED report has no independent',
+       'attestation, reviewer PASS, HUMAN_GO, MERGE_GO or merge authorization.'
+     ].join('\n');
+     if(body.length<=12000)break;
+   }
+ }
+ if(body.length>12000 && report.findings.length){
+   // Exhaustive reviews may repeat the same long authenticated file path
+   // dozens of times. A path legend is an exact, lossless representation of
+   // each path; every finding retains its number, severity, line, side and
+   // a readable excerpt of BOTH the claim and its evidence.
+   const safeSummary='Model summary: '+text(report.summary,2000);
+   const opening=bodyLines.slice(0,bodyLines.indexOf(safeSummary));
+   const paths=[...new Set(report.findings.map(f=>f.path))];
+   const pathIDs=new Map(paths.map((path,i)=>[path,i+1]));
+   const legend=paths.map((path,i)=>'P'+(i+1)+': '+text(path,300));
+   // Sanitize only once before trying successively shorter excerpts.
+   // There is no loss of findings or path identity.
+   const sanitized=report.findings.map(f=>({
+     severity:f.severity.toUpperCase(),
+     pathID:pathIDs.get(f.path),line:f.line,
+     sideStr:f.side==='OLD'?' [REMOVED/OLD]':
+       f.side==='NEW'?' [ADDED/NEW]':'',
+     message:text(f.message,500),evidence:text(f.evidence,1000)
+   }));
+   for(const cap of [60,40,24,12,8]){
+     const concise=safe=>safe.length>cap?safe.slice(0,cap-1)+'…':safe;
+     const compact=sanitized.map((f,i)=>'- #'+(i+1)+' '+
+       f.severity+' P'+f.pathID+':'+f.line+f.sideStr+
+       ' — '+concise(f.message)+
+       ' | Evidence: '+concise(f.evidence));
+     body=[...opening,
+       safeSummary,'',
+       'COMPLETE COMPACT FINDING INDEX: '+report.findings.length+
+       ' of '+report.findings.length+
+       ' authentic Qwen findings listed with exact file-path legend, line'+
+       ' and severity; claim/evidence excerpts abbreviated.'+
+       ' Full canonical report SHA-256 is above.',
+       ...legend,'',...compact,'',
        'Manual verification required. This native COMMENTED report has no independent',
        'attestation, reviewer PASS, HUMAN_GO, MERGE_GO or merge authorization.'
      ].join('\n');
@@ -325,8 +368,13 @@ export async function executeProtectedRealSemanticReview({
    // Metrics only after exact native COMMENTED readback. Never print private
    // source, per-file telemetry, prompt, response, token or attacker input.
    if(published.ok===true){
-     const safeLine=formatSafeReviewPerformance(local.safePerformance);
-     if(safeLine)console.log(safeLine);
+     try{
+       const safeLine=formatSafeReviewPerformance(local.safePerformance);
+       if(safeLine)console.log(safeLine);
+     }catch{
+       // Never fail a successfully verified native COMMENTED publication
+       // because an optional performance observation was unavailable.
+     }
    }
    return published;
  }catch(error){

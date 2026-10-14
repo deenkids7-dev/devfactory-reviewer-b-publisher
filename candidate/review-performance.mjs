@@ -24,10 +24,10 @@ export function summarizeSafeReviewPerformance({
      !isCount(transportFallbacks,1)||
      !isCount(outputFallbacks,16)||
      !isCount(duplicateFallbacks,8)||
-     !Number.isFinite(wallMs)||wallMs<0||wallMs>MAX_SECONDS*1000||
+     !Number.isFinite(wallMs)||wallMs<0||
      !Array.isArray(requestDurationsMs)||
      requestDurationsMs.length!==attempts||
-     requestDurationsMs.some(x=>!Number.isFinite(x)||x<0||x>MAX_SECONDS*1000))
+     requestDurationsMs.some(x=>!Number.isFinite(x)||x<0))
     throw Error('REVIEW_PERFORMANCE_METRICS_INVALID');
   const sorted=[...requestDurationsMs].sort((a,b)=>a-b);
   const aggregate=Object.freeze({

@@ -472,12 +472,19 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
     attempts>128||transportFallbacks>1||outputFallbacks>16||
     duplicateFallbacks>8)
    deny('SEMANTIC_BATCH_INCOMPLETE');
- const safePerformance=summarizeSafeReviewPerformance({
-   mode:routing.mode,originalParts:parts.shardCount,attempts,
-   completedParts:modelCalls,transportFallbacks,outputFallbacks,
-   duplicateFallbacks,wallMs:performance.now()-reviewStarted,
-   requestDurationsMs,
- });
+ // Non-authorizing diagnostics MUST NOT make a valid PRIVATE review
+ // fail or prevent a complete canonical report from being published.
+ let safePerformance=null;
+ try{
+   safePerformance=summarizeSafeReviewPerformance({
+     mode:routing.mode,originalParts:parts.shardCount,attempts,
+     completedParts:modelCalls,transportFallbacks,outputFallbacks,
+     duplicateFallbacks,wallMs:performance.now()-reviewStarted,
+     requestDurationsMs,
+   });
+ }catch{
+   // No telemetry is safer than falsely rejecting real reviewed source.
+ }
  const complete=Buffer.from(canonicalJson({
    schema:'devfactory.reviewer-b.findings.v1',
    run_id:runId,

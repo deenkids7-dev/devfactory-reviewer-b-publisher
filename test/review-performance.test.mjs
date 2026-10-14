@@ -22,6 +22,14 @@ test('quantized review timings contain only whitelisted aggregate numerics',()=>
   assert.ok(Object.isFrozen(safe));
   assert.doesNotMatch(line,/src\/|private|token|prompt|diff|sha|\.mjs/i);
 });
+test('legitimate reviews longer than 3h never fail due to optional telemetry',()=>{
+ const safe=summarizeSafeReviewPerformance({...valid,
+   wallMs:5*60*60*1000,
+   requestDurationsMs:[4*60*60*1000,1500,2200]});
+ assert.equal(safe.wall_seconds,10800);
+ assert.equal(safe.max_request_seconds,10800);
+ assert.ok(formatSafeReviewPerformance(safe)?.startsWith('REVIEWER_B_PERF_V1 '));
+});
 test('malformed or potentially private-shaped telemetry never gets logged',()=>{
   const safe=summarizeSafeReviewPerformance(valid);
   assert.equal(formatSafeReviewPerformance({...safe,privateDiff:'TOP SECRET'}),null);
