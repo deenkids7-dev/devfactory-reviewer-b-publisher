@@ -282,6 +282,44 @@ test('explicit local socket interruption reanalyses one full authenticated shard
  assert.equal(JSON.stringify(observed),
    JSON.stringify(deriveAddedLinesFromDiff({diffBytes:diff})));
 });
+test('two independent interrupted parts are completely reanalyzed, not silently omitted',async()=>{
+ const fullDiff=Buffer.from(paths.map(p=>file(p,65)).join(''));
+ const trusted=plan(fullDiff);
+ const baseline=planAdaptiveSemanticShards({plan:trusted}).partitions;
+ const model=mockModel();
+ let attempts=0;
+ const failedLarge=new Set();
+ const fetchImpl=async(url,options)=>{
+   attempts++;
+   const input=JSON.parse(JSON.parse(options.body).messages[1].content);
+   const bytes=Buffer.from(input.untrusted_unified_diff);
+   const fingerprint=sha(bytes);
+   // Fail two DIFFERENT original-size authenticated parts, not a child.
+   if(bytes.length>768&&failedLarge.size<2&&!failedLarge.has(fingerprint)){
+     failedLarge.add(fingerprint);
+     const e=new TypeError('local socket disrupted');
+     e.cause={code:'ECONNRESET'};
+     throw e;
+   }
+   return model.fetchImpl(url,options);
+ };
+ const result=await executeCompleteLocalSemanticReview({
+   plan:trusted,runId:RUN,fetchImpl
+ });
+ assert.equal(result.rawByteCoverageProven,true);
+ assert.equal(result.approvalAuthorized,false);
+ assert.equal(result.independentReviewVerified,false);
+ assert.ok(result.processedShardCount>=baseline.shardCount);
+ assert.ok(attempts<=128);
+ const expected=deriveAddedLinesFromDiff({diffBytes:fullDiff});
+ const actual={};
+ for(const item of model.seen){
+   const anchors=deriveAddedLinesFromDiff({diffBytes:item.bytes});
+   (actual[item.path]??=[]).push(...anchors[item.path]);
+ }
+ assert.equal(JSON.stringify(actual),JSON.stringify(expected));
+ assert.equal(result.safePerformance.transport_fallbacks,2);
+});
 test('repeated transport interruptions fail closed without publishing partial findings',async()=>{
  const bytes=Buffer.from(file('src/alpha.mjs',25));
  let attempts=0;

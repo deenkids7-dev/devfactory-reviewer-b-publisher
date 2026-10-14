@@ -349,12 +349,14 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
  const trustedDeclarationIndex=makeBoundedDiffDeclarationIndex({plan});
  const findings=[],responses=[],seen=new Set();
  let modelCalls=0,attempts=0,transportFallbacks=0,outputFallbacks=0,duplicateFallbacks=0;
+ const MAX_TRANSPORT_RECOVERIES=3;
+ const MAX_TRANSPORT_SPLIT_DEPTH=2;
  const requestDurationsMs=[];
  let coveredOriginalParts=0;
  // Each protected diff part must complete. Length exhaustion can occur on
  // MULTIPLE independent parts, so a single global fallback is insufficient.
  // Bound the entire job and never publish/aggregate a truncated response.
- async function reviewChunk(chunk,allowSplit,tokenBudget=maxOutputTokens){
+ async function reviewChunk(chunk,allowSplit,tokenBudget=maxOutputTokens,transportDepth=0){
    const bytes=chunk.privateDiffBytes;
    const chunkPlan=prepareBoundedSemanticReview({
      snapshot:snapFor(plan,bytes),rawDiffBytes:bytes});
@@ -426,9 +428,11 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
        }
        throw error;
      }
-     // Preserve the original single global CPU/transport recovery. Invalid
-     // schema, wrong model, drift, arbitrary errors never trigger a retry.
-     if(!allowSplit||transportFallbacks!==0||
+     // Allow only bounded, provably smaller exact-diff reanalysis for known
+     // local transport failures. Never accept a partial response. Invalid
+     // schema/model/drift errors remain nonretryable.
+     if(transportFallbacks>=MAX_TRANSPORT_RECOVERIES||
+        transportDepth>=MAX_TRANSPORT_SPLIT_DEPTH||
         !['LOCAL_MODEL_REQUEST_FAILED','LOCAL_MODEL_REQUEST_TIMEOUT',
           'LOCAL_MODEL_TRANSPORT_INTERRUPTED'].includes(code))throw error;
      let smaller;
@@ -442,7 +446,7 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
        throw error;
      transportFallbacks++;
      for(const part of smaller.shards)
-       await reviewChunk(part,false,tokenBudget);
+       await reviewChunk(part,false,tokenBudget,transportDepth+1);
      return;
    }
    if(result.localModelExecuted!==true||
@@ -469,7 +473,7 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
    coveredOriginalParts++;
  }
  if(coveredOriginalParts!==parts.shardCount||modelCalls<parts.shardCount||
-    attempts>128||transportFallbacks>1||outputFallbacks>16||
+    attempts>128||transportFallbacks>MAX_TRANSPORT_RECOVERIES||outputFallbacks>16||
     duplicateFallbacks>8)
    deny('SEMANTIC_BATCH_INCOMPLETE');
  // Non-authorizing diagnostics MUST NOT make a valid PRIVATE review
