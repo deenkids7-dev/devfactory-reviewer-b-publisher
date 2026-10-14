@@ -190,24 +190,28 @@ export function prepareRealSemanticComment({preflight,local,runId}={}){
    // dozens of times. A path legend is an exact, lossless representation of
    // each path; every finding retains its number, severity, line, side and
    // a readable excerpt of BOTH the claim and its evidence.
-   const opening=bodyLines.slice(0,bodyLines.indexOf(
-     'Model summary: '+text(report.summary,2000)));
+   const safeSummary='Model summary: '+text(report.summary,2000);
+   const opening=bodyLines.slice(0,bodyLines.indexOf(safeSummary));
    const paths=[...new Set(report.findings.map(f=>f.path))];
    const pathIDs=new Map(paths.map((path,i)=>[path,i+1]));
    const legend=paths.map((path,i)=>'P'+(i+1)+': '+text(path,300));
+   // Sanitize only once before trying successively shorter excerpts.
+   // There is no loss of findings or path identity.
+   const sanitized=report.findings.map(f=>({
+     severity:f.severity.toUpperCase(),
+     pathID:pathIDs.get(f.path),line:f.line,
+     sideStr:f.side==='OLD'?' [REMOVED/OLD]':
+       f.side==='NEW'?' [ADDED/NEW]':'',
+     message:text(f.message,500),evidence:text(f.evidence,1000)
+   }));
    for(const cap of [60,40,24,12,8]){
-     const concise=(value,max)=>{
-       const safe=text(value,max);
-       return safe.length>cap?safe.slice(0,cap-1)+'…':safe;
-     };
-     const compact=report.findings.map((f,i)=>'- #'+(i+1)+' '+
-       f.severity.toUpperCase()+' P'+pathIDs.get(f.path)+':'+f.line+
-       (f.side==='OLD'?' [REMOVED/OLD]':
-        f.side==='NEW'?' [ADDED/NEW]':'')+
-       ' — '+concise(f.message,500)+
-       ' | Evidence: '+concise(f.evidence,1000));
+     const concise=safe=>safe.length>cap?safe.slice(0,cap-1)+'…':safe;
+     const compact=sanitized.map((f,i)=>'- #'+(i+1)+' '+
+       f.severity+' P'+f.pathID+':'+f.line+f.sideStr+
+       ' — '+concise(f.message)+
+       ' | Evidence: '+concise(f.evidence));
      body=[...opening,
-       'Model summary: '+text(report.summary,2000),'',
+       safeSummary,'',
        'COMPLETE COMPACT FINDING INDEX: '+report.findings.length+
        ' of '+report.findings.length+
        ' authentic Qwen findings listed with exact file-path legend, line'+
