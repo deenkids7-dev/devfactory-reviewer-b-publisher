@@ -419,8 +419,8 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
      // Preserve the original single global CPU/transport recovery. Invalid
      // schema, wrong model, drift, arbitrary errors never trigger a retry.
      if(!allowSplit||transportFallbacks!==0||
-        !['LOCAL_MODEL_REQUEST_FAILED','LOCAL_MODEL_REQUEST_TIMEOUT']
-          .includes(code))throw error;
+        !['LOCAL_MODEL_REQUEST_FAILED','LOCAL_MODEL_REQUEST_TIMEOUT',
+          'LOCAL_MODEL_TRANSPORT_INTERRUPTED'].includes(code))throw error;
      let smaller;
      try{smaller=partitionRealSemanticDiff({
        plan:chunkPlan,maxChunkBytes:768});}
