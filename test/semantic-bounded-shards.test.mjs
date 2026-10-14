@@ -173,6 +173,71 @@ test('one transient LOCAL failure is recovered by complete smaller authenticated
    JSON.stringify(deriveAddedLinesFromDiff({diffBytes:diff})));
  assert.doesNotMatch(JSON.stringify(done),/changed_0_xxx/);
 });
+test('duplicate Qwen findings trigger only a complete bounded shard reanalysis',async()=>{
+ const trusted=plan();
+ const baseline=planAdaptiveSemanticShards({plan:trusted}).partitions;
+ const model=mockModel();
+ let requests=0;
+ const fetchImpl=async(url,options)=>{
+   requests++;
+   if(requests===2){
+     const request=JSON.parse(options.body);
+     const scoped=JSON.parse(request.messages[1].content);
+     const anchors=deriveAddedLinesFromDiff({
+       diffBytes:Buffer.from(scoped.untrusted_unified_diff)});
+     const path=Object.keys(anchors)[0];
+     const item={severity:'high',path,line:anchors[path][0],
+       message:'Synthetic duplicated finding',
+       evidence:'Same exact verified location and evidence'};
+     return fakeReply({
+       model:'qwen2.5-coder:7b',done:true,done_reason:'stop',
+       message:{role:'assistant',content:JSON.stringify({
+         summary:'Synthetic duplicate to reject',findings:[item,item]})},
+       prompt_eval_count:800,eval_count:120
+     });
+   }
+   return model.fetchImpl(url,options);
+ };
+ const result=await executeCompleteLocalSemanticReview({
+   plan:trusted,runId:RUN,fetchImpl});
+ assert.ok(requests>baseline.shardCount);
+ assert.equal(result.rawByteCoverageProven,true);
+ assert.equal(result.originalDiffSha256,sha(diff));
+ assert.equal(result.approvalAuthorized,false);
+ assert.equal(result.independentReviewVerified,false);
+ assert.equal(result.findingCount,0);
+ const observed={};
+ for(const item of model.seen){
+   const anchors=deriveAddedLinesFromDiff({diffBytes:item.bytes});
+   (observed[item.path]??=[]).push(...anchors[item.path]);
+ }
+ assert.equal(JSON.stringify(observed),
+   JSON.stringify(deriveAddedLinesFromDiff({diffBytes:diff})));
+});
+test('persistent duplicated findings on subdivided shard still fail closed',async()=>{
+ const bytes=Buffer.from(file('src/alpha.mjs',25));
+ let requests=0;
+ const fetchImpl=async(url,options)=>{
+   requests++;
+   const request=JSON.parse(options.body);
+   const scoped=JSON.parse(request.messages[1].content);
+   const anchors=deriveAddedLinesFromDiff({
+     diffBytes:Buffer.from(scoped.untrusted_unified_diff)});
+   const path=Object.keys(anchors)[0];
+   const item={severity:'medium',path,line:anchors[path][0],
+     message:'Persistent duplicate',evidence:'Same model finding'};
+   return fakeReply({
+     model:'qwen2.5-coder:7b',done:true,done_reason:'stop',
+     message:{role:'assistant',content:JSON.stringify({
+       summary:'Must fail without review',findings:[item,item]})},
+     prompt_eval_count:800,eval_count:120
+   });
+ };
+ await assert.rejects(()=>executeCompleteLocalSemanticReview({
+   plan:plan(bytes),runId:RUN,fetchImpl}),/OLLAMA_FINDING_DUPLICATE/);
+ assert.ok(requests>=2);
+ assert.ok(requests<=11);
+});
 test('one Ollama output-budget exhaustion reanalyzes entire trusted shard in smaller pieces',async()=>{
  const trusted=plan();
  const baseline=planAdaptiveSemanticShards({plan:trusted}).partitions;
