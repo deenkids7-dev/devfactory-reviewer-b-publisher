@@ -238,6 +238,52 @@ test('persistent duplicated findings on subdivided shard still fail closed',asyn
  assert.ok(requests>=2);
  assert.ok(requests<=11);
 });
+test('explicit local socket interruption reanalyses one full authenticated shard',async()=>{
+ const trusted=plan();
+ const baseline=planAdaptiveSemanticShards({plan:trusted}).partitions;
+ const model=mockModel();
+ let attempts=0;
+ const fetchImpl=async(url,options)=>{
+   attempts++;
+   if(attempts===2){
+     const e=new TypeError('simulated local network failure');
+     e.cause={code:'ECONNRESET'};
+     throw e;
+   }
+   return model.fetchImpl(url,options);
+ };
+ const done=await executeCompleteLocalSemanticReview({
+   plan:trusted,runId:RUN,fetchImpl});
+ assert.ok(attempts>baseline.shardCount);
+ assert.ok(attempts<=128);
+ assert.equal(done.originalDiffSha256,sha(diff));
+ assert.equal(done.rawByteCoverageProven,true);
+ assert.equal(done.approvalAuthorized,false);
+ assert.equal(done.independentReviewVerified,false);
+ assert.equal(done.findingCount,0);
+ const observed={};
+ for(const item of model.seen){
+   const anchors=deriveAddedLinesFromDiff({diffBytes:item.bytes});
+   (observed[item.path]??=[]).push(...anchors[item.path]);
+ }
+ assert.equal(JSON.stringify(observed),
+   JSON.stringify(deriveAddedLinesFromDiff({diffBytes:diff})));
+});
+test('repeated transport interruptions fail closed without publishing partial findings',async()=>{
+ const bytes=Buffer.from(file('src/alpha.mjs',25));
+ let attempts=0;
+ const fetchImpl=async()=>{
+   attempts++;
+   const e=new TypeError('simulated local network failure');
+   e.cause={code:'EPIPE'};
+   throw e;
+ };
+ await assert.rejects(()=>executeCompleteLocalSemanticReview({
+   plan:plan(bytes),runId:RUN,fetchImpl
+ }),/LOCAL_MODEL_TRANSPORT_INTERRUPTED/);
+ assert.ok(attempts>=2);
+ assert.ok(attempts<=11);
+});
 test('one Ollama output-budget exhaustion reanalyzes entire trusted shard in smaller pieces',async()=>{
  const trusted=plan();
  const baseline=planAdaptiveSemanticShards({plan:trusted}).partitions;
