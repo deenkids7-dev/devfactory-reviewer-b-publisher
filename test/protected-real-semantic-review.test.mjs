@@ -403,9 +403,11 @@ test('R97 a long Qwen analysis refreshes read AND write credentials before nativ
  const scopedRead=src.indexOf("appJwt:refreshedReadJwt,purpose:'reviewRead'",readJwt);
  const writeStage=src.indexOf("stage='TOKEN_WRITE';",scopedRead);
  const writeJwt=src.indexOf('const writerJwt=createReviewerBAppJwt(',writeStage);
- const post=src.indexOf('return await publishRealSemanticComment(',writeJwt);
+ const post=src.indexOf('const published=await publishRealSemanticComment(',writeJwt);
+ const safeLog=src.indexOf('if(published.ok===true)',post);
  assert.ok(model>=0&&prepare>model&&readStage>prepare&&readJwt>readStage&&
-   scopedRead>readJwt&&writeStage>scopedRead&&writeJwt>writeStage&&post>writeJwt);
+   scopedRead>readJwt&&writeStage>scopedRead&&writeJwt>writeStage&&
+   post>writeJwt&&safeLog>post);
  assert.match(src,/const refreshedReadNow=Date\.now\(\);/);
  assert.match(src,/appJwt:refreshedReadJwt,purpose:'reviewRead',now:refreshedReadNow,fetchImpl/);
  assert.match(src,/publishRealSemanticComment\(\{plan,readToken:refreshedRead\.token,/);

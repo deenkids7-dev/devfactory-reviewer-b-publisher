@@ -59,6 +59,19 @@ function mockModel({high=false,failAt=-1}={}){
  };
  return {fetchImpl,count:()=>calls,seen};
 }
+test('performance summary exists only as redacted non-authorizing metadata',async()=>{
+ const out=await executeCompleteLocalSemanticReview({
+   plan:plan(),runId:RUN,fetchImpl:mockModel().fetchImpl
+ });
+ assert.equal(out.safePerformance.schema,'reviewer_b_safe_performance_v1');
+ assert.equal(out.safePerformance.attempts,out.safePerformance.completed_parts);
+ assert.ok(out.safePerformance.model_seconds>=0);
+ assert.equal(Object.keys(out).includes('safePerformance'),false);
+ assert.equal(out.approvalAuthorized,false);
+ assert.equal(out.independentReviewVerified,false);
+ assert.doesNotMatch(JSON.stringify(out),/safePerformance|changed_0_xxx/);
+ assert.doesNotMatch(inspect(out),/safePerformance|changed_0_xxx/);
+});
 test('every NEW-side line is represented in valid standalone local shards',()=>{
  const p=partitionRealSemanticDiff({plan:plan(),maxChunkBytes:768});
  assert.equal(p.rawByteCoverageProven,true);

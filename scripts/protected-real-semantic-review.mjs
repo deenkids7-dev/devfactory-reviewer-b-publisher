@@ -11,6 +11,7 @@ import {createReviewerBAppJwt,createScopedReviewerBInstallationToken}
  from '../candidate/github-app-auth.mjs';
 import {runReadOnlyReviewPreflight} from '../candidate/private-review-preflight.mjs';
 import {executeCompleteLocalSemanticReview} from '../candidate/semantic-bounded-shards.mjs';
+import {formatSafeReviewPerformance} from '../candidate/review-performance.mjs';
 import {readNativeReviews} from '../candidate/github-review-readback.mjs';
 import {assessNativeReviewUniqueness} from '../candidate/native-review-uniqueness.mjs';
 const REPO='deenkids7-dev/deenkids';
@@ -319,8 +320,15 @@ export async function executeProtectedRealSemanticReview({
    const writer=await createScopedReviewerBInstallationToken({
      appJwt:writerJwt,purpose:'publish',now:writerNow,fetchImpl});
    stage='NATIVE_POST';
-   return await publishRealSemanticComment({plan,readToken:refreshedRead.token,
+   const published=await publishRealSemanticComment({plan,readToken:refreshedRead.token,
      writeToken:writer.token,approvedProtectedPublication:true,fetchImpl});
+   // Metrics only after exact native COMMENTED readback. Never print private
+   // source, per-file telemetry, prompt, response, token or attacker input.
+   if(published.ok===true){
+     const safeLine=formatSafeReviewPerformance(local.safePerformance);
+     if(safeLine)console.log(safeLine);
+   }
+   return published;
  }catch(error){
    return fail(classifyProtectedReviewFailure(stage,error));
  }

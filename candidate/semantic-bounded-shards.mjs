@@ -8,6 +8,8 @@
  */
 import {createHash} from 'node:crypto';
 import {inspect} from 'node:util';
+import {performance} from 'node:perf_hooks';
+import {summarizeSafeReviewPerformance} from './review-performance.mjs';
 import {canonicalJson} from '../src/canonical.mjs';
 import {deriveAddedLinesFromDiff} from './diff-added-lines.mjs';
 import {deriveRemovedLinesFromDiff} from './diff-removed-lines.mjs';
@@ -336,6 +338,7 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
 }={}){
  if(model!==MODEL||typeof runId!=='string'||typeof fetchImpl!=='function')
    deny('SEMANTIC_BATCH_INPUT_INVALID');
+ const reviewStarted=performance.now();
  const routing=planAdaptiveSemanticShards({plan,maxOutputTokens});
  const parts=routing.partitions;
  const original=Buffer.from(plan.privateDiffText,'utf8');
@@ -346,6 +349,7 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
  const trustedDeclarationIndex=makeBoundedDiffDeclarationIndex({plan});
  const findings=[],responses=[],seen=new Set();
  let modelCalls=0,attempts=0,transportFallbacks=0,outputFallbacks=0,duplicateFallbacks=0;
+ const requestDurationsMs=[];
  let coveredOriginalParts=0;
  // Each protected diff part must complete. Length exhaustion can occur on
  // MULTIPLE independent parts, so a single global fallback is insufficient.
@@ -357,14 +361,20 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
    if(++attempts>128)deny('SEMANTIC_BATCH_ATTEMPT_LIMIT');
    let result;
    try{
-     result=await executeLocalOllamaReview({
-       plan:chunkPlan,trustedDiffBytes:bytes,runId,
-       model,approvedLocalPrivateProcessing:true,
-       protectedEphemeralKeepAlive:true,
-       fetchImpl,maxOutputTokens:tokenBudget,
-       trustedDeclarationIndex,
-       trustedOriginalDiffSha256:parts.originalDiffSha256
-     });
+     const start=performance.now();
+     try{
+       result=await executeLocalOllamaReview({
+         plan:chunkPlan,trustedDiffBytes:bytes,runId,
+         model,approvedLocalPrivateProcessing:true,
+         protectedEphemeralKeepAlive:true,
+         fetchImpl,maxOutputTokens:tokenBudget,
+         trustedDeclarationIndex,
+         trustedOriginalDiffSha256:parts.originalDiffSha256
+       });
+     }finally{
+       // Timings only, no request bytes, path, model response or error string.
+       requestDurationsMs.push(performance.now()-start);
+     }
    }catch(error){
      const code=error?.message;
      if(code==='OLLAMA_FINDING_DUPLICATE'&&allowSplit){
@@ -462,6 +472,12 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
     attempts>128||transportFallbacks>1||outputFallbacks>16||
     duplicateFallbacks>8)
    deny('SEMANTIC_BATCH_INCOMPLETE');
+ const safePerformance=summarizeSafeReviewPerformance({
+   mode:routing.mode,originalParts:parts.shardCount,attempts,
+   completedParts:modelCalls,transportFallbacks,outputFallbacks,
+   duplicateFallbacks,wallMs:performance.now()-reviewStarted,
+   requestDurationsMs,
+ });
  const complete=Buffer.from(canonicalJson({
    schema:'devfactory.reviewer-b.findings.v1',
    run_id:runId,
@@ -482,6 +498,7 @@ export async function executeCompleteLocalSemanticReview({plan,runId,
    independentReviewVerified:false,approvalAuthorized:false,publishEvent:null
  };
  Object.defineProperties(result,{
+  safePerformance:{enumerable:false,configurable:false,value:safePerformance},
   privateCanonicalReportBytes:{enumerable:false,configurable:false,
     get:()=>Buffer.from(complete)},
   toJSON:{enumerable:false,configurable:false,
