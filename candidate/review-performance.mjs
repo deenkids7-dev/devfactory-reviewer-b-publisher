@@ -21,7 +21,7 @@ export function summarizeSafeReviewPerformance({
      !isCount(attempts,128)||attempts<originalParts||
      !isCount(completedParts,128)||completedParts<originalParts||
      completedParts>attempts||
-     !isCount(transportFallbacks,1)||
+     !isCount(transportFallbacks,3)||
      !isCount(outputFallbacks,16)||
      !isCount(duplicateFallbacks,8)||
      !Number.isFinite(wallMs)||wallMs<0||
