@@ -681,6 +681,55 @@ independent real-world testing, explicit approvals, and a later
 separately scoped implementation. **This PR is not an operational
 proxy, and no key should be introduced into this synthetic CI.**
 
+## Mock GET-proxy incident decision table — NO AUTOMATIC RETRY
+
+A third, pure `assessSyntheticProxyIncidentOffline` function
+in the **existing** synthetic read-only plan module classifies
+strictly bounded JSON fixtures. The test file now exercises
+**42 tests total (14 new incident cases)** inside the existing
+synthetic admission workflow. These observations are
+**not live OpenRouter HTTP responses** and do not grant
+network, deployment, payment or spending authority.
+
+| Untrusted fixture scenario | Simulation-only incident classification | Required future handling |
+| --- | --- | --- |
+| 401 | `AUTHENTICATION_REVIEW` | Human credential/rotation investigation, no automatic retry |
+| 403 | `AUTHORIZATION_REVIEW` | Human scope/permission investigation, no privilege escalation |
+| 429, any `retryAfterSeconds` | `RATE_LIMIT_MANUAL_REVIEW` | Do not schedule another call solely from untrusted Retry-After |
+| 500/502/503 or other 5xx | `PROVIDER_FAILURE_UNKNOWN` | Preserve uncertainty; don't mark charges as absent |
+| DNS, TLS, timeout, reset | `NETWORK_UNKNOWN_NO_RETRY` | Treat connection/response as unconfirmed |
+| 3xx or redirect | `REDIRECT_FORBIDDEN` | Never forward management credentials to redirect |
+| Truncated payload, invalid JSON, incomplete response | `RESPONSE_INCOMPLETE` | Preserve missing/incomplete evidence rather than 'zero use' |
+| Unexpected secret marker | `SECRET_EXPOSURE_REVIEW` | Investigate exposure and rotate/revoke through separately approved channel |
+| Unexpected raw logs, auto retry, automatic held-fund release, Runner auto resume | `AUDIT_OR_AUTOMATION_FORBIDDEN` | Deny direct action and require independent review |
+| HTTP 200 / JSON shape and complete fixture | `200_UNVERIFIED_NOT_SETTLED` | Still cannot authenticate source or prove financial completeness |
+| 204/404/408/409 and other non-200 | `OTHER_STATUS_UNRESOLVED` | Do not assume unbilled, missing key or settled outcome |
+| Untrusted fields, event/status mismatch, oversized input | `FIXTURE_UNTRUSTED` / `EVENT_STATUS_CONTRADICTORY` | Reject the simulated incident without silently normalizing it |
+
+All branches return `BLOCKED` with
+`mayReadProviderData=false`, `mayMutateProvider=false`,
+`maySpend=false`, `mayReserve=false`,
+`mayRetryAmbiguousRequest=false`, `mayReleaseHold=false`,
+`mayDeploy=false`, `simulatedBillIsSettled=false`,
+`automaticRetryScheduled=false` and
+`simulatedProviderEvidenceVerified=false`.
+The classifier is not imported by the paid protected Publisher
+or its real spend gate.
+
+**Explicit limits and future requirements:** This is a design
+table tested against hypothetical status codes, not proof of
+a safe production retry scheduler, trustworthy Retry-After,
+provider-side idempotency, response authentication,
+secret-redacted telemetry, immutable incident audit, token
+revocation, billing completeness, incident notification or
+all-account reconciliation. A real GET may be technically
+retryable, but only a separately authorized and tested
+production policy could decide so; no mock result here
+permits *any* automatic repeat. Any ambiguity related to
+billable upstream work must remain in financial quarantine.
+No management token, provider connection or alerting
+integration is deployed in this PR.
+
 ## Production blockers still missing
 
 1. Trusted, authenticated billing ledger covering all relevant keys
