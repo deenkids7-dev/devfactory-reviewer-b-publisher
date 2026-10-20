@@ -198,7 +198,7 @@ test('roster epoch rollback or skipped epochs are blocked',()=>on(()=>{
   }
 }));
 test('undeclared identity or removed registered member is rejected',()=>on(()=>{
-  const s=example();s.current.members[1].id='fixture:outsider';
+  const s=example();s.current.members[2].id='fixture:outsider';
   denial(assess(stringify(s)),
     'SHADOW_ROSTER_MEMBERSHIP_CHANGE_UNVERIFIED','coverage');
 }));
