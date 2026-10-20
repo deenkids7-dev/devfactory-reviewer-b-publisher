@@ -11,6 +11,8 @@ on:
       - 'scripts/openrouter-shadow-evidence-coverage-offline.mjs'
       - 'scripts/openrouter-shadow-readonly-acquisition-plan-offline.mjs'
       - 'scripts/openrouter-shadow-audit-anchor-offline.mjs'
+      - 'scripts/openrouter-shadow-audit-multiwitness-offline.mjs'
+      - 'test/openrouter-shadow-audit-multiwitness-offline.test.mjs'
       - 'test/openrouter-shadow-audit-anchor-offline.test.mjs'
       - 'test/openrouter-shadow-readonly-acquisition-plan-offline.test.mjs'
       - 'test/openrouter-shadow-evidence-coverage-offline.test.mjs'
@@ -82,4 +84,5 @@ jobs:
           REVIEWER_B_SYNTHETIC_SHADOW_ONLY=1 node --test test/openrouter-shadow-evidence-coverage-offline.test.mjs
           REVIEWER_B_SYNTHETIC_SHADOW_ONLY=1 node --test test/openrouter-shadow-readonly-acquisition-plan-offline.test.mjs
           REVIEWER_B_SYNTHETIC_SHADOW_ONLY=1 node --test test/openrouter-shadow-audit-anchor-offline.test.mjs
+          REVIEWER_B_SYNTHETIC_SHADOW_ONLY=1 node --test test/openrouter-shadow-audit-multiwitness-offline.test.mjs
           REVIEWER_B_SYNTHETIC_SHADOW_ONLY=1 node --test test/openrouter-shadow-attempt-lifecycle-offline.test.mjs
