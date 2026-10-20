@@ -730,6 +730,74 @@ billable upstream work must remain in financial quarantine.
 No management token, provider connection or alerting
 integration is deployed in this PR.
 
+## Synthetic redacted incident audit proposals and human resolution dependencies
+
+`assessSyntheticIncidentAuditOffline` and
+`assessSyntheticIncidentAuditContinuityOffline` extend the existing
+**offline-only** read-only-proxy design module, with adversarial tests
+in the same synthetic suite. **They do not create or persist a real
+audit log.** No provider GET, paid inference, cryptographic signature,
+database transaction, secret store, review submission, notification,
+automatic release or privileged service is involved.
+
+The bounded illustrative schema binds each incident to a mock
+`incident_id`, exact 40-character hexadecimal Git `head_sha`,
+64-character mock request digest and `development` or `reviewer_b`
+key role. It allows only predeclared redacted event fields:
+- a 1-based contiguous `sequence`, unique mock `event_id`,
+  canonical UTC-second timestamp and type;
+- `detected` first, then one `triaged`, optionally
+  `evidence_noted` carrying unique SHA256-*format* digest(s),
+  optionally a terminal `manual_review_requested`;
+- a fixed `review` object with only `status:"pending"`
+  and explicit `providerEvidenceAuthenticated:false`,
+  `independentReviewerApproved:false`,
+  `humanGoGranted:false`, `holdReleaseApproved:false`.
+
+The strict mock validator rejects credentials, Authorization headers,
+raw HTTP bodies, raw provider IDs, personal data and freeform comments
+as unknown input fields. Duplicate event IDs/evidence digests,
+noncontiguous sequence, malformed calendar times, time regressions,
+invalid state transitions, forged human approvals and excessive input
+all fail closed. Digest syntax is not evidence authentication and
+does not prove that the underlying incident has actually been logged.
+
+Comparing two fully validated mock snapshots detects removed or
+rewritten event prefixes and changed incident/request/HEAD identity.
+It can label newly appended events, but an apparently immutable
+comparison remains **unverified**: if both inputs are forged in the
+same way or durable logs are lost, this pure function cannot detect it.
+The proposed terminal review-request event is deliberately not
+treated as a close/approval event.
+
+### Requirements for eventual human handling (not yet implemented)
+
+The actual incident procedure would need (1) an independently
+authenticated operator identity and separation of duties,
+(2) tamper-evident durable append-only records including an
+independently trusted clock, (3) minimum necessary, secret-redacted
+request linkage and restricted evidence access, (4) accurate
+provider-authenticated incident and charge reconciliation with
+all relevant keys/workspaces, (5) documented independent Reviewer B
+review and explicit scoped HUMAN_GO for any sensitive real action,
+and (6) an entirely separate authorization mechanism for any
+budget/hold release or production deployment. A native COMMENTED
+review, synthetic digest, manual-review request, or operator's
+unverified note does not satisfy those controls.
+
+**Every simulation response remains BLOCKED:** `maySpend=false`,
+`mayReserve=false`, `mayRetryAmbiguousRequest=false`,
+`mayReleaseHold=false`, `mayDeploy=false`,
+`incidentMayBeClosed=false`,
+`actualAppendOnlyAuditVerified=false`,
+`actualHumanApprovalVerified=false`,
+`actualProviderEvidenceVerified=false`,
+`automaticIncidentResolution=false`,
+`automaticRetryScheduled=false`.
+The real spend gate and real protected Publisher remain untouched.
+This preparation MUST NOT be described as a deployed "secure audit
+journal" or an authorized incident resolution workflow.
+
 ## Production blockers still missing
 
 1. Trusted, authenticated billing ledger covering all relevant keys
