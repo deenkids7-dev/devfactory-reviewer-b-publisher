@@ -15,6 +15,7 @@ on:
       - 'scripts/openrouter-shadow-witness-roster-offline.mjs'
       - 'test/openrouter-shadow-witness-roster-offline.test.mjs'
       - 'test/openrouter-startup-no-go-contract.test.mjs'
+      - 'docs/DEVFACTORY-RUNNER-STARTUP-BLOCKERS-20261020.md'
       - 'test/openrouter-shadow-audit-multiwitness-offline.test.mjs'
       - 'test/openrouter-shadow-audit-anchor-offline.test.mjs'
       - 'test/openrouter-shadow-readonly-acquisition-plan-offline.test.mjs'
