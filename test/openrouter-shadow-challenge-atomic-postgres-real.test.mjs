@@ -90,7 +90,7 @@ test('PostgreSQL: nonce + receiver challenge consume atomically under contention
   "service_digest,issued_at,expires_at) VALUES("+
   "$1,'synthetic-service-account','shadow-postgres-processor',"+
   "date_trunc('month',clock_timestamp() AT TIME ZONE 'UTC')::date,"+
-  "$2,$3,$4,$5,15000000,$6,$7,"+
+  "$2,$3,$4,$5,$6,15000000,$7,$8,"+
   "clock_timestamp()+interval '20 seconds',"+
   "clock_timestamp()+interval '45 seconds')",
   [uuid(15),repo,5410,'e'.repeat(40),55450,model,digest(35),digest(45)]);
