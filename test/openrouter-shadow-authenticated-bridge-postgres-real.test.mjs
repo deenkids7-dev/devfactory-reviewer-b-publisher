@@ -129,6 +129,37 @@ test('real PostgreSQL16 authenticated session + two Ed25519 proofs (no paid call
   const real=(await receiver.query('SELECT session_user AS who')).rows[0].who;
   assert.equal(real,'reviewer_b_shadow_receiver_v1');
 
+  // A genuinely authenticated PostgreSQL receiver LOGIN is NOT proof
+  // that its caller presented valid Ed25519 envelopes. Reject malformed
+  // or independently mismatched proof data BEFORE sending any SQL write.
+  const negativeClaims=[
+   {...signedProof.params,signedShadowJson:JSON.stringify({
+     ...shadow,payload:{...shadow.payload,head_sha:'b'.repeat(40)}})},
+   {...signedProof.params,signedShadowJson:JSON.stringify({
+     ...shadow,payload:{...shadow.payload,upper_micro_eur:1}})},
+   {...signedProof.params,signedServiceJson:JSON.stringify({
+     ...service,signature:{...service.signature,value:'A'.repeat(88)}})},
+   {...signedProof.params,trustedGitHubContext:{
+     ...signedProof.params.trustedGitHubContext,head_sha:'b'.repeat(40)}},
+   {...signedProof.params,expectedChallenge:
+     '33333333-4444-4333-8444-555555555555'},
+  ];
+  for(const invalid of negativeClaims){
+    const rejected=await submitViaProtectedReceiverSyntheticOnly({
+      ...invalid,db:receiver});
+    assert.equal(rejected.ok,false);
+    assert.equal(rejected.recorded,false);
+    assert.equal(rejected.maySpend,false);
+  }
+  const beforePositive=await Promise.all([
+   admin.query('SELECT reserved_micro_eur::text AS total FROM reviewer_b_shadow.monthly_periods'),
+   admin.query('SELECT count(*)::integer AS n FROM reviewer_b_shadow.consumed_shadow_proofs'),
+   admin.query('SELECT count(*)::integer AS n FROM reviewer_b_shadow.issued_shadow_challenges WHERE consumed_at IS NOT NULL'),
+  ]);
+  assert.equal(beforePositive[0].rows[0].total,'0');
+  assert.equal(beforePositive[1].rows[0].n,0);
+  assert.equal(beforePositive[2].rows[0].n,0);
+
   const approved=await submitViaProtectedReceiverSyntheticOnly({
    ...signedProof.params,db:receiver});
   assert.equal(approved.ok,true);
