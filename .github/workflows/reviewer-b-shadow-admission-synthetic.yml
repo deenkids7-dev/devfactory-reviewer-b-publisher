@@ -20,6 +20,7 @@ on:
       - 'sql/reviewer_b_shadow_protected_roles_v1.sql'
       - '.github/workflows/reviewer-b-shadow-admission-synthetic.yml'
       - 'docs/OPENROUTER-SHADOW-ADMISSION-INTEGRATION-20261020.md'
+      - 'docs/OPENROUTER-SHADOW-BILLING-LIABILITY-20261020.md'
 
 permissions:
   contents: read
