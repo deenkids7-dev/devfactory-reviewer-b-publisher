@@ -184,6 +184,43 @@ test('real PostgreSQL16 authenticated session + two Ed25519 proofs (no paid call
   else process.env.REVIEWER_B_SYNTHETIC_SHADOW_ONLY=prior;
  }
 });
+test('synthetic receiver rejects option smuggling and accessor traps before SQL',async()=>{
+ const prior=process.env.REVIEWER_B_SYNTHETIC_SHADOW_ONLY;
+ process.env.REVIEWER_B_SYNTHETIC_SHADOW_ONLY='1';
+ try{
+  let queries=0,getters=0;
+  const db={query(){queries++;return {rows:[]}}};
+  const validShape={...proof().params,db};
+  const accessor=Object.defineProperty({...validShape},'expectedIssuer',{
+   enumerable:true,get(){getters++;return issuer;},
+  });
+  const queryAccessor=Object.defineProperty({},'query',{
+   enumerable:true,get(){getters++;return ()=>{queries++;};},
+  });
+  const badInputs=[
+   {...validShape,sql:'SELECT 1'},
+   {...validShape,upper_micro_eur:1},
+   {...validShape,head_sha:'b'.repeat(40)},
+   {...validShape,now:0},
+   accessor,
+   {...validShape,db:queryAccessor},
+   Object.create(validShape),
+  ];
+  for(const input of badInputs){
+   const result=await submitViaProtectedReceiverSyntheticOnly(input);
+   assert.equal(result.ok,false);
+   assert.equal(result.recorded,false);
+   assert.equal(result.maySpend,false);
+   assert.equal(result.mayReserve,false);
+   assert.equal(result.reason,'SHADOW_RECEIVER_SYNTHETIC_INPUT_UNTRUSTED');
+  }
+  assert.equal(queries,0,'no SQL from rejected inputs');
+  assert.equal(getters,0,'no getter evaluated');
+ }finally{
+  if(prior===undefined)delete process.env.REVIEWER_B_SYNTHETIC_SHADOW_ONLY;
+  else process.env.REVIEWER_B_SYNTHETIC_SHADOW_ONLY=prior;
+ }
+});
 test('static: authenticated test bridge cannot import or alter paid Publisher',()=>{
  const module=readFileSync(new URL('../scripts/openrouter-shadow-authenticated-bridge-synthetic-only.mjs',import.meta.url),'utf8');
  assert.match(module,/propose_exposure_authenticated_receiver/);
