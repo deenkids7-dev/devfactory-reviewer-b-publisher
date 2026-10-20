@@ -275,6 +275,25 @@ requires durable COMMIT verification, independent provider billing,
 authentic identity, full-key coverage, lost-ACK incident controls and
 a separately reviewed protected dispatch service.
 
+## Isolated PostgreSQL backend-loss regression (synthetic, no provider)
+
+The existing PostgreSQL 16 multi-connection test also terminates a
+**separate disposable test backend** with `pg_terminate_backend` while
+the backend holds an UNCOMMITTED dispatch-risk marker. The database
+should roll back that connection's transaction. An independent
+authenticated recovery session then observes the preexisting
+`registered` row, but receives `may_retry=false`,
+`may_dispatch=false`, and `may_spend=false`.
+
+This directly tests a server-side session termination in an
+**ephemeral GitHub Actions PostgreSQL service**. It is not a test
+of production database failover, persistent-volume loss, WAL durability,
+network egress timing, actual OpenRouter billing, or
+provider-side idempotency. A `registered` row or a missing row is
+not evidence that no external call occurred. Future recovery must
+quarantine uncertain attempts pending authenticated reconciliation
+and explicit policy, never issue a duplicate paid request.
+
 ## Production blockers still missing
 
 1. Trusted, authenticated billing ledger covering all relevant keys
