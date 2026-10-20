@@ -16,12 +16,23 @@ BEGIN
 END
 $precheck$;
 
+-- Match the ORIGINAL attempt ID and exact HEAD at the database layer.
+-- The composite key prevents wrong-attempt quarantines even if a future
+-- SECURITY DEFINER caller accidentally omits its procedural checks.
+ALTER TABLE reviewer_b_attempt_shadow.attempts
+  ADD CONSTRAINT synthetic_attempt_identity_triplet_unique
+  UNIQUE(request_id,attempt_id,head_sha);
+
 -- One permanent quarantine record per immutable synthetic request ID.
 -- No DELETE / release / mark-verified entrypoint is provided.
 CREATE TABLE reviewer_b_attempt_shadow.quarantines(
-  request_id text PRIMARY KEY REFERENCES reviewer_b_attempt_shadow.attempts(request_id),
+  request_id text PRIMARY KEY,
   attempt_id text NOT NULL,
   head_sha text NOT NULL CHECK (head_sha ~ '^[a-f0-9]{40}$'),
+  CONSTRAINT synthetic_quarantine_exact_attempt_fk
+    FOREIGN KEY (request_id,attempt_id,head_sha)
+    REFERENCES reviewer_b_attempt_shadow.attempts
+    (request_id,attempt_id,head_sha),
   quarantine_reason text NOT NULL CHECK (quarantine_reason IN (
     'dispatch_risk_unresolved','ambiguous_commit',
     'provider_outcome_unknown','billing_claim_unverified')),
