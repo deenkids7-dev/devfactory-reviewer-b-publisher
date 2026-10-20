@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
-import {assessSyntheticAuditAnchorOffline as assess}
+import {assessSyntheticAuditAnchorOffline as assess,
+  assessSyntheticWitnessIncidentOffline as witness}
   from '../scripts/openrouter-shadow-audit-anchor-offline.mjs';
 
 const sha=s=>createHash('sha256').update(s,'utf8').digest('hex');
@@ -182,4 +183,168 @@ test('paid Publisher and real gate cannot import chain mock verifier',()=>{
     assert.doesNotMatch(content,/openrouter-shadow-audit-anchor-offline/);
   assert.match(gate,/OPENROUTER_MONTHLY_RESERVATION_AND_IDEMPOTENCY_NOT_IMPLEMENTED/);
   assert.doesNotMatch(module,/OPENROUTER_API_KEY|https?:\/\/|fetch\s*\(/);
+});
+
+const witnessFixture=()=>{
+  const audit=fixture();
+  return {
+    schema:'devfactory.shadow-witness-incident.synthetic.v1',
+    scope:'illustrative-only',transport:'no-network',audit,
+    witness:{id:'mock-external-witness',source:'unverified-fixture',
+      availability:'available'},
+    prior:{sequence:2,root_hash:audit.entries[1].entry_hash,
+      key_epoch:1,key_id:'witness-key-a',key_status:'active'},
+    candidate:{sequence:4,root_hash:audit.entries[3].entry_hash,
+      key_epoch:1,key_id:'witness-key-a',key_status:'active'},
+    review:{externalSignatureAuthenticated:false,
+      witnessIndependentVerified:false,operatorApproved:false,
+      holdReleaseApproved:false},
+  };
+};
+const witnessBlocked=(r,reason,kind)=>{
+  blocked(r,reason);
+  for(const field of ['independentWitnessReachableVerified',
+    'trustedWitnessKeyEpochVerified','checkpointSignatureVerified',
+    'checkpointTimestampVerified','realIncidentEscalated',
+    'automaticReplayScheduled'])
+    assert.equal(r[field],false,field);
+  assert.equal(r.simulatedHumanInvestigationRequired,true);
+  if(kind)assert.equal(r.mockWitnessIncidentClass,kind);
+};
+test('witness drill cannot run without shadow-only test switch',()=>{
+  const previous=process.env.REVIEWER_B_SYNTHETIC_SHADOW_ONLY;
+  delete process.env.REVIEWER_B_SYNTHETIC_SHADOW_ONLY;
+  try{witnessBlocked(witness(encode(witnessFixture())),
+    'SHADOW_WITNESS_SYNTHETIC_SWITCH_REQUIRED','invalid');}
+  finally{
+    if(previous!==undefined)
+      process.env.REVIEWER_B_SYNTHETIC_SHADOW_ONLY=previous;
+  }
+});
+test('two internally matching witness fixtures grant zero trust',()=>withSwitch(()=>{
+  witnessBlocked(witness(encode(witnessFixture())),
+    'SHADOW_WITNESS_MATCHING_FIXTURES_NOT_AUTHENTIC','unverified');
+}));
+test('witness outage requires independent manual investigation',()=>withSwitch(()=>{
+  const s=witnessFixture();s.witness.availability='unavailable';
+  s.candidate=null;
+  witnessBlocked(witness(encode(s)),
+    'SHADOW_WITNESS_OUTAGE_MANUAL_ESCALATION','outage');
+}));
+test('timeout never schedules replay, automatic GET or paid retries',()=>withSwitch(()=>{
+  const s=witnessFixture();s.witness.availability='timeout';
+  s.candidate=null;
+  witnessBlocked(witness(encode(s)),
+    'SHADOW_WITNESS_TIMEOUT_NO_AUTO_RETRY','outage');
+}));
+test('unavailable witness carrying a fake candidate is contradictory',()=>withSwitch(()=>{
+  const s=witnessFixture();s.witness.availability='timeout';
+  witnessBlocked(witness(encode(s)),
+    'SHADOW_WITNESS_AVAILABILITY_CONTRADICTORY','invalid');
+}));
+test('fake earlier checkpoint root conflicting with local chain detects fork',()=>withSwitch(()=>{
+  const s=witnessFixture();s.prior.root_hash='f'.repeat(64);
+  witnessBlocked(witness(encode(s)),
+    'SHADOW_WITNESS_PRIOR_FORK_SUSPECTED','fork');
+}));
+test('same-height different checkpoint root is treated as fork',()=>withSwitch(()=>{
+  const s=witnessFixture();s.candidate.root_hash='e'.repeat(64);
+  witnessBlocked(witness(encode(s)),
+    'SHADOW_WITNESS_DIVERGENT_ROOT_FORK','fork');
+}));
+test('candidate lower than prior height is a replay',()=>withSwitch(()=>{
+  const s=witnessFixture();s.candidate.sequence=1;
+  s.candidate.root_hash=s.audit.entries[0].entry_hash;
+  witnessBlocked(witness(encode(s)),
+    'SHADOW_WITNESS_CHECKPOINT_REPLAY','replay');
+}));
+test('candidate beyond journal length is not externally authenticated',()=>withSwitch(()=>{
+  const s=witnessFixture();s.candidate.sequence=5;
+  s.candidate.root_hash='f'.repeat(64);
+  witnessBlocked(witness(encode(s)),
+    'SHADOW_WITNESS_FUTURE_CHECKPOINT_UNBOUND','provenance');
+}));
+test('stale witness acknowledgment cannot certify final head',()=>withSwitch(()=>{
+  const s=witnessFixture();s.candidate.sequence=3;
+  s.candidate.root_hash=s.audit.entries[2].entry_hash;
+  witnessBlocked(witness(encode(s)),
+    'SHADOW_WITNESS_STALE_CHECKPOINT','stale');
+}));
+test('revoked previous signer is untrusted even if current matches',()=>withSwitch(()=>{
+  const s=witnessFixture();s.prior.key_status='revoked';
+  witnessBlocked(witness(encode(s)),
+    'SHADOW_WITNESS_REVOKED_PRIOR_KEY','rotation');
+}));
+test('revoked current signer cannot attest this incident',()=>withSwitch(()=>{
+  const s=witnessFixture();s.candidate.key_status='revoked';
+  witnessBlocked(witness(encode(s)),
+    'SHADOW_WITNESS_REVOKED_CURRENT_KEY','rotation');
+}));
+test('unverified rotation to new key and epoch remains blocked',()=>withSwitch(()=>{
+  const s=witnessFixture();s.candidate.key_epoch=2;
+  s.candidate.key_id='witness-key-b';
+  witnessBlocked(witness(encode(s)),
+    'SHADOW_WITNESS_ROTATION_UNAUTHENTICATED','rotation');
+}));
+test('silent replacement of signer without epoch advancement denied',()=>withSwitch(()=>{
+  const s=witnessFixture();s.candidate.key_id='witness-key-b';
+  witnessBlocked(witness(encode(s)),
+    'SHADOW_WITNESS_UNEXPLAINED_KEY_CHANGE','rotation');
+}));
+test('rollback to earlier signer epoch is not accepted',()=>withSwitch(()=>{
+  const s=witnessFixture();s.prior.key_epoch=2;
+  witnessBlocked(witness(encode(s)),
+    'SHADOW_WITNESS_KEY_EPOCH_REGRESSION','replay');
+}));
+test('fully rewritten and rehashed audit with matching fake witness stays BLOCKED',()=>withSwitch(()=>{
+  const s=witnessFixture();
+  s.audit.entries[2].evidence_digest_sha256='d'.repeat(64);
+  rehash(s.audit);
+  s.prior.root_hash=s.audit.entries[1].entry_hash;
+  s.candidate.root_hash=s.audit.entries[3].entry_hash;
+  witnessBlocked(witness(encode(s)),
+    'SHADOW_WITNESS_MATCHING_FIXTURES_NOT_AUTHENTIC','unverified');
+}));
+test('forged signature, human approval and release fields rejected',()=>withSwitch(()=>{
+  for(const field of Object.keys(witnessFixture().review)){
+    const s=witnessFixture();s.review[field]=true;
+    witnessBlocked(witness(encode(s)),
+      'SHADOW_WITNESS_FORGED_REVIEW_AUTHORITY','security');
+  }
+}));
+test('invalid mock root, claims, token, body or dynamic network fields refused',()=>withSwitch(()=>{
+  for(const change of [
+    s=>{s.scope='signed-production';},
+    s=>{s.witness.source='provider-authenticated';},
+    s=>{s.witness.api_key='SECRET';},
+    s=>{s.witness.url='https://other.invalid';},
+    s=>{s.transport='network';},
+    s=>{s.prior.key_epoch='1';},
+    s=>{s.candidate.root_hash='bad-root';},
+    s=>{s.candidate.headers={Authorization:'Bearer SECRET'};},
+    s=>{s.candidate.key_id='../../bad';},
+    s=>{s.checkpointSigned=true;},
+  ]){
+    const s=witnessFixture();change(s);
+    const r=witness(encode(s));witnessBlocked(r);
+    assert.match(r.reason,/FIXTURE_UNTRUSTED|CANDIDATE_UNTRUSTED/);
+  }
+}));
+test('corrupted underlying mock SHA chain cannot be certified by witness',()=>withSwitch(()=>{
+  const s=witnessFixture();s.audit.entries[2].event_id='altered-event';
+  witnessBlocked(witness(encode(s)),
+    'SHADOW_WITNESS_AUDIT_CHAIN_UNTRUSTED','provenance');
+}));
+test('paid Publisher and spend gate cannot import mock witness incident',()=>{
+  const paid=readFileSync(new URL(
+    '../scripts/protected-real-openrouter-review.mjs',import.meta.url),'utf8');
+  const gate=readFileSync(new URL(
+    '../scripts/openrouter-only-spend-gate.mjs',import.meta.url),'utf8');
+  const script=readFileSync(new URL(
+    '../scripts/openrouter-shadow-audit-anchor-offline.mjs',
+    import.meta.url),'utf8');
+  for(const content of [paid,gate])
+    assert.doesNotMatch(content,/assessSyntheticWitnessIncidentOffline|openrouter-shadow-audit-anchor-offline/);
+  assert.match(gate,/OPENROUTER_MONTHLY_RESERVATION_AND_IDEMPOTENCY_NOT_IMPLEMENTED/);
+  assert.doesNotMatch(script,/OPENROUTER_API_KEY|https?:\/\/|fetch\s*\(/);
 });
