@@ -58,7 +58,8 @@ function freezeKeyring(keyring){
        !integer(r.activatedAtMs)||!integer(r.retiredAtMs)||
        r.retiredAtMs<=r.activatedAtMs||
        (r.revokedAtMs!==null&&(!integer(r.revokedAtMs)||
-          r.revokedAtMs<r.activatedAtMs)) )
+          (r.revokedAtMs<r.activatedAtMs||
+           r.revokedAtMs>r.retiredAtMs))) )
       refuse('SHADOW_KEY_POLICY_INVALID');
     if(fingerprints.has(r.spkiSha256))
       refuse('SHADOW_KEY_FINGERPRINT_ALIAS_FORBIDDEN');
@@ -90,6 +91,14 @@ export function verifyRotatingShadowClaimOffline({
     'model','service_comment_id','owner_consent_comment_id',
     'month_utc','upper_micro_eur','nonce','issued_at','expires_at',
   ]);
+  // Reject non-strings BEFORE Date.parse: objects with a custom
+  // Symbol.toPrimitive can otherwise execute code during verification.
+  const ISO_UTC=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/;
+  if(typeof payload.issued_at!=='string'||
+     typeof payload.expires_at!=='string'||
+     !ISO_UTC.test(payload.issued_at)||
+     !ISO_UTC.test(payload.expires_at))
+    refuse('SHADOW_KEY_SIGNED_TIMES_INVALID');
   const issued=Date.parse(payload.issued_at);
   const expires=Date.parse(payload.expires_at);
   if(!Number.isSafeInteger(issued)||!Number.isSafeInteger(expires)||

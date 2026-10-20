@@ -93,3 +93,15 @@ npm test
 **Decision: NO-GO DEPLOY / PAID INFERENCE / MERGE / RUNNER.**
 The real `openrouter-only-spend-gate.mjs` must still return
 `OPENROUTER_MONTHLY_RESERVATION_AND_IDEMPOTENCY_NOT_IMPLEMENTED`.
+
+## Additional adversarial desk review — without the MSI
+
+After the first all-green CI run, a manual security pass identified that
+`Date.parse` could invoke an attacker-defined `Symbol.toPrimitive` on a
+malformed payload timestamp **before** signature verification. This is now
+refused by type and exact-UTC timestamp syntax checks before calling
+`Date.parse`; a synthetic regression asserts that the malicious method
+is never executed. The policy also rejects an impossible revocation date
+scheduled after retirement. These changes do not authenticate a remote
+service, create a private key, or authorize spending. They require a
+new exact-HEAD CI run after publication.

@@ -149,3 +149,17 @@ test('paid protected runtime imports neither the rotation module nor private sig
   import.meta.url),'utf8');
  assert.match(spend,/OPENROUTER_MONTHLY_RESERVATION_AND_IDEMPOTENCY_NOT_IMPLEMENTED/);
 });
+
+rejected('signed timestamp object cannot execute Symbol.toPrimitive',()=>{
+ const claim=envelope();
+ let called=false;
+ claim.payload.issued_at={
+   [Symbol.toPrimitive](){called=true;throw Error('MALICIOUS_COERCION')}
+ };
+ try{check(claim)}finally{assert.equal(called,false)}
+},'SHADOW_KEY_SIGNED_TIMES_INVALID');
+rejected('reject implausible revocation scheduled after retirement',()=>{
+ check(envelope(),{keyring:new Map([['old',{
+   ...oldKey,revokedAtMs:at('13:00:00')
+ }]])});
+},'SHADOW_KEY_POLICY_INVALID');
