@@ -798,6 +798,110 @@ The real spend gate and real protected Publisher remain untouched.
 This preparation MUST NOT be described as a deployed "secure audit
 journal" or an authorized incident resolution workflow.
 
+## Offline SHA-256 audit self-anchor: internal consistency, NOT authenticity
+
+The new **test-only** `scripts/openrouter-shadow-audit-anchor-offline.mjs`
+and `test/openrouter-shadow-audit-anchor-offline.test.mjs`
+extend the SAME PR #73 and existing synthetic admission workflow.
+The offline `assessSyntheticAuditAnchorOffline` function parses
+a bounded, strictly redacted incident and checks an ordered hash chain
+over the original incident identity, exact SHA, role, event sequence,
+event type, canonical UTC timestamp, evidence digest and predecessor
+hash. The hash uses Node's SHA-256 over a domain-separated,
+positional JSON array. The first predecessor is fixed to 64 zeroes.
+
+The mock checkpoint merely repeats the final chain digest and must
+declare `kind:"self-declared-fixture"`,
+`witness:"unverified-fixture"`,
+`externalProofAuthenticated:false`, and
+`durableStoreVerified:false`. Strict validation of events reuses
+the existing redacted incident-audit schema, preserving an incident
+identity, constrained event progression and pending-only human review.
+
+An unchanged root with an edited event, broken predecessor or
+mismatched checkpoint is rejected. The separate suite includes
+**13 passing cases** on chain links, event history, confidential
+field injection, forged credentials/witness and protected-runtime
+non-import. A deliberately **forged-and-fully-rehashed** incident
+also passes internal consistency, but *still returns BLOCKED*.
+Similarly, dropping the final event and constructing a new root
+cannot be distinguished without an independently authenticated
+external checkpoint. That counterexample is an explicit assertion
+in CI, NOT a security capability or permission to proceed.
+
+All outcomes retain `verified:false`,
+`externalWitnessAuthenticated:false`,
+`durableJournalVerified:false`,
+`independentReviewerApproved:false`,
+`actualHumanGo:false`, `actualMergeGo:false`,
+`maySpend:false`, `mayReserve:false`,
+`mayRetryAmbiguousRequest:false`,
+`mayReleaseHold:false`, `mayDeploy:false`,
+`mayStartRunner:false` and `mayCloseIncident:false`.
+
+### External witness and anti-tamper requirements (future, NOT implemented)
+
+A credible real incident audit would require an independently
+controlled append-only sink or external trusted witness **outside
+the same mutable PR, test runner and database administrator trust
+domain**, with an authenticated, revocable signer/witness identity;
+a trusted timestamp; an auditable retention/restore policy; and
+a non-equivocating checkpoint binding exactly the incident,
+request identity, key scope, HEAD, event count and final digest.
+Tests must cover forks, missing checkpoints, rewritten prefixes,
+partial durable writes, delayed replication, key rotation/revocation,
+witness unavailability, tampered clocks and reader permission
+isolation. Existence of a matching SHA-256 string in GitHub is not
+an external checkpoint, and the current CI is not such a witness.
+None of these prerequisites is delivered or assumed operational.
+
+## Reviewer B — independent approval evidence checklist (all outstanding)
+
+Before any change in readiness or human gates, an independently
+authorized reviewer must see and verify **all applicable evidence**:
+
+1. **Exact immutable scope:** open PR #73, branch identity,
+   SHA of the exact last HEAD, all changed files and the explicit
+   single-LOT scope. Any subsequent HEAD change invalidates any
+   old SHA-bound attestations.
+2. **Native independent Reviewer B approval:** an authenticated,
+   reviewer-authorized GitHub identity, isolated from the developer
+   or any untrusted model comment, submits a native review with
+   state `APPROVED` bound to the exact last HEAD and appropriate
+   required checks/branch policy. A `COMMENTED` advisory from
+   `gemini-code-assist` is **not** this approval. No synthetic
+   manifest can impersonate it.
+3. **Exact-HEAD CI:** all required workflows complete SUCCESS
+   at the very same SHA, including PostgreSQL16 concurrency tests.
+   The synthetic `Reviewer B - Runner Smoke Test` is **not**
+   evidence that a production Runner was started or validated.
+4. **Actual security isolation:** separately reviewed and tested
+   service identity, management-key vault, protected GET-only
+   egress, TLS/DNS/redirect protections, ZDR/privacy assessment,
+   redacted and independently witnessed audit records, and
+   nonbypassable durable transaction boundaries. All of these
+   remain unproven by the offline fixtures.
+5. **Real provider billing and idempotency:** authenticated,
+   complete multi-key/workspace inventory and provider charges,
+   late adjustments, cross-run atomic reservations, settled
+   and unknown liabilities, protected per-request identities and
+   real trusted FX, with an independently reviewed maximum
+   monthly exposure. **Real spend gate must remain BLOCKED**
+   until an actually implemented and authorized policy exists.
+6. **Separate owner/human decisions:** explicit `HUMAN_GO`
+   before a real execution, **exact SHA `MERGE_GO`** before
+   any merge, and later `ZERO_CURSOR_GO` after local MSI
+   requalification. No comment, offline test or shorthand
+   `enchaine` replaces these permissions.
+
+**Observed on this PR as of this preparatory LOT:** the native
+independent Reviewer B `APPROVED` review is still missing, the
+live spend gate is still BLOCKED, and no real network, paid service,
+production witness, Runner or MSI check occurred. The checklist
+is a set of **unmet prerequisites**, not a reviewer sign-off.
+A genuinely authenticated read-only evidence service is a future
+separately scoped decision; this PR never provisions its secrets.
+
 ## Production blockers still missing
 
 1. Trusted, authenticated billing ledger covering all relevant keys
