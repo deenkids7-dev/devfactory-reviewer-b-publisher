@@ -294,6 +294,66 @@ not evidence that no external call occurred. Future recovery must
 quarantine uncertain attempts pending authenticated reconciliation
 and explicit policy, never issue a duplicate paid request.
 
+## Isolated PostgreSQL quarantine for unresolved mock provider charges
+
+The additive, **synthetic-only** migration
+`sql/reviewer_b_attempt_quarantine_synthetic_v1.sql` extends the
+existing `reviewer_b_attempt_shadow` schema in the **disposable**
+PostgreSQL 16 GitHub Actions database. It requires the pre-existing
+tombstone migration and does **not** create a competing ledger or
+connect to the actual Publisher, OpenRouter, Runner or paid service.
+
+The `quarantines` table contains exactly one immutable quarantine
+entry per synthetic request ID, linked by a database foreign key to
+the original attempt. The protected
+`quarantine_synthetic_attempt` function binds the request,
+attempt ID and exact HEAD, locks the existing risk row with
+`FOR UPDATE NOWAIT`, and only accepts requests already in
+`dispatch_may_have_occurred` or `outcome_unknown`.
+`registered` and `cancelled_before_dispatch` cannot fabricate a
+provider-risk quarantine entry. A second quarantine for the same
+request is refused. This does not confer any right to send again,
+resume a request, or release money.
+
+The `unverified_evidence` table stores **untrusted test fixtures**
+under quarantined request IDs, with globally unique evidence IDs
+and SHA-256-format digests. The single
+`record_unverified_evidence_fixture` function only accepts
+`mock_invoice`, `mock_timeout`, `mock_adjustment` or
+`mock_absence` and labels the provenance
+`unverified-fixture`. A duplicate ID/digest or a proposed
+`provider-authenticated` category is rejected. No claim is
+validated against an OpenRouter signature, API, billing statement,
+actual key or provider accounting ledger. A fixture saying
+`mock_absence` must **never** imply a zero-dollar outcome.
+
+These tables have no release, refund, DELETE, promote-to-verified or
+dispatch entrypoint for the restricted test role. Both functions
+are `SECURITY DEFINER`, owned by a NOLOGIN test principal;
+PUBLIC EXECUTE and direct table permissions are revoked.
+Every return value keeps `may_spend=false`,
+`may_dispatch=false`, `may_retry=false`,
+`may_release_hold=false`, and evidence additionally reports
+`provider_authenticated=false`.
+
+The existing multi-connection PostgreSQL16 integration test now
+checks denied direct access, conflicting quarantines under
+`NOWAIT`, rollback of uncommitted quarantine, unique identity
+and digest behavior, spoofed fixture authentication, negative
+amounts, absent/mismatched requests, and the continuing prohibition
+on dispatch from the underlying read-only recovery observer.
+
+**Known limits:** This is an isolation/coordination test, not
+authenticated billing reconciliation or a production-approved
+incident workflow. The untrusted mock evidence can be fabricated,
+omitted or incomplete. It does not establish ZDR, invoice completeness
+across all keys, trusted FX, real refund behavior, end-to-end
+exactly-once provider semantics, durable database failover,
+operator/superuser trust, or account-wide cost authorization.
+Actual holds must remain unresolved unless a future independently
+audited billing/authorization workflow explicitly proves and
+permits changes; this PR does not implement that future release.
+
 ## Production blockers still missing
 
 1. Trusted, authenticated billing ledger covering all relevant keys
