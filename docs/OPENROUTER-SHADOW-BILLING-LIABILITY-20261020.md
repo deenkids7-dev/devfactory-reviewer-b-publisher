@@ -48,6 +48,53 @@ The EUR denomination is illustrative; real provider spend may
 be USD, must use an independently trusted FX quote, time bounds,
 conservative rounding, and durable reconciliation.
 
+## Additional offline USD/EUR FX stress simulation
+
+The separate `scripts/openrouter-shadow-fx-reconciliation-offline.mjs`
+takes **serialized synthetic JSON only**, under the same test-only switch.
+Its paired test file is
+`test/openrouter-shadow-fx-reconciliation-offline.test.mjs`.
+It is deliberately **not imported by the real Publisher or spend gate**.
+The GitHub synthetic admission workflow runs the negative cases.
+
+A mock document requires the exact top-level keys `coverage`,
+`month_utc`, `observed_at`, `fx_quote`, `entries`. The quote has
+`source:"synthetic-fixture"`, `pair:"USD/EUR"`, decimal **integer
+strings** `numerator` and `denominator`, `issued_at` and
+`expires_at`. Each record has a unique `request_id`, the
+`development` or `reviewer_b` mock key role, a `charge_month_utc`
+matching the scenario month, one of `settled`/`pending`/`ambiguous`,
+and integer-string `billed_micro_usd` and `held_micro_usd`.
+
+For each record and **each** billed/held component independently, the
+simulated conversion is:
+
+```text
+micro_eur = ceil(micro_usd * numerator / denominator)
+total_micro_eur = sum(converted_billed + converted_held)
+```
+
+The calculator uses arbitrary-precision integers, prevents duplicate
+request IDs across key roles, rejects inconsistent settlement states
+and caps what it exposes as a safe numeric diagnostic. An ambiguous or
+pending charge keeps its *entire* mock liability on hold (plus partial
+invoicing) and **cannot be retried**. Missing, future or expired mock
+quotes and windows greater than 5 minutes fail closed. The code compares
+**fixture-supplied** timestamps only; it makes **no claim of actual
+current quote freshness**, source identity or authenticity. Modelled
+month mismatch is refused rather than auto-releasing earlier holds.
+
+This is **not FX hedging**, no guarantee that the numerator/denominator
+is a valid economic rate, and no trusted authenticated rate source. An
+attacker can fabricate a quote, the entries, their billed state, and
+the list of all keys. Therefore an apparently low converted liability
+must **never** unlock paid OpenRouter. Across-period liabilities,
+real provider billing delays, charge reversals, the source of
+provider request IDs, and a durable idempotency ledger remain unproven.
+Every result is still `BLOCKED / maySpend:false /
+mayReserve:false / mayRetryAmbiguousRequest:false` and does not
+create a reservation or merge/Runner permission.
+
 ## Production blockers still missing
 
 1. Trusted, authenticated billing ledger covering all relevant keys
