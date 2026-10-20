@@ -115,3 +115,32 @@ A live multi-session PostgreSQL test is still mandatory before any
 deployment. This branch **does not implement that test** and must not be
 promoted or merged as if it did. This is a shadow proposal prototype only,
 not a central billing authentication or transactional spend authorization.
+
+## Separate real PostgreSQL multi-client CI proof
+
+`.github/workflows/reviewer-b-shadow-postgres-multiclient.yml` creates
+an **ephemeral PostgreSQL 16.4 GitHub Actions service container**, accessible
+only in that test job through localhost with a **synthetic test password**.
+It uses the repository's existing exact-PR-SHA read-only tarball download
+pattern, a temporary isolated `pg@8.13.3` client (no dependency/workflow
+changes to the paid Publisher), and a zero-credential
+`test/openrouter-central-shadow-postgres-real.test.mjs` harness.
+
+Test coverage uses **three independent physical database connections**:
+`FOR UPDATE NOWAIT` contention while another transaction holds the month
+row; client A's uncommitted reservation and rollback remaining invisible to
+client B; atomic post-commit counters seen by client C; duplicate PR+HEAD
+across different comment IDs; stale-snapshot `REPEATABLE READ` denial;
+combined reservations up to precisely 15 EUR; refusal beyond the ceiling;
+and no PUBLIC EXECUTE privilege. Every successful query still reports
+`may_spend=false` and `provider_billing_authenticated=false`.
+
+The separate workflow is **read-only with respect to GitHub**, and explicitly
+refuses to download or run code from a forked pull request. A workflow job
+may still be scheduled for a fork event before this check. It contains
+**no OpenRouter key**, ZDR permission, real database, funding authority or
+Runner start. It is not
+an authorization to merge or deploy the SQL. Its first GitHub execution
+must be verified on the exact PR HEAD before claiming the multi-client
+tests passed. This synthetic concurrent job does not simulate network
+partitions, a PostgreSQL failover, multiple regions or owner credentials.
