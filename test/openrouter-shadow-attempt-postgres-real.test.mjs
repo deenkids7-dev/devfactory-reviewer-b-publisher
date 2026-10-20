@@ -83,7 +83,7 @@ test('real PostgreSQL16: durable synthetic risk tombstone, no retry or privilege
   const blockedRecovery=(result,found,status=null)=>{
     assert.equal(result.rows.length,1);
     const row=result.rows[0];
-    assert.equal(row.found,found);
+    assert.equal(row.identity_found,found);
     assert.equal(row.observed_state,status);
     assert.equal(row.may_spend,false);
     assert.equal(row.may_dispatch,false);
