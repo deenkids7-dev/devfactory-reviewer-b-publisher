@@ -601,6 +601,86 @@ substitute for invoice authentication, or permission to start
 paid traffic. The real spend gate stays BLOCKED, as do the
 human MERGE_GO/HUMAN_GO and Runner gates.
 
+## Threat model for a future isolated management-key GET proxy (synthetic)
+
+The same **non-executable** offline module,
+`scripts/openrouter-shadow-readonly-acquisition-plan-offline.mjs`,
+now has a pure `assessSyntheticProxyBoundaryOffline` validator,
+with **14 additional adversarial tests** in the existing test file
+(28 total for that suite). It does **not** instantiate an HTTP
+client, fetch account data, store keys, validate real TLS or modify
+the protected real Publisher, Runner or spend gate.
+
+### Trust boundaries and attack paths
+
+1. **Caller -> narrow read capability.** A caller may select only
+   the symbolic `keys` or `credits` read operation. The
+   validator rejects verbs other than GET, arbitrary paths, host,
+   query, port, URL, headers, request body, dynamic endpoints,
+   workspace injection and unsafe key-list offsets. This is a
+   *structural fixture test*, not authorization of an actual GET.
+2. **Proxy -> provider network.** A real design must use a fixed
+   upstream endpoint, strict TLS validation and an independently
+   enforced network egress policy. Disable redirects and ambient
+   HTTP proxy settings, and defend against DNS rebinding,
+   host/SNI disagreement, IP literal/private subnet destinations,
+   redirect credential forwarding, request smuggling and arbitrary
+   resolver/proxy configuration. The fixture only rejects symbolic
+   deviations: it does **not** pin DNS, verify certificates, inspect
+   sockets or demonstrate real SSRF prevention.
+3. **Proxy -> management credential.** A management key has
+   administrative capability and cannot safely be regarded as
+   read-only on its own. A future service requires a separately
+   authorized secret store, narrow process identity, no caller
+   access to the secret, a nonbypassable GET-only egress boundary,
+   revocation/rotation procedure and zero secret propagation to
+   logs, errors, traces, telemetry or downstream clients. The
+   fixture requires **no provisioned token or vault connection**.
+4. **Provider -> proxy response.** Test fixtures refuse 3xx
+   redirects, secret markers, non-JSON success payloads,
+   empty success payloads, oversized/invalid response metadata,
+   malformed fields and untrusted extra headers/body declarations.
+   HTTP 401/403/404/408/409/429/5xx and unknown responses all
+   mean **unresolved**, never a zero-cost or complete invoice.
+   Production must add actual response body/schema validation,
+   maximum response decompression limits, trusted provenance,
+   robust throttling and a conservative failure circuit.
+5. **Proxy -> audit, billing and dispatch.** Raw authorization
+   headers, sensitive response bodies, unredacted provider
+   identifiers and automated replay are forbidden in the
+   synthetic audit contract. A future operator must enforce
+   append-only redacted audit records and reconcile historical
+   provider usage with all workspaces, revoked keys, late charges
+   and independent financial holds. No error, absence, apparent
+   GET success or forged test fixture permits paid dispatch,
+   retry of an ambiguous request or release of held funds.
+
+### Observed mock results and unproven obligations
+
+GitHub's disposable synthetic admission workflow now exercises
+**28/28** acquisition-plan plus proxy-boundary tests, including
+the 14 new attack cases. Even a structurally matching fixture
+returns `BLOCKED`, with
+`managementCredentialPresent=false`,
+`providerDataFetched=false`,
+`readOnlyEnforcedInProduction=false`,
+`accountCoverageAuthenticated=false`,
+`mayReadProviderData=false`,
+`mayMutateProvider=false`, `maySpend=false`,
+`mayReserve=false`, `mayRetryAmbiguousRequest=false`,
+`mayReleaseHold=false`, `mayDeploy=false`, plus
+`proxyDeployed=false`, `actualEgressRestricted=false`,
+`secretRedactionVerified=false` and
+`providerResponseAuthenticated=false`.
+
+A JSON manifest cannot prove real firewall egress restrictions,
+secret-store isolation, actual authentication, billing correctness,
+network-level TLS/redirect/DNS behavior, rate-limit responses,
+privacy guarantees or tamper-evident operations. Those require
+independent real-world testing, explicit approvals, and a later
+separately scoped implementation. **This PR is not an operational
+proxy, and no key should be introduced into this synthetic CI.**
+
 ## Production blockers still missing
 
 1. Trusted, authenticated billing ledger covering all relevant keys
