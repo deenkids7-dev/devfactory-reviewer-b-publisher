@@ -190,6 +190,99 @@ BEGIN
 END
 $fn$;
 
+-- Read-only observation after a simulated lost/ambiguous COMMIT acknowledgment.
+-- Even REGISTERED/NOT FOUND cannot prove an external API call never happened.
+-- No result grants spend, dispatch, retry or permission to release a hold.
+CREATE FUNCTION reviewer_b_attempt_shadow.observe_attempt_after_uncertain_commit(
+  p_request text,p_attempt text,p_head text)
+RETURNS TABLE (
+  found boolean,reason text,observed_state text,
+  may_spend boolean,may_dispatch boolean,may_retry boolean)
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path=pg_catalog,pg_temp
+AS $fn$
+DECLARE v_state text;
+BEGIN
+  IF current_setting('transaction_isolation')<>'read committed'
+     OR p_request IS NULL OR p_request !~ '^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}
+ALTER FUNCTION reviewer_b_attempt_shadow.record_dispatch_risk(text,text,text)
+  OWNER TO reviewer_b_attempt_owner_v1;
+ALTER FUNCTION reviewer_b_attempt_shadow.mark_outcome_unknown(text,text,text)
+  OWNER TO reviewer_b_attempt_owner_v1;
+ALTER FUNCTION reviewer_b_attempt_shadow.cancel_before_dispatch(text,text,text)
+  OWNER TO reviewer_b_attempt_owner_v1;
+ALTER FUNCTION reviewer_b_attempt_shadow.observe_attempt_after_uncertain_commit(text,text,text)
+  OWNER TO reviewer_b_attempt_owner_v1;
+REVOKE ALL ON ALL FUNCTIONS IN SCHEMA reviewer_b_attempt_shadow FROM PUBLIC;
+REVOKE ALL ON TABLE reviewer_b_attempt_shadow.attempts
+  FROM reviewer_b_attempt_invoker_v1;
+GRANT USAGE ON SCHEMA reviewer_b_attempt_shadow
+  TO reviewer_b_attempt_invoker_v1;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA reviewer_b_attempt_shadow
+  TO reviewer_b_attempt_invoker_v1;
+ALTER DEFAULT PRIVILEGES FOR ROLE reviewer_b_attempt_owner_v1
+  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
+COMMIT;
+
+     OR p_attempt IS NULL OR p_attempt !~ '^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}
+ALTER FUNCTION reviewer_b_attempt_shadow.record_dispatch_risk(text,text,text)
+  OWNER TO reviewer_b_attempt_owner_v1;
+ALTER FUNCTION reviewer_b_attempt_shadow.mark_outcome_unknown(text,text,text)
+  OWNER TO reviewer_b_attempt_owner_v1;
+ALTER FUNCTION reviewer_b_attempt_shadow.cancel_before_dispatch(text,text,text)
+  OWNER TO reviewer_b_attempt_owner_v1;
+REVOKE ALL ON ALL FUNCTIONS IN SCHEMA reviewer_b_attempt_shadow FROM PUBLIC;
+REVOKE ALL ON TABLE reviewer_b_attempt_shadow.attempts
+  FROM reviewer_b_attempt_invoker_v1;
+GRANT USAGE ON SCHEMA reviewer_b_attempt_shadow
+  TO reviewer_b_attempt_invoker_v1;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA reviewer_b_attempt_shadow
+  TO reviewer_b_attempt_invoker_v1;
+ALTER DEFAULT PRIVILEGES FOR ROLE reviewer_b_attempt_owner_v1
+  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
+COMMIT;
+
+     OR p_head IS NULL OR p_head !~ '^[a-f0-9]{40}
+ALTER FUNCTION reviewer_b_attempt_shadow.record_dispatch_risk(text,text,text)
+  OWNER TO reviewer_b_attempt_owner_v1;
+ALTER FUNCTION reviewer_b_attempt_shadow.mark_outcome_unknown(text,text,text)
+  OWNER TO reviewer_b_attempt_owner_v1;
+ALTER FUNCTION reviewer_b_attempt_shadow.cancel_before_dispatch(text,text,text)
+  OWNER TO reviewer_b_attempt_owner_v1;
+REVOKE ALL ON ALL FUNCTIONS IN SCHEMA reviewer_b_attempt_shadow FROM PUBLIC;
+REVOKE ALL ON TABLE reviewer_b_attempt_shadow.attempts
+  FROM reviewer_b_attempt_invoker_v1;
+GRANT USAGE ON SCHEMA reviewer_b_attempt_shadow
+  TO reviewer_b_attempt_invoker_v1;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA reviewer_b_attempt_shadow
+  TO reviewer_b_attempt_invoker_v1;
+ALTER DEFAULT PRIVILEGES FOR ROLE reviewer_b_attempt_owner_v1
+  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
+COMMIT;
+
+  THEN
+    RETURN QUERY SELECT false,'SHADOW_RECOVERY_INPUT_INVALID'::text,
+      NULL::text,false,false,false;
+    RETURN;
+  END IF;
+
+  -- Match the original immutable identity, decline concurrent row writers.
+  -- A lock error must be treated as ambiguous, never as permission to retry.
+  SELECT a.status INTO v_state
+  FROM reviewer_b_attempt_shadow.attempts a
+  WHERE a.request_id=p_request AND a.attempt_id=p_attempt
+    AND a.head_sha=p_head
+  FOR SHARE NOWAIT;
+  IF NOT FOUND THEN
+    RETURN QUERY SELECT false,'SHADOW_RECOVERY_NOT_FOUND_OR_MISMATCH'::text,
+      NULL::text,false,false,false;
+    RETURN;
+  END IF;
+  RETURN QUERY SELECT true,'SHADOW_RECOVERY_READONLY_NOT_AUTHORITY'::text,
+    v_state,false,false,false;
+END
+$fn$;
+
 ALTER FUNCTION reviewer_b_attempt_shadow.register_synthetic_attempt(text,text,text,text)
   OWNER TO reviewer_b_attempt_owner_v1;
 ALTER FUNCTION reviewer_b_attempt_shadow.record_dispatch_risk(text,text,text)
