@@ -131,3 +131,96 @@ export function assessSyntheticEvidenceCoverageOffline(json){
     simulatedAttemptCount:attempts.size,
   });
 }
+
+/**
+ * Compare two complete, bounded, UNVERIFIED fixture inventories.
+ * Detection of a disappearing entry is not a proof of provider tampering.
+ * An apparently stable snapshot is not evidence of verified billing.
+ * There is NO network read, trusted watermark, storage or financial action.
+ */
+const ACCEPTED_COVERAGE_DIAGNOSTICS=new Set([
+  'SHADOW_COVERAGE_MISSING_KEY_MONTH_FIXTURES',
+  'SHADOW_COVERAGE_UNMATCHED_REQUEST_FIXTURES',
+  'SHADOW_COVERAGE_ALL_FIXTURES_STILL_UNVERIFIED',
+]);
+const sameRequests=(a,b)=>a.length===b.length&&
+  a.every((request,i)=>request===b[i]);
+
+export function assessSyntheticEvidenceContinuityOffline(
+  previousJson,currentJson){
+  // Reuse complete schema and budget bounds, not a bypassing mini-parser.
+  const before=assessSyntheticEvidenceCoverageOffline(previousJson);
+  const after=assessSyntheticEvidenceCoverageOffline(currentJson);
+  if(!ACCEPTED_COVERAGE_DIAGNOSTICS.has(before.reason)||
+     !ACCEPTED_COVERAGE_DIAGNOSTICS.has(after.reason))
+    return denied('SHADOW_CONTINUITY_SNAPSHOT_UNTRUSTED');
+  const previous=JSON.parse(previousJson),current=JSON.parse(currentJson);
+  const oldEnd=index(previous.window.last_month_utc);
+  if(previous.window.first_month_utc!==current.window.first_month_utc||
+     index(current.window.last_month_utc)<oldEnd)
+    return denied('SHADOW_CONTINUITY_WINDOW_REGRESSION');
+
+  const oldKeys=new Map(previous.keys.map(k=>[k.key_id,k]));
+  const newKeys=new Map(current.keys.map(k=>[k.key_id,k]));
+  for(const [id,old] of oldKeys){
+    const now=newKeys.get(id);
+    if(!now)return denied('SHADOW_CONTINUITY_KEY_DISAPPEARED');
+    if(now.role!==old.role||
+       now.valid_from_month_utc!==old.valid_from_month_utc)
+      return denied('SHADOW_CONTINUITY_KEY_IDENTITY_CHANGED');
+    if(old.retired_after_month_utc!==now.retired_after_month_utc){
+      // Recording retirement after the prior window is additive.
+      // Backdating or changing an already-known retirement is not.
+      if(old.retired_after_month_utc!==null||
+         now.retired_after_month_utc===null||
+         index(now.retired_after_month_utc)<oldEnd)
+        return denied('SHADOW_CONTINUITY_KEY_RETIREMENT_REWRITTEN');
+    }
+  }
+  for(const now of current.keys){
+    if(!oldKeys.has(now.key_id)&&
+       index(now.valid_from_month_utc)<=oldEnd)
+      return denied('SHADOW_CONTINUITY_RETROACTIVE_KEY_DISCOVERY');
+  }
+
+  const oldAttempts=new Map(previous.attempts.map(a=>[a.request_id,a]));
+  const newAttempts=new Map(current.attempts.map(a=>[a.request_id,a]));
+  for(const [id,old] of oldAttempts){
+    const now=newAttempts.get(id);
+    if(!now)return denied('SHADOW_CONTINUITY_ATTEMPT_DISAPPEARED');
+    if(now.key_id!==old.key_id||
+       now.initiated_month_utc!==old.initiated_month_utc||
+       now.state!==old.state)
+      return denied('SHADOW_CONTINUITY_ATTEMPT_RECLASSIFIED_UNVERIFIED');
+  }
+  for(const now of current.attempts){
+    if(!oldAttempts.has(now.request_id)&&
+       index(now.initiated_month_utc)<=oldEnd)
+      return denied('SHADOW_CONTINUITY_RETROACTIVE_ATTEMPT_DISCOVERY');
+  }
+
+  const oldStatements=new Map(previous.statements.map(s=>[s.statement_id,s]));
+  const newStatements=new Map(current.statements.map(s=>[s.statement_id,s]));
+  for(const [id,old] of oldStatements){
+    const now=newStatements.get(id);
+    if(!now)return denied('SHADOW_CONTINUITY_STATEMENT_DISAPPEARED');
+    if(now.key_id!==old.key_id||now.month_utc!==old.month_utc||
+       now.digest_sha256!==old.digest_sha256||now.source!==old.source||
+       !sameRequests(now.request_ids,old.request_ids))
+      return denied('SHADOW_CONTINUITY_STATEMENT_REWRITTEN');
+  }
+  for(const now of current.statements){
+    if(!oldStatements.has(now.statement_id)&&
+       index(now.month_utc)<=oldEnd)
+      return denied('SHADOW_CONTINUITY_RETROACTIVE_STATEMENT_DISCOVERY');
+  }
+
+  return denied('SHADOW_CONTINUITY_STABLE_BUT_UNVERIFIED',{
+    previousCoverageReason:before.reason,
+    currentCoverageReason:after.reason,
+    simulatedRetainedKeyCount:oldKeys.size,
+    simulatedRetainedAttemptCount:oldAttempts.size,
+    simulatedRetainedStatementCount:oldStatements.size,
+    simulatedAddedStatementCount:newStatements.size-oldStatements.size,
+  });
+}
