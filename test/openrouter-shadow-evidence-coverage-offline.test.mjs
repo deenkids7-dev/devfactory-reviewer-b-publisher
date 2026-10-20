@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {assessSyntheticEvidenceCoverageOffline as assess}
+import {assessSyntheticEvidenceCoverageOffline as assess,
+  assessSyntheticEvidenceContinuityOffline as compare}
   from '../scripts/openrouter-shadow-evidence-coverage-offline.mjs';
 
 const statement=(statement_id,key_id,month_utc,digit,request_ids)=>({
@@ -184,4 +185,102 @@ test('real spend gate and real Publisher do not import fixture coverage module',
     assert.doesNotMatch(code,/openrouter-shadow-evidence-coverage-offline/);
   assert.match(gate,/OPENROUTER_MONTHLY_RESERVATION_AND_IDEMPOTENCY_NOT_IMPLEMENTED/);
   assert.doesNotMatch(module,/OPENROUTER_API_KEY|https?:\/\/|fetch\s*\(/);
+});
+
+test('two unchanged synthetic snapshots remain BLOCKED, not authenticated',()=>withSwitch(()=>{
+  const s=example();
+  const r=compare(encode(s),encode(s));
+  blocked(r,'SHADOW_CONTINUITY_STABLE_BUT_UNVERIFIED');
+  assert.equal(r.simulatedRetainedKeyCount,2);
+  assert.equal(r.simulatedRetainedStatementCount,3);
+  assert.equal(r.simulatedAddedStatementCount,0);
+}));
+test('future month and later retirement can be added but remain unverified',()=>withSwitch(()=>{
+  const s=example();s.window.last_month_utc='2026-11';
+  s.keys[0].retired_after_month_utc='2026-10';
+  const r=compare(encode(example()),encode(s));
+  blocked(r,'SHADOW_CONTINUITY_STABLE_BUT_UNVERIFIED');
+  assert.equal(r.currentCoverageReason,
+    'SHADOW_COVERAGE_ALL_FIXTURES_STILL_UNVERIFIED');
+}));
+test('untrusted new snapshot and synthetic switch disabled fail closed',()=>{
+  const previous=encode(example());
+  const s=example();s.scope='provider-authenticated';
+  blocked(withSwitch(()=>compare(previous,encode(s))),
+    'SHADOW_CONTINUITY_SNAPSHOT_UNTRUSTED');
+  const was=process.env.REVIEWER_B_SYNTHETIC_SHADOW_ONLY;
+  delete process.env.REVIEWER_B_SYNTHETIC_SHADOW_ONLY;
+  try{blocked(compare(previous,previous),
+    'SHADOW_CONTINUITY_SNAPSHOT_UNTRUSTED');}
+  finally{
+    if(was!==undefined)process.env.REVIEWER_B_SYNTHETIC_SHADOW_ONLY=was;
+  }
+});
+test('shrinking a snapshot window is a blocked regression',()=>withSwitch(()=>{
+  const next=example();
+  next.window.last_month_utc='2026-09';
+  next.statements.splice(1,1);
+  blocked(compare(encode(example()),encode(next)),
+    'SHADOW_CONTINUITY_WINDOW_REGRESSION');
+}));
+test('dropped key, old request and prior statement are detected',()=>withSwitch(()=>{
+  const a=example();a.keys.pop();a.attempts.pop();a.statements.pop();
+  blocked(compare(encode(example()),encode(a)),
+    'SHADOW_CONTINUITY_KEY_DISAPPEARED');
+  const b=example();b.attempts.pop();
+  blocked(compare(encode(example()),encode(b)),
+    'SHADOW_CONTINUITY_ATTEMPT_DISAPPEARED');
+  const c=example();c.statements.pop();
+  blocked(compare(encode(example()),encode(c)),
+    'SHADOW_CONTINUITY_STATEMENT_DISAPPEARED');
+}));
+test('reassigned key role or retroactive retirement cannot rewrite history',()=>withSwitch(()=>{
+  const a=example();a.keys[0].role='reviewer_b';
+  blocked(compare(encode(example()),encode(a)),
+    'SHADOW_CONTINUITY_KEY_IDENTITY_CHANGED');
+  const b=example();b.keys[1].retired_after_month_utc='2026-10';
+  blocked(compare(encode(example()),encode(b)),
+    'SHADOW_CONTINUITY_KEY_RETIREMENT_REWRITTEN');
+}));
+test('retroactive key introduced later is reported, never verified',()=>withSwitch(()=>{
+  const s=example();
+  s.keys.push({key_id:'hidden-old',role:'development',
+    valid_from_month_utc:'2026-09',retired_after_month_utc:'2026-09'});
+  s.statements.push(statement('hidden-sep','hidden-old','2026-09','d',[]));
+  blocked(compare(encode(example()),encode(s)),
+    'SHADOW_CONTINUITY_RETROACTIVE_KEY_DISCOVERY');
+}));
+test('retroactive request discovered after prior inventory is reported',()=>withSwitch(()=>{
+  const s=example();
+  s.attempts.push({request_id:'hidden-req',key_id:'dev-key',
+    initiated_month_utc:'2026-09',state:'ambiguous'});
+  blocked(compare(encode(example()),encode(s)),
+    'SHADOW_CONTINUITY_RETROACTIVE_ATTEMPT_DISCOVERY');
+}));
+test('reclassification from ambiguous to fake settled is blocked',()=>withSwitch(()=>{
+  const s=example();s.attempts[0].state='settled_fixture';
+  blocked(compare(encode(example()),encode(s)),
+    'SHADOW_CONTINUITY_ATTEMPT_RECLASSIFIED_UNVERIFIED');
+}));
+test('old invoice digest, key and request references cannot be rewritten',()=>withSwitch(()=>{
+  const a=example();a.statements[0].digest_sha256='d'.repeat(64);
+  blocked(compare(encode(example()),encode(a)),
+    'SHADOW_CONTINUITY_STATEMENT_REWRITTEN');
+  const b=example();b.statements[0].request_ids=[];
+  blocked(compare(encode(example()),encode(b)),
+    'SHADOW_CONTINUITY_STATEMENT_REWRITTEN');
+}));
+test('late insertion of previously missing key-month remains diagnostic',()=>withSwitch(()=>{
+  const s=example();s.statements.pop();
+  blocked(compare(encode(s),encode(example())),
+    'SHADOW_CONTINUITY_RETROACTIVE_STATEMENT_DISCOVERY');
+}));
+test('fixture continuity is not imported into paid reviewer or spend gate',()=>{
+  const real=readFileSync(new URL(
+    '../scripts/protected-real-openrouter-review.mjs',import.meta.url),'utf8');
+  const gate=readFileSync(new URL(
+    '../scripts/openrouter-only-spend-gate.mjs',import.meta.url),'utf8');
+  for(const s of [real,gate])
+    assert.doesNotMatch(s,/assessSyntheticEvidenceContinuityOffline/);
+  assert.match(gate,/OPENROUTER_MONTHLY_RESERVATION_AND_IDEMPOTENCY_NOT_IMPLEMENTED/);
 });
