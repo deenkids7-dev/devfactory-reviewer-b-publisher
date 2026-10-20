@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'sql/reviewer_b_shadow_central_pg_v1.sql'
+      - 'sql/reviewer_b_attempt_tombstone_synthetic_v1.sql'
+      - 'test/openrouter-shadow-attempt-postgres-real.test.mjs'
       - 'sql/reviewer_b_shadow_protected_roles_v1.sql'
       - 'test/openrouter-central-shadow-postgres-real.test.mjs'
       - 'test/openrouter-central-shadow-sql.test.mjs'
@@ -76,3 +78,4 @@ jobs:
           set -euo pipefail
           cd source
           node --test test/openrouter-central-shadow-postgres-real.test.mjs
+          node --test test/openrouter-shadow-attempt-postgres-real.test.mjs
