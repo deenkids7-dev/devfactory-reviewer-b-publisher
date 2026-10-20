@@ -99,6 +99,22 @@ test('real PostgreSQL16: durable synthetic risk tombstone, no retry or privilege
   await admin.query('ROLLBACK');
   assert.equal((await state('req:1')).status,'registered');
 
+  // Race TWO authenticated invokers for the same prospective dispatch:
+  // a transaction holding the tombstone must block the other writer
+  // without waiting or performing any hypothetical second dispatch.
+  blockedResult(await register(writer,'req:race','attempt:race'),true);
+  await writer.query('BEGIN');
+  blockedResult(await risk(writer,'req:race','attempt:race'),true);
+  assert.equal((await state('req:race')).status,'registered');
+  await assert.rejects(
+    ()=>risk(reconnected,'req:race','attempt:race'),
+    e=>e.code==='55P03');
+  await writer.query('COMMIT');
+  assert.equal((await state('req:race')).status,
+    'dispatch_may_have_occurred');
+  blockedResult(await risk(reconnected,'req:race','attempt:race'),false);
+  blockedResult(await register(reconnected,'req:race','attempt:other'),false);
+
   // One committed risk tombstone survives a different backend connection.
   blockedResult(await risk(writer,'req:1','attempt:1'),true);
   const after=await state('req:1');
@@ -156,5 +172,5 @@ test('real PostgreSQL16: durable synthetic risk tombstone, no retry or privilege
   assert.equal(grants.rows[0].n,0);
   const count=await observer.query(
     'SELECT count(*)::int AS n FROM reviewer_b_attempt_shadow.attempts');
-  assert.equal(count.rows[0].n,3);
+  assert.equal(count.rows[0].n,4);
 });
