@@ -159,3 +159,89 @@ test('cross-month and cross-key simulated exhaustion never rolls credit grant',(
       maySpend:true},
   ])assertBlocked(gate(candidate));
 });
+
+
+/**
+ * These enforce the actual real gate after the financial handoff DESIGN.
+ * None of the deliberately hypothetical financial envelopes below is
+ * provider-signed, independently verified, or allowed to authorize spend.
+ */
+test('financial handoff contract remains explicitly non-authorizing',()=>{
+  const design=file('../docs/OPENROUTER-FINANCIAL-EVIDENCE-ATOMIC-RESERVATION-HANDOFF-20261020.md');
+  for(const text of [
+    'devfactory.financial-evidence.v0',
+    'devfactory.financial-reservation.v0',
+    'AMBIGUOUS_HOLD',
+    'NO-GO SPEND / NO-GO MERGE / NO-GO DEPLOY / NO-GO RUNNER',
+    'not an implemented OpenRouter management client',
+    '15_000_000 micro-EUR',
+  ])assert.ok(design.includes(text),text);
+  assert.match(design,/COMMIT/);
+});
+test('signed-looking evidence envelopes alone cannot grant reserve or spend',()=>{
+  for(const signed of [
+    {schema:'devfactory.financial-evidence.v0',verified:true,
+      providerBillingAuthenticated:true,keyInventoryAuthenticated:true,
+      operatorSignature:'pretend-signature'},
+    {schema:'devfactory.financial-reservation.v0',
+      reservationRecorded:true,quote_upper_micro_eur:15000000,
+      maySpend:true,authorized:true},
+    {providerManagementGETStatus:200,signedProviderInvoice:true,
+      accountScopeDigest:'f'.repeat(64)},
+  ])assertBlocked(gate(signed));
+});
+test('stale evidence watermarks and current-day blind spot never authorize',()=>{
+  for(const snapshot of [
+    {expiredAtUtc:'2026-10-20T00:00:00Z',asOf:'2026-10-20T20:00:00Z',
+      verified:true},
+    {lastCompletedUtcDay:'2026-10-19',currentUtcDayUnbilledEur:0,
+      mayReserve:true},
+    {watermark:'provider-unverified',clockTrusted:true,
+      billingLagUpperEur:0},
+  ])assertBlocked(gate(snapshot));
+});
+test('unknown provider results and late charges remain in financial quarantine',()=>{
+  for(const payload of [
+    {httpStatus:504,attemptUnknown:true,zeroChargesObserved:true,
+      mayRetryAmbiguousRequest:true},
+    {httpStatus:200,chargeSettled:false,holdReleased:true,
+      maySpend:true},
+    {billingMonth:'2026-09',lateChargeEur:12,
+      currentMonthAvailableEur:15,mayReserve:true},
+  ])assertBlocked(gate(payload));
+});
+test('two clients falsely claiming a durable reservation cannot mint permission',()=>{
+  for(const payload of [
+    {twoKeys:['development','reviewer_b'],bothReserved:true,
+      sharedLockProven:true,maySpend:true},
+    {atomicLedgerRecorded:true,transactionCommitted:true,
+      releaseFenceAuthenticated:true,mayReserve:true},
+    {providerBudgetUsdRemaining:200,
+      centralReserveMicroEur:100,dbRole:'reviewer_b_shadow_invoker_v1'},
+  ])assertBlocked(gate(payload));
+});
+test('identity replay, lost commit reply and UTC rollover do not grant retry',()=>{
+  for(const payload of [
+    {duplicateCommentId:true,requestIdentityUnique:true,maySpend:true},
+    {commitReplyLost:true,assumeRolledBack:true,
+      retryAmbiguousRequest:true},
+    {beforeMonthUtc:'2026-10',afterMonthUtc:'2026-11',
+      priorMonthExposureZero:true,mayReserve:true},
+    {shaBoundApproval:'a'.repeat(40),currentSHA:'b'.repeat(40),
+      independentReviewerApproved:true},
+  ])assertBlocked(gate(payload));
+});
+test('production-paid path does not import design or a synthetic producer',()=>{
+  const forbidden=/openrouter-shadow-(?:billing|fx|provider|evidence|audit|witness|readonly|admission)|OPENROUTER-FINANCIAL-EVIDENCE-ATOMIC-RESERVATION-HANDOFF/;
+  assert.doesNotMatch(real,forbidden);
+  assert.doesNotMatch(spend,forbidden);
+  assert.match(real,/if\(budget\.verified!==true\|\|budget\.maySpend!==true\)/);
+});
+test('shadow SQL reserves proposals only and denies spend in function contract',()=>{
+  assert.match(sql,/FOR UPDATE NOWAIT/);
+  assert.match(sql,/SHADOW_DUPLICATE_OR_AMBIGUOUS/);
+  assert.match(sql,/provider_billing_authenticated boolean/);
+  assert.match(sql,/may_spend boolean/);
+  assert.doesNotMatch(sql,/may_spend\s*=\s*true/);
+  assert.doesNotMatch(spend,/maySpend\s*:\s*true/);
+});
