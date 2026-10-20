@@ -186,6 +186,58 @@ This PR deliberately neither deploys this coordinator nor calls a
 provider API, and does not lift any financial, deployment, merge or
 Runner gate.
 
+## Real PostgreSQL16 *synthetic* dispatch-risk tombstones
+
+The additive file `sql/reviewer_b_attempt_tombstone_synthetic_v1.sql`
+defines a **separate**, inactive-by-default schema
+`reviewer_b_attempt_shadow`. It is executed in an **ephemeral
+PostgreSQL 16.4 CI service only**, not on a real Publisher database.
+Two NOLOGIN principals isolate a privileged definer and a restricted
+test invoker. No account key, network credential or production login
+is provisioned. Public execution privileges and invoker table access
+are revoked; all state changes must use reviewed functions.
+
+The immutable identities `request_id` and `attempt_id` are both
+globally unique across UTC months and across mock key roles. Database
+constraints enforce a four-state monotonic record:
+
+- `registered`: an intent exists; no outbound request has happened.
+- `dispatch_may_have_occurred`: one atomic, committed **risk
+  tombstone** should precede *any* hypothetical network send.
+- `outcome_unknown`: a potential dispatch has uncertain billing;
+  no replay, cancellation or automatic financial release.
+- `cancelled_before_dispatch`: cancellation while no dispatch
+  marker exists; request ID cannot be recreated.
+
+`record_dispatch_risk` uses a PostgreSQL row lock
+`FOR UPDATE NOWAIT` and a state-checked CAS. One independent
+connection cannot create another dispatch marker once the first has
+committed. Failed/ambiguous database writes are never an invitation
+to send the request. `register_synthetic_attempt` refuses reused
+request/attempt IDs even when callers change roles or calendar months.
+
+The separate test `test/openrouter-shadow-attempt-postgres-real.test.mjs`
+runs inside the existing restricted PostgreSQL 16.4 multi-client
+workflow. It verifies real connection-level privilege isolation,
+database lock contention, rollback visibility, reconnect/restart
+persistence within the *ephemeral* CI instance, duplicate/reforged
+identity rejection, invalid repeat dispatches, denial after unknown
+outcomes, and cancellation strictly before a dispatch marker.
+The tested entrypoints always return `may_spend=false` and
+`may_dispatch=false`; the test creates **no actual paid request**.
+
+**Important transactional limit:** a hypothetical external send after
+a successful SQL function response but **before COMMIT** would still
+be unsafe; rollback would remove the marker. In real use, the caller
+would have to prove that the marker committed durably **before egress**,
+handle lost COMMIT acknowledgements as permanently uncertain, and
+never retry an unknown billing outcome. Database-only uniqueness does
+not establish upstream provider idempotency or exactly-once execution.
+A separate protected dispatcher, authenticated invoice reconciliation
+and independent threat review are mandatory. The schema is deliberately
+**not linked** to the Publisher, actual budget coordinator, paid API,
+secret-bearing receiver, Runner or deployment scripts.
+
 ## Production blockers still missing
 
 1. Trusted, authenticated billing ledger covering all relevant keys
