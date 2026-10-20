@@ -45,6 +45,53 @@ target PR+HEAD+model, monthly period, key roles and explicit approval
 duration; adversarial tests must reject stale scope, model mismatch,
 forged identities and new HEADs. This is not `HUMAN_GO` for this LOT.
 
+### OpenRouter management API: official read-only evidence capability survey
+
+The official **OpenRouter API reference** documents **separate**
+management-key-authorized GET operations:
+
+| Read-only source | Officially documented scope | Critical remaining uncertainty |
+| --- | --- | --- |
+| `GET /api/v1/keys` ([reference](https://openrouter.ai/docs/api/api-reference/api-keys/list)) | List keys, optional `include_disabled`, `offset`, and `workspace_id` | Default response covers **default workspace**, not automatically every workspace/account. No authorization for future spend. |
+| Workspace list ([SDK reference](https://openrouter.ai/docs/client-sdks/go/api-reference/workspaces)) | List workspaces with pagination for the authenticated user; management key required | Must prove inventory completeness, account/organization scope and any missing pages. A submitted workspace list is not independently authenticated by itself. |
+| `GET /api/v1/activity` ([reference](https://openrouter.ai/docs/api/api-reference/analytics/get-user-activity)) | Activity grouped by endpoint over the **last 30 completed UTC days**; filter by date or API-key hash | This **does not cover today's in-progress UTC day** and must not be treated as a provider settlement ledger, unknown-request upper bound, or complete historical audit. |
+| `GET /api/v1/credits` ([reference](https://openrouter.ai/docs/api/api-reference/credits/get-credits)) | Total credits purchased and used for the authenticated user | No evidence here of a synchronous pre-POST spend reservation, settled versus delayed charges, or EUR-valued monthly outstanding liability. |
+| Key-limit update ([reference](https://openrouter.ai/docs/api/api-reference/api-keys/update-keys)) | A **PATCH**, not a safe read; key limits are documented in USD | Key limits and a previously observed balance do not replace a cross-key atomic **EUR 15/month** authorization. No PATCH is performed by this LOT. |
+
+**Source versus inference distinction:** the endpoints, authentication
+requirements, workspace-default behavior, 30-completed-day limitation
+and USD key limits above come from the referenced provider documentation.
+The assessment that these are *insufficient on their own* to prove
+safe future EUR spending is a conservative DevFactory security
+requirement, **not** a claim that OpenRouter's API contains no other
+tools, reports, guarantees or enterprise features. A provider-supported,
+audited reservation capability, webhook, official settlements feed,
+multi-account reconciliation or other trusted evidence would require
+separate verification before being relied upon.
+
+The repo's existing hypothetical
+`scripts/openrouter-shadow-readonly-acquisition-plan-offline.mjs`
+limits itself to `/api/v1/keys` and `/api/v1/credits`.
+It currently does **not** model authenticated workspace enumeration
+or `/api/v1/activity`, so its coverage must not be exaggerated.
+Adding a future `GET` must require explicit allowlisting,
+server-enforced GET-only networking, independent credential
+custody, no redirects, fixed host, bounded pages/responses,
+safe event logging and separate human/security authorization.
+**No management API request or real credential use was made here.**
+
+Nine new regression cases in
+`test/openrouter-startup-no-go-contract.test.mjs` pass
+hypothetical management-response-shaped objects (including
+completely plausible matching keys/activity/credits and fake
+sign-off fields) to the **actual** real spend gate and ensure it
+still returns `BLOCKED`. They check inability to infer an
+authenticated monthly EUR budget from default-only coverage,
+completed-day statistics, balances, late billing, currency
+guesses, revocation, owner consent, or a shadow SQL proposal.
+These tests are negative regressions, **not an implemented
+provider reader** or a proof of budget completeness.
+
 ### P1 — authentic provider coverage and conservative EUR liability
 
 Build a **separately authorized READ-ONLY**, fixed-endpoint
