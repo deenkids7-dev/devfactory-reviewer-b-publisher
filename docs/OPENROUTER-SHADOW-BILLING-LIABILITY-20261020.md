@@ -386,6 +386,67 @@ coverage, establish exact provider-side idempotency, or justify
 releasing a held amount. All production financial and human
 approval gates remain unchanged.
 
+## Mock OpenRouter billing evidence coverage and provenance stress test
+
+The standalone `scripts/openrouter-shadow-evidence-coverage-offline.mjs`
+and `test/openrouter-shadow-evidence-coverage-offline.test.mjs`
+run under the existing synthetic admission GitHub Actions workflow.
+They **never** access OpenRouter or private API keys, contact
+providers, authenticate invoices, create SQL reservations or
+authorize financial or Runner operations.
+
+An explicitly `illustrative-only` JSON input enumerates fictitious
+`development` and `reviewer_b` key IDs; key active/retired
+UTC-month periods; simulated request IDs and initiation months; and
+statement-like fixtures labeled `unverified-fixture` with
+SHA256-*format* digests and request IDs. The tool checks strict
+bounded schemas, unique IDs/digests, key lifecycle bounds, a
+maximum 12-calendar-month simulated window, missing key-month
+entries, mismatched key/attempt identities, orphan invoice
+references, monthly duplicates and charges appearing before
+requests. Partial or delayed billing across UTC months does not
+automatically clear an ambiguous request.
+
+The diagnostic reason is one of:
+- `SHADOW_COVERAGE_MISSING_KEY_MONTH_FIXTURES` when a declared
+  key-month fixture is absent;
+- `SHADOW_COVERAGE_UNMATCHED_REQUEST_FIXTURES` when a declared
+  synthetic request has no matching fixture;
+- `SHADOW_COVERAGE_ALL_FIXTURES_STILL_UNVERIFIED` when every
+  **supplied** illustrative key-month and request lines up.
+
+All three outcomes remain **BLOCKED**:
+`verified=false`, `maySpend=false`, `mayReserve=false`,
+`mayRetryAmbiguousRequest=false`, `mayReleaseHold=false`,
+`providerBillingAuthenticated=false`,
+`accountCoverageAuthenticated=false`,
+`keyInventoryAuthenticated=false`,
+`statementProvenanceAuthenticated=false` and
+`fxAuthenticated=false`. Malformed, duplicate, forged-authority
+and out-of-window fixtures fail closed without usable exposure
+summaries. The dedicated synthetic suite currently contains
+**14 negative/positive test cases**. A result that looks internally
+complete is *not* provider-backed reconciliation.
+
+**Fundamental source limitation:** the inventory is supplied by
+the fixture itself. A malicious or incomplete source could omit a
+whole key, expired/rotated key, organization, client, invoice,
+adjustment, refund, pending charge or month. This model **cannot
+discover omitted provider accounts** or independently know that
+a statement is signed, issued by OpenRouter or complete. SHA256
+syntax is not signature verification. A statement naming zero
+requests cannot prove zero financial liability. Even perfectly
+consistent mock monthly statements are not a trustworthy billing
+watermark, nor a valid basis for releasing any hold.
+
+A *future* separately approved implementation would require an
+authenticated provider-side account/organization inventory
+including rotated/retired keys, independent receipt provenance,
+provider request correlation, bounded late invoice delivery,
+immutable audited completeness watermarks, trusted FX and
+durable treatment of missing or ambiguous charges. No such
+production verification or payment authority is implemented here.
+
 ## Production blockers still missing
 
 1. Trusted, authenticated billing ledger covering all relevant keys
