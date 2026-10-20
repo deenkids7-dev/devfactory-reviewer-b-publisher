@@ -78,6 +78,17 @@ test('real PostgreSQL16: durable synthetic risk tombstone, no retry or privilege
     call(client,'mark_outcome_unknown',req,attempt,head);
   const cancel=(client,req,attempt,head=HEAD)=>
     call(client,'cancel_before_dispatch',req,attempt,head);
+  const recover=(client,req,attempt,head=HEAD)=>
+    call(client,'observe_attempt_after_uncertain_commit',req,attempt,head);
+  const blockedRecovery=(result,found,status=null)=>{
+    assert.equal(result.rows.length,1);
+    const row=result.rows[0];
+    assert.equal(row.found,found);
+    assert.equal(row.observed_state,status);
+    assert.equal(row.may_spend,false);
+    assert.equal(row.may_dispatch,false);
+    assert.equal(row.may_retry,false);
+  };
   const state=async req=>(await observer.query(
     'SELECT status,dispatch_marker_at,unknown_at,cancelled_at FROM '+
     'reviewer_b_attempt_shadow.attempts WHERE request_id=$1',[req])).rows[0];
@@ -88,6 +99,12 @@ test('real PostgreSQL16: durable synthetic risk tombstone, no retry or privilege
   blockedResult(await risk(writer,'req:1','wrong-attempt'),false);
   blockedResult(await risk(writer,'req:1','attempt:1','b'.repeat(40)),false);
   assert.equal((await state('req:1')).status,'registered');
+  blockedRecovery(await recover(reconnected,'req:1','attempt:1'),
+    true,'registered');
+  blockedRecovery(await recover(reconnected,'req:1','wrong'),false);
+  blockedRecovery(await recover(reconnected,'missing','attempt:1'),false);
+  blockedRecovery(await recover(reconnected,'req:1','attempt:1',
+    'b'.repeat(40)),false);
 
   // Real physical connection A holds the target row; separate invoker B
   // must fail immediately via NOWAIT. There is no automated retry.
@@ -95,6 +112,9 @@ test('real PostgreSQL16: durable synthetic risk tombstone, no retry or privilege
   await admin.query(
     "SELECT request_id FROM reviewer_b_attempt_shadow.attempts WHERE request_id='req:1' FOR UPDATE");
   await assert.rejects(()=>risk(reconnected,'req:1','attempt:1'),
+    e=>e.code==='55P03');
+  // A read-only recovery observation must also refuse an in-flight write.
+  await assert.rejects(()=>recover(reconnected,'req:1','attempt:1'),
     e=>e.code==='55P03');
   await admin.query('ROLLBACK');
   assert.equal((await state('req:1')).status,'registered');
@@ -137,6 +157,28 @@ test('real PostgreSQL16: durable synthetic risk tombstone, no retry or privilege
   blockedResult(await risk(restart,'req:1','attempt:1'),false);
   blockedResult(await register(restart,'req:1','attempt:4'),false);
 
+  // Deterministically simulate transport discarding a successful COMMIT
+  // response. This is NOT a real network-fault injection or provider call.
+  blockedResult(await register(restart,'req:ack','attempt:ack'),true);
+  await restart.query('BEGIN');
+  blockedResult(await risk(restart,'req:ack','attempt:ack'),true);
+  await assert.rejects(async()=>{
+    await restart.query('COMMIT');
+    throw Object.assign(new Error('synthetic commit reply lost'),
+      {code:'SYNTHETIC_COMMIT_REPLY_LOST'});
+  },e=>e.code==='SYNTHETIC_COMMIT_REPLY_LOST');
+  const recovery=makeClient(Client,'attempt_shadow_ci_login');
+  t.after(async()=>recovery.end().catch(()=>{}));
+  await recovery.connect();
+  blockedRecovery(await recover(recovery,'req:ack','attempt:ack'),
+    true,'dispatch_may_have_occurred');
+  blockedResult(await risk(recovery,'req:ack','attempt:ack'),false);
+  blockedResult(await register(recovery,'req:ack','attempt:other'),false);
+  // A missing row or a REGISTERED row never gives recovery permission to
+  // send. A future paid dispatcher would have to remain blocked.
+  blockedRecovery(await recover(recovery,'req:unseen','attempt:unseen'),
+    false);
+
   // A cancellation is only possible BEFORE any risk marker exists.
   blockedResult(await register(restart,'req:cancel','attempt:cancel',
     'development'),true);
@@ -153,6 +195,13 @@ test('real PostgreSQL16: durable synthetic risk tombstone, no retry or privilege
   assert.equal((await state('req:rollback')).status,'registered');
   await reconnected.query('ROLLBACK');
   assert.equal((await state('req:rollback')).status,'registered');
+  blockedRecovery(await recover(recovery,'req:rollback','attempt:rollback'),
+    true,'registered');
+  // Recovery is an observation, NOT evidence that an external API request
+  // did not occur. The status must never authorize a retry.
+  await recovery.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+  blockedRecovery(await recover(recovery,'req:ack','attempt:ack'),false);
+  await recovery.query('ROLLBACK');
 
   // A stale snapshot cannot be used for admission.
   await reconnected.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
@@ -172,5 +221,5 @@ test('real PostgreSQL16: durable synthetic risk tombstone, no retry or privilege
   assert.equal(grants.rows[0].n,0);
   const count=await observer.query(
     'SELECT count(*)::int AS n FROM reviewer_b_attempt_shadow.attempts');
-  assert.equal(count.rows[0].n,4);
+  assert.equal(count.rows[0].n,5);
 });
