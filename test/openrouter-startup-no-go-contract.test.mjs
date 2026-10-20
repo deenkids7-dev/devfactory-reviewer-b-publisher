@@ -173,7 +173,7 @@ test('financial handoff contract remains explicitly non-authorizing',()=>{
     'devfactory.financial-reservation.v0',
     'AMBIGUOUS_HOLD',
     'NO-GO SPEND / NO-GO MERGE / NO-GO DEPLOY / NO-GO RUNNER',
-    'not an implemented OpenRouter management client',
+    '**not** an implemented OpenRouter management client',
     '15_000_000 micro-EUR',
   ])assert.ok(design.includes(text),text);
   assert.match(design,/COMMIT/);
