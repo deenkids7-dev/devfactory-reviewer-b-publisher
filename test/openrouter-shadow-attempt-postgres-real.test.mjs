@@ -203,6 +203,32 @@ test('real PostgreSQL16: durable synthetic risk tombstone, no retry or privilege
   blockedRecovery(await recover(recovery,'req:ack','attempt:ack'),false);
   await recovery.query('ROLLBACK');
 
+  // A REAL PostgreSQL backend disappears with an UNCOMMITTED synthetic
+  // marker. PostgreSQL rolls that transaction back, but recovery still
+  // cannot infer absence of external egress or authorize a second call.
+  blockedResult(await register(recovery,'req:backend-lost',
+    'attempt:backend-lost','development'),true);
+  const lost=makeClient(Client,'attempt_shadow_ci_login');
+  lost.on('error',()=>{}); // pg emits an expected connection-loss event.
+  t.after(async()=>lost.end().catch(()=>{}));
+  await lost.connect();
+  const doomedPid=lost.processID;
+  assert.ok(Number.isInteger(doomedPid)&&doomedPid>0);
+  await lost.query('BEGIN');
+  blockedResult(await risk(lost,'req:backend-lost',
+    'attempt:backend-lost'),true);
+  assert.equal((await state('req:backend-lost')).status,'registered');
+  // pg_terminate_backend is authorized only in this disposable test DB.
+  const killed=await admin.query(
+    'SELECT pg_terminate_backend($1,5000) AS terminated',[doomedPid]);
+  assert.equal(killed.rows[0].terminated,true);
+  assert.equal((await state('req:backend-lost')).status,'registered');
+  blockedRecovery(await recover(recovery,'req:backend-lost',
+    'attempt:backend-lost'),true,'registered');
+  // A new connection is able to see the row, but the observation is NOT
+  // proof the outside world has seen no request; may_retry is always false.
+  await lost.end().catch(()=>{});
+
   // A stale snapshot cannot be used for admission.
   await reconnected.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
   const stale=await register(reconnected,'req:stale','attempt:stale');
@@ -221,5 +247,5 @@ test('real PostgreSQL16: durable synthetic risk tombstone, no retry or privilege
   assert.equal(grants.rows[0].n,0);
   const count=await observer.query(
     'SELECT count(*)::int AS n FROM reviewer_b_attempt_shadow.attempts');
-  assert.equal(count.rows[0].n,5);
+  assert.equal(count.rows[0].n,6);
 });
