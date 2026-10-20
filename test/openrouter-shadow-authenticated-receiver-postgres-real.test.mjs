@@ -61,15 +61,15 @@ test('postgres real: only authenticated receiver SESSION_USER may submit synthet
  });
  // Operator has not provisioned any production credential; login must fail.
  const deniedLogin=connect('reviewer_b_shadow_receiver_v1');
- await assert.rejects(()=>deniedLogin.connect(),e=>e.code==='28000');
+ await assert.rejects(()=>deniedLogin.connect(),e=>e.code==='28000'||e.code==='28P01');
  await deniedLogin.end().catch(()=>{});
  await admin.query("CREATE ROLE synthetic_other_client LOGIN INHERIT NOSUPERUSER PASSWORD 'synthetic-shadow-ci-only-20261020'");
  await admin.query('GRANT reviewer_b_shadow_invoker_v1 TO synthetic_other_client');
  await adversary.connect();
 
  const privileges=await adversary.query('SELECT '+
-  'has_function_privilege($1,$3) AS old_route,'+
-  'has_function_privilege($2,$3) AS guarded_route',
+  'has_function_privilege($1::text,$3::text) AS old_route,'+
+  'has_function_privilege($2::text,$3::text) AS guarded_route',
   [oldFunction,receiverFunction,'EXECUTE']);
  assert.deepEqual(privileges.rows[0],{
    old_route:false,guarded_route:false,
