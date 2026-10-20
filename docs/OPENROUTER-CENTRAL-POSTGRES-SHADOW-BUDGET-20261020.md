@@ -144,3 +144,40 @@ an authorization to merge or deploy the SQL. Its first GitHub execution
 must be verified on the exact PR HEAD before claiming the multi-client
 tests passed. This synthetic concurrent job does not simulate network
 partitions, a PostgreSQL failover, multiple regions or owner credentials.
+
+## Shadow PostgreSQL privilege boundary: explicit opt-in migration
+
+The accompanying **non-deployed** migration
+`sql/reviewer_b_shadow_protected_roles_v1.sql` prepares two
+**NOLOGIN** roles: an exclusive schema/table/function owner and
+a narrower function-invocation role. It converts only the synthetic
+budget proposal entrypoint to `SECURITY DEFINER` with pinned
+`pg_catalog, reviewer_b_shadow, pg_temp` search path and fully
+qualified ledger tables. All PUBLIC function/schema/table/sequence
+permissions remain revoked. The invoker role is granted only schema
+USAGE and the one function EXECUTE; it is **not granted table writes,
+table reads or owner-role membership**. No login, credential, network
+endpoint or role membership to an existing service is provisioned.
+
+The separate PostgreSQL 16.4 integration test provisions a disposable
+synthetic login with its own test-only password, verifies via
+PostgreSQL that this separate authenticated connection cannot read or
+modify ledger tables or create schema objects, and verifies that only
+the audited function can record an offline proposed upper bound.
+Tests also assert `may_spend=false`, locked schema ownership and
+the original lock/cap anti-replay guarantees.
+
+**Explicit trust limit:** any entity permitted to call this proposal
+function can still submit a deliberately false `PR+HEAD`, comment
+identity, model, and estimated euro amount. There is **NO server-side
+GitHub/App identity attestation, no signed request proof, no
+provider-authenticated bill, no FX validation or spend grant** in this
+migration. The invoker role must not be granted to the live Publisher
+until a separately audited authenticated intermediary exists. An
+operator/superuser can still bypass all ledger guardrails and must
+be protected outside this project. This is NOT spend authorization,
+MERGE_GO, or ZERO_CURSOR_GO.
+
+This role script is deliberately executed in a **throwaway CI
+PostgreSQL container only**; CI does not apply it to a persistent
+database and does not modify the paid workflow.

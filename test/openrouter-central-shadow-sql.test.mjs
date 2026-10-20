@@ -143,3 +143,54 @@ test('PostgreSQL WASM: reject stale Repeatable Read and Serializable contexts',{
  assert.equal(counter.rows[0].proposal_count,0);
  assert.equal(Number(counter.rows[0].reserved_micro_eur),0);
 });
+
+test('PGlite: hardened owner policy rejects pre-existing named and column grants',{
+ skip:pglitePath===''?'PGlite not provisioned in baseline zero-dependency CI':false,
+},async()=>{
+ const {PGlite}=await import(pathToFileURL(path.resolve(pglitePath)).href);
+ const rolesSql=readFileSync(new URL('../sql/reviewer_b_shadow_protected_roles_v1.sql',import.meta.url),'utf8');
+ for(const unsafeGrant of [
+  'GRANT UPDATE ON reviewer_b_shadow.monthly_periods TO shadow_attacker',
+  'GRANT UPDATE(ceiling_micro_eur) ON reviewer_b_shadow.monthly_periods TO shadow_attacker',
+  'GRANT CREATE ON SCHEMA reviewer_b_shadow TO shadow_attacker',
+  'GRANT USAGE ON SEQUENCE reviewer_b_shadow.exposure_proposals_id_seq TO shadow_attacker',
+  'GRANT EXECUTE ON FUNCTION reviewer_b_shadow.propose_exposure(text,integer,text,bigint,text,text,bigint) TO shadow_attacker',
+ ]){
+  const db=new PGlite();
+  try{
+   await db.exec(sql);
+   await db.exec('CREATE ROLE shadow_attacker NOLOGIN');
+   await db.exec(unsafeGrant);
+   await assert.rejects(()=>db.exec(rolesSql),/SHADOW_EXISTING_PRIVILEGES_NOT_TRUSTED/);
+   await db.exec('ROLLBACK');
+   const result=await db.query(
+    "SELECT prosecdef FROM pg_catalog.pg_proc WHERE oid='reviewer_b_shadow.propose_exposure(text,integer,text,bigint,text,text,bigint)'::regprocedure");
+   assert.equal(result.rows[0].prosecdef,false);
+  }finally{await db.close()}
+ }
+});
+test('PGlite: hardened no-login definer accepts synthetic low-priv proposal',{
+ skip:pglitePath===''?'PGlite not provisioned in baseline zero-dependency CI':false,
+},async t=>{
+ const {PGlite}=await import(pathToFileURL(path.resolve(pglitePath)).href);
+ const db=new PGlite();
+ t.after(async()=>db.close());
+ await db.exec(sql);
+ await db.exec(readFileSync(new URL('../sql/reviewer_b_shadow_protected_roles_v1.sql',import.meta.url),'utf8'));
+ const role=await db.query(
+  "SELECT p.prosecdef,p.proowner::regrole::text AS owner,has_function_privilege('reviewer_b_shadow_invoker_v1','reviewer_b_shadow.propose_exposure(text,integer,text,bigint,text,text,bigint)','EXECUTE') AS can_call,has_table_privilege('reviewer_b_shadow_invoker_v1','reviewer_b_shadow.monthly_periods','UPDATE') AS can_update FROM pg_catalog.pg_proc p WHERE p.oid='reviewer_b_shadow.propose_exposure(text,integer,text,bigint,text,text,bigint)'::regprocedure");
+ assert.deepEqual(role.rows[0],{
+  prosecdef:true,owner:'reviewer_b_shadow_owner_v1',
+  can_call:true,can_update:false,
+ });
+ await db.query("INSERT INTO reviewer_b_shadow.monthly_periods(month_utc) VALUES (date_trunc('month',clock_timestamp() AT TIME ZONE 'UTC')::date)");
+ await db.exec('SET ROLE reviewer_b_shadow_invoker_v1');
+ try{
+  const output=await query(db,params(9001,1000000));
+  assert.equal(output.rows[0].recorded,true);
+  assert.equal(output.rows[0].may_spend,false);
+  await assert.rejects(
+   ()=>db.query('SELECT * FROM reviewer_b_shadow.exposure_proposals'),
+   /permission denied/i);
+ }finally{await db.exec('RESET ROLE')}
+});

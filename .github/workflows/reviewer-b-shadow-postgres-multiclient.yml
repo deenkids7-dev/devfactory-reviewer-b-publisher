@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'sql/reviewer_b_shadow_central_pg_v1.sql'
+      - 'sql/reviewer_b_shadow_protected_roles_v1.sql'
       - 'test/openrouter-central-shadow-postgres-real.test.mjs'
       - 'test/openrouter-central-shadow-sql.test.mjs'
       - '.github/workflows/reviewer-b-shadow-postgres-multiclient.yml'
