@@ -245,3 +245,24 @@ test('shadow SQL reserves proposals only and denies spend in function contract',
   assert.doesNotMatch(sql,/may_spend\s*=\s*true/);
   assert.doesNotMatch(spend,/maySpend\s*:\s*true/);
 });
+
+test('post-inference consent refresh is checked before native write',()=>{
+  const start=real.indexOf("stage='CONSENT_REFRESH'");
+  const write=real.indexOf("stage='WRITE'");
+  const native=real.indexOf("stage='NATIVE'");
+  assert.ok(start>=0&&write>start&&native>write);
+  const block=real.slice(start,write);
+  assert.match(block,/const refreshedConsent=await fetchAndVerifyOwnerCloudConsent\(/);
+  assert.match(block,/if\(refreshedConsent\?\.ok!==true\|\|/);
+  assert.match(block,/refreshedConsent\.globalMonthlyBudgetEur!==15\)/);
+  assert.match(block,/deny\('CLOUD_OWNER_CONSENT_REFRESH_REJECTED'\)/);
+  assert.ok(real.indexOf('publishRealSemanticComment({',native)>native);
+});
+test('failed refreshed consent has no fallback publication or spend exception',()=>{
+  assert.match(real,/stage='CONSENT_REFRESH'/);
+  assert.match(real,/CLOUD_OWNER_CONSENT_REFRESH_REJECTED/);
+  assert.match(real,/stage='CONSENT_REFRESH'[\s\S]*?deny\('CLOUD_OWNER_CONSENT_REFRESH_REJECTED'\);[\s\S]*?stage='WRITE'/);
+  assert.match(real,/catch\(error\) \{[\s\S]*?CLOUD_[\s\S]*?_FAILED_CLOSED/);
+  assertBlocked(gate({refreshedConsent:{ok:true,
+    globalMonthlyBudgetEur:15},maySpend:true}));
+});
