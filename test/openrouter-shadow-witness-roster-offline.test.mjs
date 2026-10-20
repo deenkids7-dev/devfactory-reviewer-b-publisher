@@ -222,7 +222,7 @@ test('network, secret, arbitrary actor or payload injection is refused',()=>on((
   ]){
     const s=example();edit(s);
     const r=assess(stringify(s));denial(r);
-    assert.match(r.reason,/FIXTURE_UNTRUSTED|REPLICA_UNTRUSTED/);
+    assert.match(r.reason,/FIXTURE_UNTRUSTED|REPLICA_(CHECKPOINT_)?UNTRUSTED/);
   }
 }));
 test('oversize, malformed, unsorted, excess members and invalid shape denied',()=>on(()=>{
