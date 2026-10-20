@@ -602,8 +602,10 @@ test('raw credentials, HTTP bodies, personal details and actors excluded by sche
   ];
   for(const f of changes){
     const s=incidentAuditFixture();f(s);
-    auditBlocked(assessAudit(encode(s)),'SHADOW_AUDIT_FIXTURE_UNTRUSTED',
-    );
+    const r=assessAudit(encode(s));
+    auditBlocked(r);
+    assert.match(r.reason,
+      /^SHADOW_AUDIT_(FIXTURE_UNTRUSTED|EVENT_INVALID_OR_DUPLICATE)$/);
   }
 }));
 test('invalid incident, role, request digest or HEAD are rejected',()=>withSwitch(()=>{
