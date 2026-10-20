@@ -447,6 +447,92 @@ immutable audited completeness watermarks, trusted FX and
 durable treatment of missing or ambiguous charges. No such
 production verification or payment authority is implemented here.
 
+## Longitudinal synthetic billing evidence continuity
+
+The existing `scripts/openrouter-shadow-evidence-coverage-offline.mjs`
+now also exports `assessSyntheticEvidenceContinuityOffline(previousJson,
+currentJson)`, with tests in its existing isolated suite. Both inputs
+are strictly validated with the original bounded coverage parser before
+comparison. This is **not** a provider API integration and produces no
+network traffic, private credentials or billing authorization.
+
+A later fixture must keep the same start month and not retract the
+observation window; preserve all previously declared key IDs, key
+roles and creation months; preserve earlier request identities and
+unverified states; and preserve all previous statement IDs, digests,
+periods and request references. Discovery of a supposedly preexisting
+key, previously omitted request or previously missing statement is
+flagged explicitly as a retrospective coverage problem. A newly
+documented retirement is allowed only if it does not rewrite the
+already-observed prior window.
+
+An apparently continuous inventory returns
+`SHADOW_CONTINUITY_STABLE_BUT_UNVERIFIED`, **never VERIFIED**.
+Retractions, silent reclassification from `ambiguous` to
+`settled_fixture`, missing records and replaced digests are
+fail-closed. This only detects inconsistencies between *supplied*
+fixtures; two equally fabricated, consistently incomplete snapshots
+still appear internally consistent. No automatic hold release, paid
+retry or spending follows any outcome.
+
+## Official OpenRouter billing evidence — read-only design preflight
+
+The following are **public documented API capabilities**, not data
+actually obtained from the user's OpenRouter account. The future
+production design MUST remain blocked until independent, authenticated
+scope, provenance and financial completeness have been demonstrated.
+
+1. `GET /api/v1/keys` can list API keys using a **management key**.
+   Its documented list has an `offset` pagination parameter and an
+   `include_disabled` option. A `workspace_id` filter exists; the
+   default is only the **default workspace**. A caller MUST account
+   for paging, disabled/rotated keys and every relevant workspace,
+   not silently equate one default-workspace page with a complete
+   account inventory.
+   Source: https://openrouter.ai/docs/api/api-reference/api-keys/list
+2. `GET /api/v1/keys/:hash` returns details about a particular
+   identified key; `GET /api/v1/key` describes only the **current
+   authenticated key**. Neither call alone enumerates all historical
+   keys and workspaces.
+   Sources: https://openrouter.ai/docs/api/api-reference/api-keys/get-key
+   and https://openrouter.ai/docs/api/api-reference/api-keys/get-current-key
+3. `GET /api/v1/credits` exposes `total_credits` and
+   `total_usage` for an authenticated user and requires a management
+   key. These aggregate amounts are **not** a signed, complete
+   per-request invoice, an authenticated EUR exchange rate or a
+   proof of absence of delayed charges.
+   Source: https://openrouter.ai/docs/api/api-reference/credits/get-credits
+4. `GET /api/v1/generation?id=...` provides metadata and cost for
+   a **known generation ID**, including example `request_id` and
+   `total_cost` fields. This does not prove that every failed,
+   timed-out or never-acknowledged request is enumerable. A failed
+   lookup or HTTP timeout must not establish zero liability.
+   Source: https://openrouter.ai/docs/api/api-reference/generations/get-generation
+5. OpenRouter documents spending guardrails at key/member scope,
+   including USD budget limits. The described enforcement is
+   per-key and per-user, **not** a single transactional DevFactory
+   budget across arbitrary independent keys, accounts and roles.
+   Source: https://openrouter.ai/docs/guides/features/guardrails/overview
+
+**Future authenticated reconciliation prerequisites (NOT implemented):**
+identify the authorized provider account and all relevant workspaces;
+obtain an independently approved management identity through a
+protected secret store; enumerate and paginate all entitled key
+inventories including disabled keys; securely bind each known
+request/generation to its issuing key and original immutable HEAD;
+record independently authenticated billing and adjustments with
+time-bounded completeness/late-arrival semantics; never treat
+missing generation records as unbilled; reconcile unsettled holds,
+global USD exposure and trusted USD/EUR FX with conservative rounding;
+separately verify privacy/ZDR and actual provider-side idempotency.
+
+**No public documentation examined here establishes that the
+above combination is already complete, atomic or sufficient
+for a real global spend gate.** The present preparatory work
+does not create a management key, call any private endpoint, view
+actual balances, assume supported paid-request retries, or grant
+HUMAN_GO / MERGE_GO / deployment / Runner privileges.
+
 ## Production blockers still missing
 
 1. Trusted, authenticated billing ledger covering all relevant keys
