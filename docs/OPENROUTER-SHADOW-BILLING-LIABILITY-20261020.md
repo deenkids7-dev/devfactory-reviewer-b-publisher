@@ -1043,6 +1043,79 @@ implemented here**, nor do these tests unblock HUMAN_GO, Reviewer B
 native APPROVED, exact-SHA MERGE_GO, ZERO_CURSOR_GO, paid spending or
 the real Runner.
 
+## Witness roster identity, revocation and delayed replication (synthetic only)
+
+This LOT adds **pure, bounded, offline** `assessSyntheticWitnessRosterOffline`
+in `scripts/openrouter-shadow-witness-roster-offline.mjs`, plus
+`test/openrouter-shadow-witness-roster-offline.test.mjs` (26 tests)
+and a test invocation in the existing synthetic admission workflow.
+The module accepts only a strict illustrative JSON description of
+two consecutive roster versions, two to six declared replica IDs,
+and untrusted observations, all bound to a SHA-format mock HEAD.
+It does not contact GitHub, OpenRouter or any witness, write keys,
+perform signatures, verify actual membership or grant authority.
+
+**Structural comparison only:**
+
+- Roster entries contain only fixture-format member ID, claimed
+  custodian, claimed signer ID, integer key epoch and
+  `active`/`revoked` status. Sorted, bounded member arrays are
+  required. Member addition/removal or a roster-epoch jump is not
+  silently assumed authorized.
+- Duplicate claimed current custodians or signer IDs are treated
+  as collisions. Changes in a custodian, hidden substitution of a
+  signer, signer rotation with a higher epoch but no externally
+  authenticated authority, unexplained key-epoch change, and
+  revoked-to-active rollback remain blocked.
+- Replica identity is **self-declared** and completeness cannot be
+  established from the source itself. A replica may offer a
+  mock SHA-256 digest of the previous or current version, or
+  declare outage/timeout with no digest. Digest construction is
+  deterministic, domain-separated and binds the mock HEAD,
+  roster epoch, sorted members, custodians, signer IDs and status.
+- A prior-epoch replica matching the previous roster signifies
+  **delayed propagation**, with a stronger
+  `SHADOW_ROSTER_REVOCATION_PROPAGATION_DELAY` signal if a key
+  was newly revoked. Contradictory same-epoch digests,
+  rollback/future epochs, missing observations, duplicate IDs,
+  offline replica with an invented successful receipt and shared
+  replica custodians are rejected.
+- Even if all replicas report exactly the current digest and
+  all claimed member/replica owners are distinct, the result
+  remains `SHADOW_ROSTER_MATCHING_FIXTURES_NOT_TRUSTED`.
+  Matching mock digests do not prove actual witness identity,
+  independent custody, authorization, signer revocation or
+  real anti-equivocation.
+
+All results are `BLOCKED` and keep
+`rosterAuthorityAuthenticated:false`,
+`replicaIdentityAuthenticated:false`,
+`independentCustodyVerified:false`,
+`externalSignaturesAuthenticated:false`,
+`revocationReceiptAuthenticated:false`,
+`providerEvidenceAuthenticated:false`,
+`mayReadProviderData:false`, `maySpend:false`,
+`mayReserve:false`, `mayRetryAmbiguousRequest:false`,
+`mayReleaseHold:false`, `mayDeploy:false`,
+`mayStartRunner:false`, `mayCloseIncident:false`
+and `automaticRetryScheduled:false`.
+Tests cover forced approvals and injection of tokens, URLs,
+headers, actor details and unsorted/oversized records.
+
+**Requirements this mock cannot satisfy:** Independently
+authenticated fixed roster membership, protected key custody,
+cryptographic signer rotation and revocation proofs with
+effective dates, secure epoch and trusted-clock provenance,
+signer key compromise handling, external witness independence,
+signed non-equivocating checkpoints, resilient quorum/failure
+policies, and durable replica propagation/monitoring.
+A production resolution of these requirements must be
+separately scoped, reviewed and human-approved. The real
+OpenRouter spend gate is **NOT** consulted by this mock and
+remains independently BLOCKED. An apparent roster match is
+not permission to clear ambiguous liability, pay for tokens,
+merge PR #73 or enable the Runner.
+
 ## Production blockers still missing
 
 1. Trusted, authenticated billing ledger covering all relevant keys
