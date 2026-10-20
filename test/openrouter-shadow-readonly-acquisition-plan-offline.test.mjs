@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {assessSyntheticReadOnlyAcquisitionPlanOffline as assess,
   assessSyntheticProxyBoundaryOffline as probe,
-  assessSyntheticProxyIncidentOffline as classifyIncident}
+  assessSyntheticProxyIncidentOffline as classifyIncident,
+  assessSyntheticIncidentAuditOffline as assessAudit,
+  assessSyntheticIncidentAuditContinuityOffline as compareAudit}
   from '../scripts/openrouter-shadow-readonly-acquisition-plan-offline.mjs';
 
 const plan=()=>({
@@ -513,4 +515,216 @@ test('synthetic incident tool cannot flow into protected paid dispatch paths',()
     assert.doesNotMatch(text,/assessSyntheticProxyIncidentOffline|openrouter-shadow-readonly-acquisition-plan-offline/);
   assert.match(gate,/OPENROUTER_MONTHLY_RESERVATION_AND_IDEMPOTENCY_NOT_IMPLEMENTED/);
   assert.doesNotMatch(model,/OPENROUTER_API_KEY|https?:\/\/|fetch\s*\(/);
+});
+
+const incidentAuditFixture=()=>({
+  schema:'devfactory.shadow-incident-audit.synthetic.v1',
+  scope:'illustrative-only',transport:'no-network',
+  incident_id:'incident:fixture-001',head_sha:'a'.repeat(40),
+  request_digest_sha256:'b'.repeat(64),key_role:'development',
+  events:[
+    {sequence:1,event_id:'event:detected',type:'detected',
+      occurred_utc:'2026-10-20T16:00:00Z',evidence_digest_sha256:null},
+    {sequence:2,event_id:'event:triaged',type:'triaged',
+      occurred_utc:'2026-10-20T16:01:00Z',evidence_digest_sha256:null},
+    {sequence:3,event_id:'event:observed',type:'evidence_noted',
+      occurred_utc:'2026-10-20T16:02:00Z',
+      evidence_digest_sha256:'c'.repeat(64)},
+  ],
+  review:{status:'pending',providerEvidenceAuthenticated:false,
+    independentReviewerApproved:false,humanGoGranted:false,
+    holdReleaseApproved:false},
+});
+const mockReviewRequest=(s)=>{
+  s.events.push({sequence:s.events.length+1,event_id:'event:review',
+    type:'manual_review_requested',
+    occurred_utc:'2026-10-20T16:03:00Z',
+    evidence_digest_sha256:null});
+  return s;
+};
+const auditBlocked=(r,reason)=>{
+  blocked(r,reason);
+  assert.equal(r.syntheticAuditOnly,true);
+  assert.equal(r.simulatedHumanInvestigationRequired,true);
+  assert.equal(r.actualAppendOnlyAuditVerified,false);
+  assert.equal(r.actualHumanApprovalVerified,false);
+  assert.equal(r.actualProviderEvidenceVerified,false);
+  assert.equal(r.incidentMayBeClosed,false);
+  assert.equal(r.automaticIncidentResolution,false);
+  assert.equal(r.automaticRetryScheduled,false);
+};
+test('mock incident audit denies without explicit synthetic switch',()=>{
+  const prev=process.env.REVIEWER_B_SYNTHETIC_SHADOW_ONLY;
+  delete process.env.REVIEWER_B_SYNTHETIC_SHADOW_ONLY;
+  try{auditBlocked(assessAudit(encode(incidentAuditFixture())),
+    'SHADOW_AUDIT_SYNTHETIC_SWITCH_REQUIRED');}
+  finally{
+    if(prev!==undefined)process.env.REVIEWER_B_SYNTHETIC_SHADOW_ONLY=prev;
+  }
+});
+test('strict redacted audit fixture remains unverified and unclosable',()=>withSwitch(()=>{
+  const r=assessAudit(encode(incidentAuditFixture()));
+  auditBlocked(r,'SHADOW_AUDIT_PENDING_HUMAN_REVIEW_NO_AUTHORITY');
+  assert.equal(r.simulatedEventCount,3);
+  assert.equal(r.simulatedUnverifiedEvidenceCount,1);
+  assert.equal(r.simulatedReviewRequested,false);
+}));
+test('mock request for manual review does NOT grant signed human approval',()=>withSwitch(()=>{
+  const r=assessAudit(encode(mockReviewRequest(incidentAuditFixture())));
+  auditBlocked(r,'SHADOW_AUDIT_PENDING_HUMAN_REVIEW_NO_AUTHORITY');
+  assert.equal(r.simulatedEventCount,4);
+  assert.equal(r.simulatedReviewRequested,true);
+}));
+test('forged approvals, hold releases and closed case statuses denied',()=>withSwitch(()=>{
+  for(const change of [
+    s=>{s.review.status='closed';},
+    s=>{s.review.providerEvidenceAuthenticated=true;},
+    s=>{s.review.independentReviewerApproved=true;},
+    s=>{s.review.humanGoGranted=true;},
+    s=>{s.review.holdReleaseApproved=true;},
+  ]){
+    const s=incidentAuditFixture();change(s);
+    auditBlocked(assessAudit(encode(s)),
+      'SHADOW_AUDIT_FORGED_HUMAN_OR_FINANCIAL_APPROVAL');
+  }
+}));
+test('raw credentials, HTTP bodies, personal details and actors excluded by schema',()=>withSwitch(()=>{
+  const changes=[
+    s=>{s.authorization='Bearer TOKEN';},
+    s=>{s.account_email='user@example.invalid';},
+    s=>{s.raw_provider_payload={data:'private'};},
+    s=>{s.events[1].raw_headers={Authorization:'secret'};},
+    s=>{s.events[2].provider_request_id='unverified-raw-id';},
+    s=>{s.events[2].actor='external-alleged-reviewer';},
+    s=>{s.events[2].prompt='private prompt';},
+    s=>{s.review.reviewer_name='unknown-person';},
+    s=>{s.review.comment='unredacted body';},
+  ];
+  for(const f of changes){
+    const s=incidentAuditFixture();f(s);
+    auditBlocked(assessAudit(encode(s)),'SHADOW_AUDIT_FIXTURE_UNTRUSTED',
+    );
+  }
+}));
+test('invalid incident, role, request digest or HEAD are rejected',()=>withSwitch(()=>{
+  for(const change of [
+    s=>{s.incident_id='../../root';},
+    s=>{s.head_sha='f'.repeat(39);},
+    s=>{s.head_sha='Z'.repeat(40);},
+    s=>{s.request_digest_sha256='a'.repeat(63);},
+    s=>{s.key_role='real-payment';},
+  ]){
+    const s=incidentAuditFixture();change(s);
+    auditBlocked(assessAudit(encode(s)),'SHADOW_AUDIT_FIXTURE_UNTRUSTED');
+  }
+}));
+test('sequence gaps, duplicate event IDs and invalid event kinds are denied',()=>withSwitch(()=>{
+  const a=incidentAuditFixture();a.events[1].sequence=4;
+  auditBlocked(assessAudit(encode(a)),
+    'SHADOW_AUDIT_EVENT_INVALID_OR_DUPLICATE');
+  const b=incidentAuditFixture();b.events[1].event_id='event:detected';
+  auditBlocked(assessAudit(encode(b)),
+    'SHADOW_AUDIT_EVENT_INVALID_OR_DUPLICATE');
+  const c=incidentAuditFixture();c.events[2].type='human_approved';
+  auditBlocked(assessAudit(encode(c)),
+    'SHADOW_AUDIT_EVENT_INVALID_OR_DUPLICATE');
+}));
+test('detection must precede triage and review request must be terminal',()=>withSwitch(()=>{
+  const a=incidentAuditFixture();a.events[0].type='triaged';
+  auditBlocked(assessAudit(encode(a)),'SHADOW_AUDIT_INVALID_EVENT_ORDER');
+  const b=incidentAuditFixture();b.events[1].type='evidence_noted';
+  b.events[1].evidence_digest_sha256='d'.repeat(64);
+  auditBlocked(assessAudit(encode(b)),'SHADOW_AUDIT_INVALID_EVENT_ORDER');
+  const c=mockReviewRequest(incidentAuditFixture());
+  c.events[2].type='manual_review_requested';
+  c.events[2].evidence_digest_sha256=null;
+  c.events[3].type='evidence_noted';
+  c.events[3].evidence_digest_sha256='d'.repeat(64);
+  auditBlocked(assessAudit(encode(c)),'SHADOW_AUDIT_INVALID_EVENT_ORDER');
+}));
+test('time reversals, non-UTC times and impossible calendar days fail',()=>withSwitch(()=>{
+  const a=incidentAuditFixture();a.events[2].occurred_utc='2026-10-20T15:00:00Z';
+  auditBlocked(assessAudit(encode(a)),
+    'SHADOW_AUDIT_TIME_REGRESSION_OR_INVALID');
+  for(const value of [
+    '2026-10-20T16:02:00+02:00',
+    '2026-02-30T16:02:00Z','2026-13-20T16:02:00Z',
+    '2026-10-20 16:02:00Z',
+  ]){
+    const b=incidentAuditFixture();b.events[2].occurred_utc=value;
+    auditBlocked(assessAudit(encode(b)),
+      'SHADOW_AUDIT_TIME_REGRESSION_OR_INVALID');
+  }
+}));
+test('evidence events need distinct mock digests, never raw receipts',()=>withSwitch(()=>{
+  const a=incidentAuditFixture();a.events[2].evidence_digest_sha256=null;
+  auditBlocked(assessAudit(encode(a)),
+    'SHADOW_AUDIT_EVIDENCE_DIGEST_UNTRUSTED');
+  const b=incidentAuditFixture();b.events[1].evidence_digest_sha256='e'.repeat(64);
+  auditBlocked(assessAudit(encode(b)),
+    'SHADOW_AUDIT_EVIDENCE_DIGEST_UNTRUSTED');
+  const c=incidentAuditFixture();
+  c.events.push({sequence:4,event_id:'event:duplicate',type:'evidence_noted',
+    occurred_utc:'2026-10-20T16:03:00Z',
+    evidence_digest_sha256:'c'.repeat(64)});
+  auditBlocked(assessAudit(encode(c)),'SHADOW_AUDIT_EVIDENCE_DIGEST_REUSED');
+}));
+test('empty, oversized, malformed and excessively long fixture denied',()=>withSwitch(()=>{
+  const x=incidentAuditFixture();x.events.pop();x.events.pop();
+  const y=incidentAuditFixture();
+  for(let i=4;i<=66;i++)y.events.push({
+    sequence:i,event_id:'event:'+i,type:'evidence_noted',
+    occurred_utc:'2026-10-20T16:04:00Z',
+    evidence_digest_sha256:i.toString(16).padStart(64,'0'),
+  });
+  for(const input of [null,{},'invalid',' '.repeat(16385),
+    encode(x),encode(y),encode({...incidentAuditFixture(),scope:'trusted'})]){
+    auditBlocked(assessAudit(input),'SHADOW_AUDIT_FIXTURE_UNTRUSTED');
+  }
+}));
+test('immutable prefix accepts appended observation without granting rights',()=>withSwitch(()=>{
+  const a=incidentAuditFixture(),b=incidentAuditFixture();
+  b.events.push({sequence:4,event_id:'event:extra',type:'evidence_noted',
+    occurred_utc:'2026-10-20T16:03:00Z',
+    evidence_digest_sha256:'d'.repeat(64)});
+  const r=compareAudit(encode(a),encode(b));
+  auditBlocked(r,'SHADOW_AUDIT_CONTINUITY_UNVERIFIED_NO_RELEASE');
+  assert.equal(r.simulatedPreviousEventCount,3);
+  assert.equal(r.simulatedCurrentEventCount,4);
+  assert.equal(r.simulatedAppendCount,1);
+}));
+test('retracted or edited prior event cannot silently rewrite mock audit',()=>withSwitch(()=>{
+  const original=mockReviewRequest(incidentAuditFixture());
+  const shrink=incidentAuditFixture();
+  auditBlocked(compareAudit(encode(original),encode(shrink)),
+    'SHADOW_AUDIT_EVENT_RETRACTED');
+  const modified=mockReviewRequest(incidentAuditFixture());
+  modified.events[2].evidence_digest_sha256='e'.repeat(64);
+  auditBlocked(compareAudit(encode(original),encode(modified)),
+    'SHADOW_AUDIT_EVENT_REWRITTEN');
+}));
+test('changed incident identity, future post-review append and forged state denied',()=>withSwitch(()=>{
+  const a=incidentAuditFixture(),b=incidentAuditFixture();
+  b.head_sha='f'.repeat(40);
+  auditBlocked(compareAudit(encode(a),encode(b)),
+    'SHADOW_AUDIT_INCIDENT_IDENTITY_CHANGED');
+  const c=mockReviewRequest(incidentAuditFixture());
+  const d=mockReviewRequest(incidentAuditFixture());
+  d.events.push({sequence:5,event_id:'event:late',type:'evidence_noted',
+    occurred_utc:'2026-10-20T16:04:00Z',
+    evidence_digest_sha256:'e'.repeat(64)});
+  auditBlocked(compareAudit(encode(c),encode(d)),
+    'SHADOW_AUDIT_CONTINUITY_INPUT_UNTRUSTED');
+  const e=incidentAuditFixture();e.review.status='approved';
+  auditBlocked(compareAudit(encode(a),encode(e)),
+    'SHADOW_AUDIT_CONTINUITY_INPUT_UNTRUSTED');
+}));
+test('audit proposal cannot be imported into paid Publisher or spend gate',()=>{
+  const paid=readFileSync(new URL(
+    '../scripts/protected-real-openrouter-review.mjs',import.meta.url),'utf8');
+  const gate=readFileSync(new URL(
+    '../scripts/openrouter-only-spend-gate.mjs',import.meta.url),'utf8');
+  for(const code of [paid,gate])
+    assert.doesNotMatch(code,/assessSyntheticIncidentAuditOffline|assessSyntheticIncidentAuditContinuityOffline|openrouter-shadow-readonly-acquisition-plan-offline/);
+  assert.match(gate,/OPENROUTER_MONTHLY_RESERVATION_AND_IDEMPOTENCY_NOT_IMPLEMENTED/);
 });
