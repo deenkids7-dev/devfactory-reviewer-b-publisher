@@ -986,6 +986,63 @@ witness's availability or apparent health. Neither a perfectly
 matching witness fixture nor an approved source-code review
 alone can release exposure, enable spending or start the Runner.
 
+## Offline multi-witness cross-check — quorum spoofing and disagreement
+
+`scripts/openrouter-shadow-audit-multiwitness-offline.mjs`
+now exposes `assessSyntheticMultiWitnessOffline` for
+strictly controlled **mock-only** cross-checks of a redacted local
+incident SHA-256 chain against two to six *self-declared* witness
+identifiers and mock observations. Its own 19-case adversarial test
+suite is run by the existing synthetic GitHub workflow at exact PR HEAD.
+No provider data is fetched; there are no actual independent witnesses,
+cryptographic signatures, external logs, servers, payments or privileged
+operations.
+
+The schema demands an illustrative-only, no-network scope; distinct
+declared mock witness IDs; each untrusted observation's fixed
+allowlisted fields (claimed custodian, fake origin, availability,
+and, when available, checkpoint sequence, SHA-256-format root, signer
+ID, key epoch, key status, signature status `not-verified`).
+The mock human-review fields explicitly deny authenticated signatures,
+custody and approvals. The strict existing incident hash-chain fixture
+must validate before any comparison.
+
+| Simulated observation | Conservative result |
+| --- | --- |
+| Two witnesses give different roots at the same event height | `SHADOW_MULTI_WITNESS_SAME_HEIGHT_FORK` |
+| A witness's checkpoint differs from the local journal at its own height | `SHADOW_MULTI_WITNESS_LOCAL_ROOT_DIVERGENCE` |
+| Claimed witnesses share a declared custodian | `SHADOW_MULTI_WITNESS_CUSTODY_COLLISION` |
+| A member is omitted from the declared mock set or reports outage/timeout | `SHADOW_MULTI_WITNESS_DECLARED_MEMBER_MISSING` / `SHADOW_MULTI_WITNESS_OUTAGE_NO_QUORUM` |
+| Invalid/synthetic signer status, unverified rotation | `SHADOW_MULTI_WITNESS_REVOKED_SIGNER` / `SHADOW_MULTI_WITNESS_ROTATION_UNAUTHENTICATED` |
+| An event height is beyond the local log, or a checkpoint is stale | `SHADOW_MULTI_WITNESS_FUTURE_CHECKPOINT` / `SHADOW_MULTI_WITNESS_STALE_CHECKPOINT` |
+| All invented witness records and roots match | `SHADOW_MULTI_WITNESS_MATCH_ONLY_NO_AUTHORITY` |
+
+**Critical negative test:** an attacker may forge the original incident,
+fully recompute its SHA-256 chain and supply matching fictitious roots
+from all three invented witnesses. Such an internally consistent set
+still returns `BLOCKED`, with
+`independentWitnessesAuthenticated:false`,
+`independentCustodyVerified:false`,
+`externalSignaturesAuthenticated:false`,
+`checkpointQuorumAuthenticated:false`,
+`providerEvidenceAuthenticated:false`, `maySpend:false`,
+`mayReserve:false`, `mayRetryAmbiguousRequest:false`,
+`mayReleaseHold:false`, `mayDeploy:false`,
+`mayStartRunner:false`, `mayCloseIncident:false`.
+Distinct *claimed* custodians are NOT proof of genuine separation
+or non-equivocation, and matching SHA-256 values are not receipts.
+
+Actual independent cross-witness assurance would require an externally
+authenticated and fixed witness membership roster, independently
+controlled signing and storage, authenticated key epochs and revocation,
+signed checkpoints bound to a trusted time and incident identity, a
+non-equivocation/consistency protocol and a provable quorum model.
+A real out-of-domain incident alert and controlled remediation process
+would also be separately approved and verified. **None of these is
+implemented here**, nor do these tests unblock HUMAN_GO, Reviewer B
+native APPROVED, exact-SHA MERGE_GO, ZERO_CURSOR_GO, paid spending or
+the real Runner.
+
 ## Production blockers still missing
 
 1. Trusted, authenticated billing ledger covering all relevant keys
