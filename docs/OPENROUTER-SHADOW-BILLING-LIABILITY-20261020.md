@@ -139,6 +139,53 @@ provider credit expiry and post-timeout settlement remain unresolved.
 A trusted billing evidence source, durable idempotency and a separately
 approved reconciliation protocol are mandatory before real spending.
 
+
+## Offline attempt-lifecycle and no-retry contract
+
+The preparatory module `scripts/openrouter-shadow-attempt-lifecycle-offline.mjs`
+and its dedicated test file model a **hypothetical event sequence only**.
+They are run in the isolated synthetic GitHub Actions workflow. Inputs
+are bounded serialized JSON fixtures with strictly sequential event
+numbers and exact role, request, attempted dispatch, HEAD and UTC-month
+identity. This is neither a service nor a trusted durable event store.
+
+For every fixture request, the permitted illustrative phases are:
+
+1. `reserved` — a local *simulation* of a planned attempt.
+2. `dispatch_recorded` — **one hypothetical** dispatch-intent event;
+   this code does **not** send any request.
+3. `outcome_unknown` after dispatch — preserve uncertainty, do not
+   re-dispatch or refund any hold.
+4. `settled_fixture` only after recorded dispatch, possibly from unknown
+   status, but with no authentic provider receipt.
+5. `cancelled_before_dispatch` only from reserved; cancellation after a
+   possible dispatch is forbidden.
+
+Second dispatches (including after simulated settlement), duplicate
+request or attempt IDs across roles, resurrecting a cancellation, stale
+event sequence, forged HEAD/role/attempt identifiers and a backwards
+UTC-month transition are all denied. Every result is **BLOCKED** with
+`maySpend:false`, `mayReserve:false`, `verified:false`,
+`mayRetryAmbiguousRequest:false`, and
+`durableIdempotencyVerified:false`.
+
+**Critical limit:** strict parsing and replay of caller-supplied fixtures
+does not establish authentic persistence, atomicity, crash durability or
+cross-machine serialization. A malicious caller can fabricate or omit
+the entire event history. A future authorized production component
+would require a centrally provisioned durable database with a UNIQUE
+provider-account/request-id pair, write-before-send intent, atomic
+CAS transitions, protected credentials, reliable acknowledgement
+provenance and explicit recovery for ambiguous attempts. It must be
+impossible for two dispatchers to act on different stale copies.
+Even a unique database request ID cannot guarantee provider-side
+idempotency unless the provider documents and enforces compatible
+semantics; do not automatically retry requests whose charge is unknown.
+
+This PR deliberately neither deploys this coordinator nor calls a
+provider API, and does not lift any financial, deployment, merge or
+Runner gate.
+
 ## Production blockers still missing
 
 1. Trusted, authenticated billing ledger covering all relevant keys
