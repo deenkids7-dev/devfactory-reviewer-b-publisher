@@ -105,3 +105,100 @@ export function assessSyntheticReadOnlyAcquisitionPlanOffline(json){
     simulatedAccountEnumerationVerified:false,
   });
 }
+
+/**
+ * Offline threat-model fixture for the FUTURE token-isolating GET proxy.
+ * An attacker controls the entire JSON. No symbolic field enforces
+ * real DNS, TLS, permissions, egress or log redaction; those will need
+ * independent production integration and proof.
+ */
+const PROXY_ROOT=['schema','scope','transport','credential','request',
+  'upstream','response','audit'];
+const PROXY_CREDENTIAL=['tokenPresent','secretStoreConnected'];
+const PROXY_UPSTREAM=['target','tls','redirects','forwardedHeaders',
+  'dnsVerification'];
+const PROXY_KEYS=['kind','method','workspace','offset','include_disabled'];
+const PROXY_CREDITS=['kind','method'];
+const PROXY_RESPONSE=['source','httpStatus','contentType','sizeBytes',
+  'redirected','unexpectedSecrets'];
+const PROXY_AUDIT=['rawAuthorization','rawHeaders','rawResponse',
+  'unredactedProviderIds','automaticReplay'];
+const MAX_PROXY_BYTES=8192;
+const MAX_RESPONSE_BYTES=65536;
+
+/**
+ * Pure refusal-oriented model. A "matching" fixture still grants ZERO
+ * network, secret, read, dispatch or financial authority.
+ */
+export function assessSyntheticProxyBoundaryOffline(json){
+  if(process.env.REVIEWER_B_SYNTHETIC_SHADOW_ONLY!=='1')
+    return denial('SHADOW_PROXY_SYNTHETIC_SWITCH_REQUIRED');
+  if(typeof json!=='string'||Buffer.byteLength(json,'utf8')>MAX_PROXY_BYTES)
+    return denial('SHADOW_PROXY_ENVELOPE_UNTRUSTED');
+  let s;
+  try{s=JSON.parse(json)}catch{
+    return denial('SHADOW_PROXY_ENVELOPE_UNTRUSTED');
+  }
+  if(!object(s,PROXY_ROOT)||
+     s.schema!=='devfactory.shadow-get-boundary.synthetic.v1'||
+     s.scope!=='illustrative-only'||s.transport!=='no-network'||
+     !object(s.credential,PROXY_CREDENTIAL)||
+     s.credential.tokenPresent!==false||
+     s.credential.secretStoreConnected!==false)
+    return denial('SHADOW_PROXY_ENVELOPE_UNTRUSTED');
+
+  const r=s.request;
+  if(!r||typeof r!=='object'||Array.isArray(r))
+    return denial('SHADOW_PROXY_REQUEST_UNTRUSTED');
+  if(r.kind==='keys'){
+    if(!object(r,PROXY_KEYS)||r.method!=='GET'||
+       typeof r.workspace!=='string'||!WORKSPACE.test(r.workspace)||
+       !Number.isSafeInteger(r.offset)||r.offset<0||
+       r.offset>MAX_OFFSET||r.include_disabled!==true)
+      return denial('SHADOW_PROXY_READ_OPERATION_FORBIDDEN');
+  }else if(r.kind==='credits'){
+    if(!object(r,PROXY_CREDITS)||r.method!=='GET')
+      return denial('SHADOW_PROXY_READ_OPERATION_FORBIDDEN');
+  }else return denial('SHADOW_PROXY_READ_OPERATION_FORBIDDEN');
+
+  // No caller-controlled host, path, URI, port, redirects or HTTP headers.
+  // These are symbolic requirements, NOT runtime enforcement claims.
+  const u=s.upstream;
+  if(!object(u,PROXY_UPSTREAM)||
+     u.target!=='symbolic-fixed-openrouter-api'||
+     u.tls!=='required-unverified'||
+     u.redirects!=='deny'||
+     u.forwardedHeaders!=='none'||
+     u.dnsVerification!=='not-performed')
+    return denial('SHADOW_PROXY_UPSTREAM_POLICY_UNTRUSTED');
+
+  const audit=s.audit;
+  if(!object(audit,PROXY_AUDIT)||
+     PROXY_AUDIT.some(k=>audit[k]!==false))
+    return denial('SHADOW_PROXY_AUDIT_OR_REPLAY_UNSAFE');
+
+  const reply=s.response;
+  if(!object(reply,PROXY_RESPONSE)||reply.source!=='unverified-fixture'||
+     !Number.isSafeInteger(reply.httpStatus)||
+     !Number.isSafeInteger(reply.sizeBytes)||reply.sizeBytes<0||
+     reply.sizeBytes>MAX_RESPONSE_BYTES||
+     typeof reply.redirected!=='boolean'||
+     typeof reply.unexpectedSecrets!=='boolean')
+    return denial('SHADOW_PROXY_RESPONSE_UNTRUSTED');
+  if(reply.redirected||reply.httpStatus>=300&&reply.httpStatus<400)
+    return denial('SHADOW_PROXY_REDIRECT_FORBIDDEN');
+  if(reply.unexpectedSecrets)
+    return denial('SHADOW_PROXY_RESPONSE_SECRET_MARKER');
+  // HTTP failures/timeout/ratelimits are NOT empty billing or free calls.
+  if(reply.httpStatus!==200)
+    return denial('SHADOW_PROXY_UPSTREAM_OUTCOME_UNKNOWN_NO_RETRY');
+  if(reply.contentType!=='application/json'||reply.sizeBytes===0)
+    return denial('SHADOW_PROXY_RESPONSE_TYPE_OR_SIZE_INVALID');
+
+  return denial('SHADOW_PROXY_FIXTURE_POLICY_MATCH_NOT_AUTHORITY',{
+    simulatedRequestKind:r.kind,
+    simulatedResponseBytes:reply.sizeBytes,
+    proxyDeployed:false,actualEgressRestricted:false,
+    secretRedactionVerified:false,providerResponseAuthenticated:false,
+  });
+}
