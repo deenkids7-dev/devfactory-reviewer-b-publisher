@@ -297,3 +297,156 @@ export function assessSyntheticProxyIncidentOffline(json){
   // no trusted proof of source, invoice completeness, charge or key scope.
   return incident('SHADOW_INCIDENT_200_UNVERIFIED_NOT_SETTLED','provenance');
 }
+
+/**
+ * NON-PERSISTENT, SYNTHETIC audit-proposal validator. This does not create
+ * an incident journal or verify a cryptographic chain, an actor or a human
+ * approval. No provider credentials, network, protected runtime or storage.
+ */
+const AUDIT_ROOT=['schema','scope','transport','incident_id','head_sha',
+  'request_digest_sha256','key_role','events','review'];
+const AUDIT_EVENT=['sequence','event_id','type','occurred_utc',
+  'evidence_digest_sha256'];
+const AUDIT_REVIEW=['status','providerEvidenceAuthenticated',
+  'independentReviewerApproved','humanGoGranted',
+  'holdReleaseApproved'];
+const AUDIT_KINDS=new Set(['detected','triaged','evidence_noted',
+  'manual_review_requested']);
+const AUDIT_ID=/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$/;
+const AUDIT_SHA=/^[a-f0-9]{40}$/;
+const AUDIT_DIGEST=/^[a-f0-9]{64}$/;
+const AUDIT_UTC=/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])T([01]\d|2[0-3]):[0-5]\d:[0-5]\dZ$/;
+const AUDIT_MAX_BYTES=16384,AUDIT_MAX_EVENTS=64;
+const utcTime=s=>{
+  if(typeof s!=='string'||!AUDIT_UTC.test(s))return null;
+  const timestamp=Date.parse(s);
+  return Number.isFinite(timestamp)&&
+    new Date(timestamp).toISOString()===s.replace('Z','.000Z')
+    ?timestamp:null;
+};
+const auditDeny=(reason,counts={})=>denial(reason,{
+  syntheticAuditOnly:true,simulatedHumanInvestigationRequired:true,
+  actualAppendOnlyAuditVerified:false,actualHumanApprovalVerified:false,
+  actualProviderEvidenceVerified:false,incidentMayBeClosed:false,
+  automaticIncidentResolution:false,automaticRetryScheduled:false,
+  ...counts,
+});
+
+/**
+ * Strictly sanitized untrusted fixture:
+ * - fixed incident/HEAD/request-digest identity;
+ * - contiguous chronological monotonic events, unique IDs/digests;
+ * - detected -> triaged -> optional evidence -> review-request;
+ * - pending only; forged human approvals cannot transition any gate.
+ * This is an *input validation example*, NOT secure append-only storage.
+ */
+export function assessSyntheticIncidentAuditOffline(json){
+  if(process.env.REVIEWER_B_SYNTHETIC_SHADOW_ONLY!=='1')
+    return auditDeny('SHADOW_AUDIT_SYNTHETIC_SWITCH_REQUIRED');
+  if(typeof json!=='string'||Buffer.byteLength(json,'utf8')>AUDIT_MAX_BYTES)
+    return auditDeny('SHADOW_AUDIT_FIXTURE_UNTRUSTED');
+  let a;
+  try{a=JSON.parse(json)}catch{
+    return auditDeny('SHADOW_AUDIT_FIXTURE_UNTRUSTED');
+  }
+  if(!object(a,AUDIT_ROOT)||
+     a.schema!=='devfactory.shadow-incident-audit.synthetic.v1'||
+     a.scope!=='illustrative-only'||a.transport!=='no-network'||
+     typeof a.incident_id!=='string'||!AUDIT_ID.test(a.incident_id)||
+     typeof a.head_sha!=='string'||!AUDIT_SHA.test(a.head_sha)||
+     typeof a.request_digest_sha256!=='string'||
+     !AUDIT_DIGEST.test(a.request_digest_sha256)||
+     !['development','reviewer_b'].includes(a.key_role)||
+     !Array.isArray(a.events)||a.events.length<2||
+     a.events.length>AUDIT_MAX_EVENTS||
+     !object(a.review,AUDIT_REVIEW))
+    return auditDeny('SHADOW_AUDIT_FIXTURE_UNTRUSTED');
+  if(a.review.status!=='pending'||
+     a.review.providerEvidenceAuthenticated!==false||
+     a.review.independentReviewerApproved!==false||
+     a.review.humanGoGranted!==false||
+     a.review.holdReleaseApproved!==false)
+    return auditDeny('SHADOW_AUDIT_FORGED_HUMAN_OR_FINANCIAL_APPROVAL');
+
+  let previousTime=-1,triaged=false,reviewRequested=false,evidenceCount=0;
+  const ids=new Set(),digests=new Set();
+  for(let i=0;i<a.events.length;i++){
+    const e=a.events[i];
+    if(!object(e,AUDIT_EVENT)||
+       !Number.isSafeInteger(e.sequence)||e.sequence!==i+1||
+       typeof e.event_id!=='string'||!AUDIT_ID.test(e.event_id)||
+       ids.has(e.event_id)||!AUDIT_KINDS.has(e.type)||
+       !(e.evidence_digest_sha256===null||
+         (typeof e.evidence_digest_sha256==='string'&&
+          AUDIT_DIGEST.test(e.evidence_digest_sha256))))
+      return auditDeny('SHADOW_AUDIT_EVENT_INVALID_OR_DUPLICATE');
+    const t=utcTime(e.occurred_utc);
+    if(t===null||t<previousTime)
+      return auditDeny('SHADOW_AUDIT_TIME_REGRESSION_OR_INVALID');
+    previousTime=t;ids.add(e.event_id);
+    if(i===0){
+      if(e.type!=='detected')
+        return auditDeny('SHADOW_AUDIT_INVALID_EVENT_ORDER');
+    }else if(e.type==='detected'||reviewRequested)
+      return auditDeny('SHADOW_AUDIT_INVALID_EVENT_ORDER');
+    if(e.type==='triaged'){
+      if(triaged)return auditDeny('SHADOW_AUDIT_INVALID_EVENT_ORDER');
+      triaged=true;
+    }else if(e.type==='evidence_noted'){
+      if(!triaged)return auditDeny('SHADOW_AUDIT_INVALID_EVENT_ORDER');
+      evidenceCount++;
+    }else if(e.type==='manual_review_requested'){
+      if(!triaged)return auditDeny('SHADOW_AUDIT_INVALID_EVENT_ORDER');
+      reviewRequested=true;
+    }
+    const hasDigest=e.evidence_digest_sha256!==null;
+    if(hasDigest!==(e.type==='evidence_noted'))
+      return auditDeny('SHADOW_AUDIT_EVIDENCE_DIGEST_UNTRUSTED');
+    if(hasDigest){
+      if(digests.has(e.evidence_digest_sha256))
+        return auditDeny('SHADOW_AUDIT_EVIDENCE_DIGEST_REUSED');
+      digests.add(e.evidence_digest_sha256);
+    }
+  }
+  if(!triaged)return auditDeny('SHADOW_AUDIT_TRIAGE_MISSING');
+  return auditDeny('SHADOW_AUDIT_PENDING_HUMAN_REVIEW_NO_AUTHORITY',{
+    simulatedEventCount:a.events.length,
+    simulatedUnverifiedEvidenceCount:evidenceCount,
+    simulatedReviewRequested:reviewRequested,
+  });
+}
+
+/**
+ * Test continuity across TWO user-supplied mock snapshots.
+ * Compare immutable event prefixes; a match never authenticates journal
+ * origin or grants permission to close/retry/release a quarantined charge.
+ */
+export function assessSyntheticIncidentAuditContinuityOffline(
+  previousJson,currentJson){
+  const before=assessSyntheticIncidentAuditOffline(previousJson);
+  const after=assessSyntheticIncidentAuditOffline(currentJson);
+  if(before.reason!=='SHADOW_AUDIT_PENDING_HUMAN_REVIEW_NO_AUTHORITY'||
+     after.reason!=='SHADOW_AUDIT_PENDING_HUMAN_REVIEW_NO_AUTHORITY')
+    return auditDeny('SHADOW_AUDIT_CONTINUITY_INPUT_UNTRUSTED');
+  const a=JSON.parse(previousJson),b=JSON.parse(currentJson);
+  if(a.incident_id!==b.incident_id||a.head_sha!==b.head_sha||
+     a.request_digest_sha256!==b.request_digest_sha256||
+     a.key_role!==b.key_role)
+    return auditDeny('SHADOW_AUDIT_INCIDENT_IDENTITY_CHANGED');
+  if(b.events.length<a.events.length)
+    return auditDeny('SHADOW_AUDIT_EVENT_RETRACTED');
+  for(let i=0;i<a.events.length;i++){
+    const old=a.events[i],next=b.events[i];
+    if(AUDIT_EVENT.some(k=>old[k]!==next[k]))
+      return auditDeny('SHADOW_AUDIT_EVENT_REWRITTEN');
+  }
+  // A complete human-review request is terminal for THIS mock design.
+  if(a.events.some(e=>e.type==='manual_review_requested')&&
+     b.events.length>a.events.length)
+    return auditDeny('SHADOW_AUDIT_APPEND_AFTER_REVIEW_REQUEST_FORBIDDEN');
+  return auditDeny('SHADOW_AUDIT_CONTINUITY_UNVERIFIED_NO_RELEASE',{
+    simulatedPreviousEventCount:a.events.length,
+    simulatedCurrentEventCount:b.events.length,
+    simulatedAppendCount:b.events.length-a.events.length,
+  });
+}
