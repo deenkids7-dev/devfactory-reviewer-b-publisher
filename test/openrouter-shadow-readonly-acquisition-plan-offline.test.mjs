@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {assessSyntheticReadOnlyAcquisitionPlanOffline as assess,
-  assessSyntheticProxyBoundaryOffline as probe}
+  assessSyntheticProxyBoundaryOffline as probe,
+  assessSyntheticProxyIncidentOffline as classifyIncident}
   from '../scripts/openrouter-shadow-readonly-acquisition-plan-offline.mjs';
 
 const plan=()=>({
@@ -361,4 +362,155 @@ test('protected paid Publisher still cannot import synthetic proxy model',()=>{
   for(const s of [paid,gate])
     assert.doesNotMatch(s,/assessSyntheticProxyBoundaryOffline|shadow-readonly-acquisition-plan-offline/);
   assert.match(gate,/OPENROUTER_MONTHLY_RESERVATION_AND_IDEMPOTENCY_NOT_IMPLEMENTED/);
+});
+
+const incidentFixture=()=>({
+  schema:'devfactory.shadow-get-incident.synthetic.v1',
+  scope:'illustrative-only',transport:'no-network',
+  operation:'keys',event:'response',httpStatus:200,
+  bodyBytes:256,contentType:'application/json',responseComplete:true,
+  source:'unverified-fixture',hasSecretMarker:false,retryAfterSeconds:null,
+  audit:{rawAuthorization:false,rawBody:false,
+    unredactedIds:false,autoRetry:false,
+    autoReleaseHold:false,autoResumeRunner:false},
+});
+const incidentBlocked=(r,reason,category)=>{
+  blocked(r,reason);
+  assert.equal(r.syntheticIncidentOnly,true);
+  assert.equal(r.simulatedManualInvestigationRequired,true);
+  assert.equal(r.automaticRetryScheduled,false);
+  assert.equal(r.simulatedBillIsSettled,false);
+  assert.equal(r.simulatedProviderEvidenceVerified,false);
+  if(category)assert.equal(r.simulatedIncidentClass,category);
+};
+test('incident classifier requires the explicit OFFLINE switch',()=>{
+  const previous=process.env.REVIEWER_B_SYNTHETIC_SHADOW_ONLY;
+  delete process.env.REVIEWER_B_SYNTHETIC_SHADOW_ONLY;
+  try{incidentBlocked(classifyIncident(encode(incidentFixture())),
+    'SHADOW_INCIDENT_SYNTHETIC_SWITCH_REQUIRED','invalid');}
+  finally{
+    if(previous!==undefined)
+      process.env.REVIEWER_B_SYNTHETIC_SHADOW_ONLY=previous;
+  }
+});
+test('HTTP 200 fixture is never authenticated billing or settled',()=>withSwitch(()=>{
+  incidentBlocked(classifyIncident(encode(incidentFixture())),
+    'SHADOW_INCIDENT_200_UNVERIFIED_NOT_SETTLED','provenance');
+}));
+test('401 and 403 require manual identity review, not credential escalation',()=>withSwitch(()=>{
+  for(const [status,reason] of [
+    [401,'SHADOW_INCIDENT_AUTHENTICATION_REVIEW'],
+    [403,'SHADOW_INCIDENT_AUTHORIZATION_REVIEW'],
+  ]){
+    const s=incidentFixture();s.httpStatus=status;
+    incidentBlocked(classifyIncident(encode(s)),reason,'identity');
+  }
+}));
+test('429 retry-after value never schedules any automatic GET or paid retry',()=>withSwitch(()=>{
+  for(const secs of [null,0,1,60,86400]){
+    const s=incidentFixture();s.httpStatus=429;s.retryAfterSeconds=secs;
+    incidentBlocked(classifyIncident(encode(s)),
+      'SHADOW_INCIDENT_RATE_LIMIT_MANUAL_REVIEW','rate-limit');
+  }
+}));
+test('5xx, 404, 408, 409, 204 are not proof of absent bills',()=>withSwitch(()=>{
+  for(const sCode of [500,502,503,599,404,408,409,204]){
+    const s=incidentFixture();s.httpStatus=sCode;
+    const reason=sCode>=500?'SHADOW_INCIDENT_PROVIDER_FAILURE_UNKNOWN':
+      'SHADOW_INCIDENT_OTHER_STATUS_UNRESOLVED';
+    incidentBlocked(classifyIncident(encode(s)),reason,'provider');
+  }
+}));
+test('timeout, connection reset, DNS and TLS failure remain unknown',()=>withSwitch(()=>{
+  for(const event of ['timeout','connection_reset','dns_failure',
+    'tls_failure']){
+    const s=incidentFixture();s.event=event;s.httpStatus=0;
+    incidentBlocked(classifyIncident(encode(s)),
+      'SHADOW_INCIDENT_NETWORK_UNKNOWN_NO_RETRY','network');
+  }
+}));
+test('302, 307, 308 redirects are never followed',()=>withSwitch(()=>{
+  for(const status of [301,302,307,308]){
+    const s=incidentFixture();s.event='redirect';s.httpStatus=status;
+    incidentBlocked(classifyIncident(encode(s)),
+      'SHADOW_INCIDENT_REDIRECT_FORBIDDEN','network');
+  }
+}));
+test('truncated, invalid JSON and incomplete 200 are not complete bills',()=>withSwitch(()=>{
+  const variants=[
+    s=>{s.event='truncated';s.httpStatus=0;},
+    s=>{s.event='invalid_json';s.httpStatus=0;},
+    s=>{s.responseComplete=false;},
+  ];
+  for(const modify of variants){
+    const s=incidentFixture();modify(s);
+    incidentBlocked(classifyIncident(encode(s)),
+      'SHADOW_INCIDENT_RESPONSE_INCOMPLETE','provenance');
+  }
+}));
+test('HTTP 200 wrong MIME or zero body cannot establish provenance',()=>withSwitch(()=>{
+  for(const v of [
+    s=>{s.contentType='other';},
+    s=>{s.contentType='none';},
+    s=>{s.bodyBytes=0;},
+  ]){
+    const s=incidentFixture();v(s);
+    incidentBlocked(classifyIncident(encode(s)),
+      'SHADOW_INCIDENT_UNTRUSTED_200_PAYLOAD','provenance');
+  }
+}));
+test('unexpected secret marker escalates mock incident without logging it',()=>withSwitch(()=>{
+  const s=incidentFixture();s.hasSecretMarker=true;
+  incidentBlocked(classifyIncident(encode(s)),
+    'SHADOW_INCIDENT_SECRET_EXPOSURE_REVIEW','security');
+}));
+test('unredacted logs, auto retries, hold release and runner wakeup forbidden',()=>withSwitch(()=>{
+  for(const key of Object.keys(incidentFixture().audit)){
+    const s=incidentFixture();s.audit[key]=true;
+    incidentBlocked(classifyIncident(encode(s)),
+      'SHADOW_INCIDENT_AUDIT_OR_AUTOMATION_FORBIDDEN','security');
+  }
+}));
+test('status-event contradictions, including 200 on timeout, are denied',()=>withSwitch(()=>{
+  for(const variant of [
+    s=>{s.event='timeout';},
+    s=>{s.event='response';s.httpStatus=0;},
+    s=>{s.event='redirect';s.httpStatus=200;},
+  ]){
+    const s=incidentFixture();variant(s);
+    incidentBlocked(classifyIncident(encode(s)),
+      'SHADOW_INCIDENT_EVENT_STATUS_CONTRADICTORY','invalid');
+  }
+}));
+test('malformed input, fake provider origin, embedded secret and extra fields denied',()=>withSwitch(()=>{
+  const invalid=[
+    null,{},'bad-json',' '.repeat(4097),
+    encode({...incidentFixture(),credential:'live'}),
+    encode({...incidentFixture(),verified:true}),
+    encode({...incidentFixture(),source:'authenticated-openrouter'}),
+    encode({...incidentFixture(),httpStatus:'200'}),
+    encode({...incidentFixture(),bodyBytes:65537}),
+    encode({...incidentFixture(),retryAfterSeconds:86401}),
+    encode({...incidentFixture(),retryAfterSeconds:'120'}),
+    encode({...incidentFixture(),event:'paid_completion'}),
+    encode({...incidentFixture(),operation:'chat/completions'}),
+    encode({...incidentFixture(),audit:{...incidentFixture().audit,
+      remoteSink:'log-private-token'}}),
+  ];
+  for(const raw of invalid)
+    incidentBlocked(classifyIncident(raw),
+      'SHADOW_INCIDENT_FIXTURE_UNTRUSTED','invalid');
+}));
+test('synthetic incident tool cannot flow into protected paid dispatch paths',()=>{
+  const paid=readFileSync(new URL(
+    '../scripts/protected-real-openrouter-review.mjs',import.meta.url),'utf8');
+  const gate=readFileSync(new URL(
+    '../scripts/openrouter-only-spend-gate.mjs',import.meta.url),'utf8');
+  const model=readFileSync(new URL(
+    '../scripts/openrouter-shadow-readonly-acquisition-plan-offline.mjs',
+    import.meta.url),'utf8');
+  for(const text of [paid,gate])
+    assert.doesNotMatch(text,/assessSyntheticProxyIncidentOffline|openrouter-shadow-readonly-acquisition-plan-offline/);
+  assert.match(gate,/OPENROUTER_MONTHLY_RESERVATION_AND_IDEMPOTENCY_NOT_IMPLEMENTED/);
+  assert.doesNotMatch(model,/OPENROUTER_API_KEY|https?:\/\/|fetch\s*\(/);
 });
