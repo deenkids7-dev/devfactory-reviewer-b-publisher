@@ -6,6 +6,8 @@ on:
     paths:
       - 'scripts/openrouter-shadow-admission-synthetic-only.mjs'
       - 'scripts/openrouter-shadow-billing-reconciliation-offline.mjs'
+      - 'scripts/openrouter-shadow-fx-reconciliation-offline.mjs'
+      - 'test/openrouter-shadow-fx-reconciliation-offline.test.mjs'
       - 'test/openrouter-shadow-billing-reconciliation-offline.test.mjs'
       - 'scripts/openrouter-shadow-signed-admission-synthetic-only.mjs'
       - 'scripts/openrouter-shadow-service-binding-offline.mjs'
@@ -64,3 +66,4 @@ jobs:
           node --test test/openrouter-shadow-admission-synthetic-only.test.mjs
           node --test test/openrouter-shadow-signed-admission-synthetic-only.test.mjs
           REVIEWER_B_SYNTHETIC_SHADOW_ONLY=1 node --test test/openrouter-shadow-billing-reconciliation-offline.test.mjs
+          REVIEWER_B_SYNTHETIC_SHADOW_ONLY=1 node --test test/openrouter-shadow-fx-reconciliation-offline.test.mjs
