@@ -123,7 +123,10 @@ BEGIN
       NULL::bigint,false,false;
     RETURN;
   END IF;
-  IF v_challenge.expires_at<=clock_timestamp()
+  -- A pre-issued future challenge must not be usable before its actual
+  -- server-recorded issued_at. Expiry alone is not an issuance check.
+  IF v_challenge.issued_at>clock_timestamp()
+     OR v_challenge.expires_at<=clock_timestamp()
      OR v_challenge.month_utc<>v_month
      OR v_challenge.issuer<>'synthetic-service-account'
      OR v_challenge.audience<>'shadow-postgres-processor'
