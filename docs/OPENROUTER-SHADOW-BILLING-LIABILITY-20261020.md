@@ -354,6 +354,38 @@ Actual holds must remain unresolved unless a future independently
 audited billing/authorization workflow explicitly proves and
 permits changes; this PR does not implement that future release.
 
+## Composite PostgreSQL identity binding in quarantine (synthetic)
+
+An additional defense-in-depth constraint now binds each quarantine
+record to the **same (request_id, attempt_id, exact head_sha)** as the
+underlying synthetic attempt. The test-only quarantine migration adds
+a PostgreSQL UNIQUE triplet constraint to the pre-existing attempts
+table, then uses an explicit **composite foreign key** from
+`reviewer_b_attempt_shadow.quarantines` to that triplet.
+
+This protects against a future function implementation error that
+could otherwise record a correct request ID alongside an incorrect
+attempt ID or HEAD. Unlike a procedural equality check, the relation
+is checked by PostgreSQL on direct INSERT/UPDATE as well. Foreign-key
+checks are **not** proof against a privileged database owner who
+can alter schema or disable constraints; operator and superuser trust
+remain outside this fixture's security guarantees.
+
+The existing PostgreSQL 16 integration test uses isolated
+administrator permissions to deliberately attempt invalid direct
+quarantine INSERTs and UPDATEs and mutation of the referenced
+parent attempt identity. Mismatches must fail with SQLSTATE
+`23503`; a legitimate quarantine with matching identifiers
+still succeeds, and all recovery outputs continue to deny
+spend/dispatch/retry. The synthetic test does not contact
+OpenRouter or validate provider invoices.
+
+A cryptographic-looking digest or a successful relational join
+does **not** authenticate an invoice, demonstrate full account/key
+coverage, establish exact provider-side idempotency, or justify
+releasing a held amount. All production financial and human
+approval gates remain unchanged.
+
 ## Production blockers still missing
 
 1. Trusted, authenticated billing ledger covering all relevant keys
