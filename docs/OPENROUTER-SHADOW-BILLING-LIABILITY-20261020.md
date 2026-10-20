@@ -238,6 +238,43 @@ and independent threat review are mandatory. The schema is deliberately
 **not linked** to the Publisher, actual budget coordinator, paid API,
 secret-bearing receiver, Runner or deployment scripts.
 
+## Recovery observation after a lost COMMIT acknowledgment (synthetic)
+
+The same test-only PostgreSQL tombstone migration now includes the
+SECURITY DEFINER function
+`reviewer_b_attempt_shadow.observe_attempt_after_uncertain_commit`.
+It requires immutable request ID, attempt ID and HEAD; runs only with
+READ COMMITTED isolation; reads status using `FOR SHARE NOWAIT` to
+reject conflicting in-flight updates; exposes no raw table permissions
+to the restricted test invoker; and returns `may_spend=false`,
+`may_dispatch=false`, `may_retry=false` for **every** outcome,
+including matching, REGISTERED, missing, cancelled or ambiguous.
+A wrong ID/HEAD and invalid isolation produce fail-closed observations.
+
+The PostgreSQL 16 multi-client integration test models two cases:
+- A COMMIT is successfully acknowledged by PostgreSQL, then the test
+  deliberately discards that response at the application boundary
+  (synthetic lost acknowledgment). An independent newly authenticated
+  session reads the persisted `dispatch_may_have_occurred` marker
+  and cannot create a second marker or a new attempt under that ID.
+- A transaction is rolled back before its dispatch marker commits.
+  The read-only recovery function sees `registered`, but **still**
+  grants neither dispatch nor retry: without trusted evidence,
+  the caller cannot infer whether an external action occurred.
+  An in-flight UPDATE lock causes the recovery read to fail immediately
+  instead of silently trusting stale data.
+
+**Boundaries:** This does NOT simulate a real dropped TCP COMMIT reply,
+database restart/failover, lost durable writes, operator/superuser
+modification, network egress to OpenRouter, actual invoice identity,
+or provider-supported idempotency. In particular a client must **not**
+use the underlying synthetic registration/dispatch function as a
+"retry" after a lost acknowledgment: the recovery function alone
+does not enforce a production dispatcher protocol. Real deployment
+requires durable COMMIT verification, independent provider billing,
+authentic identity, full-key coverage, lost-ACK incident controls and
+a separately reviewed protected dispatch service.
+
 ## Production blockers still missing
 
 1. Trusted, authenticated billing ledger covering all relevant keys
