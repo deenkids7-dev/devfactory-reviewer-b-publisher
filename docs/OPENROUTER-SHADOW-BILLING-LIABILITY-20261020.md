@@ -533,6 +533,74 @@ does not create a management key, call any private endpoint, view
 actual balances, assume supported paid-request retries, or grant
 HUMAN_GO / MERGE_GO / deployment / Runner privileges.
 
+## Read-only OpenRouter acquisition preflight — explicitly non-executable
+
+`scripts/openrouter-shadow-readonly-acquisition-plan-offline.mjs`
+and `test/openrouter-shadow-readonly-acquisition-plan-offline.test.mjs`
+extend the **existing PR #73** and existing synthetic admission CI.
+They validate an illustrative, strictly bounded **JSON design
+manifest**, not a real OpenRouter response and **not an HTTP client**.
+A valid manifest still returns `BLOCKED` and cannot authorize
+network access, money, deployment, retries, hold release, or Reviewer B.
+
+The mock manifest has `transport:"no-network"`,
+`scope:"illustrative-only"` and a credential marked
+`management-key-capability / not-provisioned / none`, with no secret.
+Its only recognized hypothetical GET operations are:
+- exact path `/api/v1/keys`, separate illustrative workspace,
+  explicit `include_disabled:true`, monotonic page offsets
+  starting at zero;
+- exactly one exact-path `/api/v1/credits` aggregate read.
+
+All other operations, methods, paths, dynamic URLs, headers, tokens,
+request bodies, omitted workspaces, duplicate/unsorted pagination,
+false `include_disabled`, fabricated credentials or authority
+claims are rejected. The output does **not** contain a runnable URL,
+request payload, bearer token, or provider credential. Even complete
+fixture pagination returns
+`SHADOW_READONLY_STRUCTURAL_PLAN_ONLY` with
+`managementCredentialPresent=false`,
+`providerDataFetched=false`,
+`readOnlyEnforcedInProduction=false`,
+`accountCoverageAuthenticated=false`,
+`mayReadProviderData=false`, `maySpend=false`,
+`mayReserve=false`, `mayRetryAmbiguousRequest=false`,
+`mayReleaseHold=false`, `mayMutateProvider=false`, and
+`mayDeploy=false`.
+
+**Critical distinction:** OpenRouter documents a management key
+for the `GET /api/v1/keys` and `GET /api/v1/credits`
+endpoints. A management key must **not** be treated as an
+intrinsically read-only credential: OpenRouter also documents
+management-key operations that can update or delete keys.
+A future design would require a protected, audited **GET-only
+egress boundary** and a separately approved secret store. Neither
+exists in this PR; no management key is created, activated, requested,
+injected into CI, or used here.
+
+Official references (public schema descriptions only):
+- https://openrouter.ai/docs/api/api-reference/api-keys/list
+- https://openrouter.ai/docs/api/api-reference/credits/get-credits
+- https://openrouter.ai/docs/api/api-reference/api-keys/update-keys
+
+Before real access, separately establish user authorization,
+trusted account and workspace ownership, all-workspace and
+disabled/retired-key inventory, bounded pagination exhaustion,
+provider identity/authenticity, response signing or an appropriate
+trusted channel, redaction and zero-secret logging, rate-limit
+handling (including 401/403/429/5xx), a strictly outbound
+GET-only allowlist, testable revoke/rotation behavior, consistent
+UTC accounting windows and independently reliable completion
+watermarks for late charges or refunds. **An inaccessible page,
+incomplete inventory, unknown generation or API failure is not
+evidence of zero cost.** No real provider balance or expenditure
+is claimed verified.
+
+This synthetic manifest is **not** a deployable service, a
+substitute for invoice authentication, or permission to start
+paid traffic. The real spend gate stays BLOCKED, as do the
+human MERGE_GO/HUMAN_GO and Runner gates.
+
 ## Production blockers still missing
 
 1. Trusted, authenticated billing ledger covering all relevant keys
