@@ -354,4 +354,55 @@ test('real PostgreSQL16: durable synthetic risk tombstone, no retry or privilege
   blockedRecovery(await recover(recovery,'req:quarantine-race',
     'attempt:quarantine-race'),true,'dispatch_may_have_occurred');
 
+  // PostgreSQL, not just the SECURITY DEFINER code, must enforce the
+  // (request_id, attempt_id, exact HEAD) binding. Deliberately use
+  // privileged CI setup access to bypass the function and try corrupt
+  // inserts/updates: every mismatched identity must fail with FK 23503.
+  blockedResult(await register(recovery,'req:fk','attempt:fk',
+    'reviewer_b'),true);
+  blockedResult(await risk(recovery,'req:fk','attempt:fk'),true);
+  await assert.rejects(
+    ()=>admin.query(
+      'INSERT INTO reviewer_b_attempt_shadow.quarantines '+
+      '(request_id,attempt_id,head_sha,quarantine_reason) '+
+      'VALUES($1,$2,$3,$4)',
+      ['req:fk','attempt:WRONG',HEAD,'ambiguous_commit']),
+    e=>e.code==='23503');
+  await assert.rejects(
+    ()=>admin.query(
+      'INSERT INTO reviewer_b_attempt_shadow.quarantines '+
+      '(request_id,attempt_id,head_sha,quarantine_reason) '+
+      'VALUES($1,$2,$3,$4)',
+      ['req:fk','attempt:fk','b'.repeat(40),'ambiguous_commit']),
+    e=>e.code==='23503');
+  const preBind=(await admin.query(
+    "SELECT count(*)::int AS n FROM reviewer_b_attempt_shadow.quarantines "+
+    "WHERE request_id='req:fk'")).rows[0];
+  assert.equal(preBind.n,0);
+
+  quarantineBlocked(await quarantine(recovery,'req:fk','attempt:fk',
+    'ambiguous_commit'),true);
+  await assert.rejects(
+    ()=>admin.query(
+      "UPDATE reviewer_b_attempt_shadow.attempts "+
+      "SET attempt_id='attempt:replaced' WHERE request_id='req:fk'"),
+    e=>e.code==='23503');
+  await assert.rejects(
+    ()=>admin.query(
+      "UPDATE reviewer_b_attempt_shadow.attempts "+
+      "SET head_sha=$1 WHERE request_id='req:fk'",['b'.repeat(40)]),
+    e=>e.code==='23503');
+  await assert.rejects(
+    ()=>admin.query(
+      "UPDATE reviewer_b_attempt_shadow.quarantines "+
+      "SET attempt_id='attempt:forged' WHERE request_id='req:fk'"),
+    e=>e.code==='23503');
+  const stored=(await admin.query(
+    "SELECT q.attempt_id, q.head_sha FROM "+
+    "reviewer_b_attempt_shadow.quarantines q WHERE q.request_id='req:fk'"
+  )).rows[0];
+  assert.deepEqual(stored,{attempt_id:'attempt:fk',head_sha:HEAD});
+  blockedRecovery(await recover(recovery,'req:fk','attempt:fk'),
+    true,'dispatch_may_have_occurred');
+
 });
