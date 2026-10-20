@@ -90,3 +90,22 @@ HUMAN_GO, exact SHA MERGE_GO and later ZERO_CURSOR_GO are separate.
 `OPENROUTER_MONTHLY_RESERVATION_AND_IDEMPOTENCY_NOT_IMPLEMENTED`.
 
 **NO-GO DEPLOY / PAID OPENROUTER / MERGE / RUNNER.**
+
+## Correction de la fenêtre d'expiration pendant l'écriture
+
+Une contre-analyse manuelle a identifié un TOCTOU restant : un défi
+pouvait être valide lors du premier `FOR UPDATE NOWAIT` puis expirer
+pendant l'appel à la fonction de nonce et la mise à jour du budget.
+Après la dernière mise à jour de `consumed_at`, le SQL recontrôle
+désormais le mois UTC et `expires_at`, puis **lève une exception**
+en cas de changement. Cette erreur annule toute la requête SQL.
+
+Le test PostgreSQL réel crée un défi valable 2 secondes et un
+déclencheur de test qui ralentit intentionnellement son écriture de
+2,3 secondes, une fois que la proposition a été tentée. Il exige
+`SHADOW_CHALLENGE_EXPIRED_DURING_WRITE`, puis prouve qu'aucun
+montant, nonce, proposition ou défi consommé ne subsiste.
+Le déclencheur n'existe que dans le conteneur PostgreSQL éphémère CI.
+
+Ce test ne résout pas l'authentification cryptographique manquante
+du futur service ni les autorisations de dépense.

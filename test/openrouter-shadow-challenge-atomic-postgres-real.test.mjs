@@ -34,7 +34,7 @@ async function state(db){
    nonces:c.rows[0].n,consumed:d.rows[0].n};
 }
 async function issue(db,{challenge=10,nonce=30,service=40,expired=false,
-   pr=5400,head='a'.repeat(40),comment=55440}={}){
+   durationSeconds=45,pr=5400,head='a'.repeat(40),comment=55440}={}){
  const insert='INSERT INTO reviewer_b_shadow.issued_shadow_challenges ('+
   'challenge_uuid,issuer,audience,month_utc,target_repo,pr_number,'+
   'head_sha,service_comment_id,model,upper_micro_eur,shadow_digest,'+
@@ -43,9 +43,9 @@ async function issue(db,{challenge=10,nonce=30,service=40,expired=false,
   "date_trunc('month',clock_timestamp() AT TIME ZONE 'UTC')::date,"+
   "$2,$3,$4,$5,$6,15000000,$7,$8,"+
   "clock_timestamp()-($9::integer*interval '1 second'),"+
-  "clock_timestamp()+((45-$9::integer)*interval '1 second'))";
+  "clock_timestamp()+(($10::integer-$9::integer)*interval '1 second'))";
  await db.query(insert,[uuid(challenge),repo,pr,head,comment,model,
-   digest(nonce),digest(service),expired?120:0]);
+   digest(nonce),digest(service),expired?120:0,durationSeconds]);
 }
 test('PostgreSQL: nonce + receiver challenge consume atomically under contention',{
  skip:process.env.SHADOW_POSTGRES_REAL!=='1'||!process.env.SHADOW_PG_CLIENT_ENTRY?
@@ -116,6 +116,32 @@ test('PostgreSQL: nonce + receiver challenge consume atomically under contention
  assert.deepEqual(await state(admin),{euros:'0',proposals:0,nonces:0,consumed:0});
  await admin.query('DROP TRIGGER synthetic_challenge_failure ON reviewer_b_shadow.issued_shadow_challenges');
  await admin.query('DROP FUNCTION public.synthetic_challenge_inject_fail()');
+
+ // Adversarial TOCTOU: challenge is valid at SELECT FOR UPDATE, but
+ // expires while a test-only BEFORE UPDATE trigger sleeps after the
+ // nonce and budget have been written. The post-write expiry check MUST
+ // raise, restoring all three tables to their prior empty state.
+ await issue(admin,{challenge:13,nonce:33,service:43,durationSeconds:2,
+   pr:5403,head:'d'.repeat(40),comment:55443});
+ const delayed=[
+   "CREATE FUNCTION public.synthetic_expiry_delay() RETURNS trigger",
+   "LANGUAGE plpgsql AS $f$",
+   "BEGIN IF NEW.challenge_uuid='11111111-2222-4333-8444-00000000000d'::uuid",
+   "AND NEW.consumed_at IS NOT NULL THEN PERFORM pg_sleep(2.3);",
+   "END IF; RETURN NEW; END $f$;",
+   "CREATE TRIGGER synthetic_challenge_expiry BEFORE UPDATE",
+   "ON reviewer_b_shadow.issued_shadow_challenges",
+   "FOR EACH ROW EXECUTE FUNCTION public.synthetic_expiry_delay();"
+ ].join(' ');
+ await admin.query(delayed);
+ const short=[
+   repo,5403,'d'.repeat(40),55443,model,'synthetic-challenge-5403',
+   15000000,uuid(33),digest(33),uuid(13),digest(43)];
+ await assert.rejects(()=>call(a,short),
+   e=>e.message.includes('SHADOW_CHALLENGE_EXPIRED_DURING_WRITE'));
+ assert.deepEqual(await state(admin),{euros:'0',proposals:0,nonces:0,consumed:0});
+ await admin.query('DROP TRIGGER synthetic_challenge_expiry ON reviewer_b_shadow.issued_shadow_challenges');
+ await admin.query('DROP FUNCTION public.synthetic_expiry_delay()');
 
  const accepted=await call(a,args());
  assert.equal(accepted.recorded,true);

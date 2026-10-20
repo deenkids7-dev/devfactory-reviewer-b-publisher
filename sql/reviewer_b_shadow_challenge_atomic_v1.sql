@@ -164,6 +164,14 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'SHADOW_CHALLENGE_ATOMIC_CAS_FAILED';
   END IF;
+  -- Prevent an accepted challenge from expiring DURING the nonce/budget
+  -- write. Any exception here rolls the entire SQL statement back:
+  -- challenge consumed_at, nonce, proposal and monthly counter.
+  IF v_challenge.expires_at<=clock_timestamp()
+     OR date_trunc('month',clock_timestamp() AT TIME ZONE 'UTC')::date<>v_month
+  THEN
+    RAISE EXCEPTION 'SHADOW_CHALLENGE_EXPIRED_DURING_WRITE';
+  END IF;
 
   RETURN QUERY SELECT true,'SHADOW_CHALLENGE_AND_NONCE_ATOMIC_NO_SPEND'::text,
     v_proposal.reserved_micro_eur,false,false;
