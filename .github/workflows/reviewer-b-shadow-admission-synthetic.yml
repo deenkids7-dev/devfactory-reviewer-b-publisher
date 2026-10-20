@@ -8,6 +8,8 @@ on:
       - 'scripts/openrouter-shadow-billing-reconciliation-offline.mjs'
       - 'scripts/openrouter-shadow-fx-reconciliation-offline.mjs'
       - 'scripts/openrouter-shadow-provider-reconciliation-offline.mjs'
+      - 'scripts/openrouter-shadow-attempt-lifecycle-offline.mjs'
+      - 'test/openrouter-shadow-attempt-lifecycle-offline.test.mjs'
       - 'test/openrouter-shadow-provider-reconciliation-offline.test.mjs'
       - 'test/openrouter-shadow-fx-reconciliation-offline.test.mjs'
       - 'test/openrouter-shadow-billing-reconciliation-offline.test.mjs'
@@ -71,3 +73,4 @@ jobs:
           REVIEWER_B_SYNTHETIC_SHADOW_ONLY=1 node --test test/openrouter-shadow-billing-reconciliation-offline.test.mjs
           REVIEWER_B_SYNTHETIC_SHADOW_ONLY=1 node --test test/openrouter-shadow-fx-reconciliation-offline.test.mjs
           REVIEWER_B_SYNTHETIC_SHADOW_ONLY=1 node --test test/openrouter-shadow-provider-reconciliation-offline.test.mjs
+          REVIEWER_B_SYNTHETIC_SHADOW_ONLY=1 node --test test/openrouter-shadow-attempt-lifecycle-offline.test.mjs
