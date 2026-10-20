@@ -95,6 +95,50 @@ Every result is still `BLOCKED / maySpend:false /
 mayReserve:false / mayRetryAmbiguousRequest:false` and does not
 create a reservation or merge/Runner permission.
 
+## Cross-month mock provider reconciliation (no real invoices)
+
+A further **offline-only, deterministic fixture** is implemented in
+**scripts/openrouter-shadow-provider-reconciliation-offline.mjs** and tested in
+**test/openrouter-shadow-provider-reconciliation-offline.test.mjs**.
+The existing synthetic GitHub Actions workflow exercises this module.
+It is not imported into any billable path.
+
+The fixture has one uniquely identified intention per request, its declared
+key role (development or reviewer_b), initiation UTC month, simulated state
+(settled, pending, ambiguous) and positive held micro-USD for unresolved
+outcomes. Separate mock invoice lines carry globally unique line IDs,
+request IDs, billing UTC months and unsigned integer-string micro-USD
+amounts. All inputs are **unverified fixture data**, not authenticated
+evidence about OpenRouter invoices, credits, provider identity or account
+coverage.
+
+The review model does not discard potential liability:
+- An ambiguous **September** request continues to hold its full upper
+  bound in **October**, until an independently established final result.
+- A partial invoice received the next month is **added to** the held
+  upper-bound amount. A timeout or missing provider record is not
+  permission to retry or release that hold.
+- An invoice without a matching request is an orphan and blocks the
+  simulated reconciliation instead of being ignored.
+- Duplicate request IDs across both key roles, duplicate invoice IDs,
+  invoice months before request creation, future billing periods,
+  invalid monetary strings, overflow and contradictory states are denied.
+- A supposedly settled mock request without invoice evidence is denied,
+  rather than treated as free. This is a conservative fixture rule,
+  **not a factual claim about all genuinely zero-cost requests**.
+- Even a matching mock ledger remains BLOCKED with all spend, reserve,
+  retry, provider verification and account-completeness permissions false.
+
+The sums remain in hypothetical **USD micro-units**. They are NOT
+converted into real EUR liabilities or compared with the proposed
+EUR 15 synthetic ceiling. They prove neither all-key coverage nor
+provider authenticity. Charge reversals, refunds, adjustments,
+zero-cost settlements, partial invoice delivery, clock skew, retention,
+across-account enumeration, provider request identity, real FX,
+provider credit expiry and post-timeout settlement remain unresolved.
+A trusted billing evidence source, durable idempotency and a separately
+approved reconciliation protocol are mandatory before real spending.
+
 ## Production blockers still missing
 
 1. Trusted, authenticated billing ledger covering all relevant keys
