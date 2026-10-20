@@ -6,6 +6,9 @@ import {pathToFileURL} from 'node:url';
 
 const sql=readFileSync(new URL(
   '../sql/reviewer_b_attempt_tombstone_synthetic_v1.sql',import.meta.url),'utf8');
+const quarantineSql=readFileSync(new URL(
+  '../sql/reviewer_b_attempt_quarantine_synthetic_v1.sql',
+  import.meta.url),'utf8');
 const HEAD='a'.repeat(40),PASS='synthetic-shadow-ci-only-20261020';
 const makeClient=(Client,user='postgres',password=PASS)=>new Client({
   host:'127.0.0.1',port:5432,database:'postgres',user,password,
@@ -37,6 +40,7 @@ test('real PostgreSQL16: durable synthetic risk tombstone, no retry or privilege
   await admin.connect();
   await observer.connect();
   await admin.query(sql);
+  await admin.query(quarantineSql);
   const role=await admin.query(
     "SELECT rolcanlogin FROM pg_catalog.pg_roles WHERE rolname='reviewer_b_attempt_invoker_v1'");
   assert.equal(role.rows[0].rolcanlogin,false);
@@ -248,4 +252,106 @@ test('real PostgreSQL16: durable synthetic risk tombstone, no retry or privilege
   const count=await observer.query(
     'SELECT count(*)::int AS n FROM reviewer_b_attempt_shadow.attempts');
   assert.equal(count.rows[0].n,6);
+
+  // The additive quarantine tables are not visible or mutable to the
+  // restricted CI login: only narrow SECURITY DEFINER functions are usable.
+  const privateRights=(await recovery.query(
+    "SELECT has_table_privilege("+
+    "'reviewer_b_attempt_shadow.quarantines','SELECT') AS can_see,"+
+    " has_table_privilege("+
+    "'reviewer_b_attempt_shadow.unverified_evidence','INSERT') AS can_insert"
+  )).rows[0];
+  assert.deepEqual(privateRights,{can_see:false,can_insert:false});
+  await assert.rejects(
+    ()=>recovery.query('SELECT * FROM reviewer_b_attempt_shadow.quarantines'),
+    e=>e.code==='42501');
+  await assert.rejects(
+    ()=>recovery.query(
+      "DELETE FROM reviewer_b_attempt_shadow.quarantines WHERE request_id='req:1'"),
+    e=>e.code==='42501');
+
+  const quarantine=(client,request,attempt,reason,head=HEAD)=>
+    call(client,'quarantine_synthetic_attempt',
+      request,attempt,head,reason);
+  const evidence=(client,request,id,digest,kind,amount)=>
+    call(client,'record_unverified_evidence_fixture',
+      request,id,digest,kind,amount);
+  const quarantineBlocked=(result,recorded)=>{
+    assert.equal(result.rows.length,1);
+    const row=result.rows[0];
+    assert.equal(row.recorded,recorded);
+    for(const k of ['may_spend','may_dispatch','may_retry',
+      'may_release_hold'])assert.equal(row[k],false,k);
+  };
+  const evidenceBlocked=(result,recorded)=>{
+    quarantineBlocked(result,recorded);
+    assert.equal(result.rows[0].provider_authenticated,false);
+  };
+
+  // A registered or cancelled intention is not a dispatch-risk claim.
+  quarantineBlocked(await quarantine(recovery,'req:rollback',
+    'attempt:rollback','ambiguous_commit'),false);
+  quarantineBlocked(await quarantine(recovery,'req:cancel',
+    'attempt:cancel','provider_outcome_unknown'),false);
+  quarantineBlocked(await quarantine(recovery,'req:ack',
+    'wrong-attempt','ambiguous_commit'),false);
+  quarantineBlocked(await quarantine(recovery,'req:ack',
+    'attempt:ack','ambiguous_commit','b'.repeat(40)),false);
+
+  // Only committed risk/unknown states can be quarantined. Quarantine
+  // cannot be undone, rewritten, promoted to verified or used to retry.
+  quarantineBlocked(await quarantine(recovery,'req:ack',
+    'attempt:ack','ambiguous_commit'),true);
+  quarantineBlocked(await quarantine(recovery,'req:ack',
+    'attempt:ack','ambiguous_commit'),false);
+  quarantineBlocked(await quarantine(recovery,'req:1',
+    'attempt:1','provider_outcome_unknown'),true);
+  evidenceBlocked(await evidence(recovery,'req:rollback',
+    'proof:orphan','e'.repeat(64),'mock_invoice',200),false);
+
+  evidenceBlocked(await evidence(recovery,'req:ack',
+    'proof:1','a'.repeat(64),'mock_invoice',500),true);
+  evidenceBlocked(await evidence(recovery,'req:ack',
+    'proof:1','b'.repeat(64),'mock_invoice',500),false);
+  evidenceBlocked(await evidence(recovery,'req:1',
+    'proof:2','a'.repeat(64),'mock_invoice',500),false);
+  evidenceBlocked(await evidence(recovery,'req:ack',
+    'proof:3','c'.repeat(64),'provider-authenticated',500),false);
+  evidenceBlocked(await evidence(recovery,'req:ack',
+    'proof:4','d'.repeat(64),'mock_adjustment',-1),false);
+  evidenceBlocked(await evidence(recovery,'req:ack',
+    'proof:absence','f'.repeat(64),'mock_absence',0),true);
+  const trusted=await admin.query(
+    'SELECT count(*)::int AS n FROM reviewer_b_attempt_shadow.unverified_evidence');
+  assert.equal(trusted.rows[0].n,2);
+  const allSources=await admin.query(
+    'SELECT DISTINCT source FROM reviewer_b_attempt_shadow.unverified_evidence');
+  assert.deepEqual(allSources.rows,[{source:'unverified-fixture'}]);
+
+  // Real PostgreSQL concurrency: lock holder's uncommitted quarantine
+  // cannot be raced by an independent authenticated SQL connection.
+  blockedResult(await register(recovery,'req:quarantine-race',
+    'attempt:quarantine-race','development'),true);
+  blockedResult(await risk(recovery,'req:quarantine-race',
+    'attempt:quarantine-race'),true);
+  await reconnected.query('BEGIN');
+  quarantineBlocked(await quarantine(reconnected,'req:quarantine-race',
+    'attempt:quarantine-race','dispatch_risk_unresolved'),true);
+  await assert.rejects(
+    ()=>quarantine(recovery,'req:quarantine-race',
+      'attempt:quarantine-race','dispatch_risk_unresolved'),
+    e=>e.code==='55P03');
+  await reconnected.query('ROLLBACK');
+  const absent=await admin.query(
+    'SELECT count(*)::int AS n FROM reviewer_b_attempt_shadow.quarantines '+
+    "WHERE request_id='req:quarantine-race'");
+  assert.equal(absent.rows[0].n,0);
+  quarantineBlocked(await quarantine(recovery,'req:quarantine-race',
+    'attempt:quarantine-race','dispatch_risk_unresolved'),true);
+  const quarantined=await admin.query(
+    'SELECT count(*)::int AS n FROM reviewer_b_attempt_shadow.quarantines');
+  assert.equal(quarantined.rows[0].n,3);
+  blockedRecovery(await recover(recovery,'req:quarantine-race',
+    'attempt:quarantine-race'),true,'dispatch_may_have_occurred');
+
 });
