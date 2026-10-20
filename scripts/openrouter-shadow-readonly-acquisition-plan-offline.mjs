@@ -202,3 +202,98 @@ export function assessSyntheticProxyBoundaryOffline(json){
     secretRedactionVerified:false,providerResponseAuthenticated:false,
   });
 }
+
+/**
+ * Table of decisions for *untrusted hypothetical* GET-proxy incidents.
+ * No secret, socket, actual OpenRouter status, provider reconciliation,
+ * session scheduling, billing operation or automatic retry is involved.
+ *
+ * A "200" mock is NOT evidence of authentic, complete billing.
+ */
+const INCIDENT_KEYS=['schema','scope','transport','operation','event',
+  'httpStatus','bodyBytes','contentType','responseComplete',
+  'source','hasSecretMarker','retryAfterSeconds','audit'];
+const INCIDENT_AUDIT=['rawAuthorization','rawBody','unredactedIds',
+  'autoRetry','autoReleaseHold','autoResumeRunner'];
+const INCIDENT_EVENTS=new Set(['response','timeout','connection_reset',
+  'dns_failure','tls_failure','redirect','truncated','invalid_json']);
+const MAX_INCIDENT_BYTES=4096;
+const incident=(code,incidentClass)=>denial(code,{
+  simulatedIncidentClass:incidentClass,
+  simulatedManualInvestigationRequired:true,
+  syntheticIncidentOnly:true,
+  automaticRetryScheduled:false,
+  simulatedBillIsSettled:false,
+  simulatedProviderEvidenceVerified:false,
+});
+
+/**
+ * All routes return BLOCKED. Operators must investigate outside this
+ * synthetic classifier, and any paid incident remains quarantined.
+ */
+export function assessSyntheticProxyIncidentOffline(json){
+  if(process.env.REVIEWER_B_SYNTHETIC_SHADOW_ONLY!=='1')
+    return incident('SHADOW_INCIDENT_SYNTHETIC_SWITCH_REQUIRED','invalid');
+  if(typeof json!=='string'||Buffer.byteLength(json,'utf8')>MAX_INCIDENT_BYTES)
+    return incident('SHADOW_INCIDENT_FIXTURE_UNTRUSTED','invalid');
+  let s;
+  try{s=JSON.parse(json)}catch{
+    return incident('SHADOW_INCIDENT_FIXTURE_UNTRUSTED','invalid');
+  }
+  if(!object(s,INCIDENT_KEYS)||
+     s.schema!=='devfactory.shadow-get-incident.synthetic.v1'||
+     s.scope!=='illustrative-only'||s.transport!=='no-network'||
+     !['keys','credits'].includes(s.operation)||
+     !INCIDENT_EVENTS.has(s.event)||
+     !Number.isSafeInteger(s.httpStatus)||s.httpStatus<0||
+     s.httpStatus>599||
+     !Number.isSafeInteger(s.bodyBytes)||s.bodyBytes<0||
+     s.bodyBytes>MAX_RESPONSE_BYTES||
+     !['application/json','other','none'].includes(s.contentType)||
+     typeof s.responseComplete!=='boolean'||
+     s.source!=='unverified-fixture'||
+     typeof s.hasSecretMarker!=='boolean'||
+     !(s.retryAfterSeconds===null||
+       (Number.isSafeInteger(s.retryAfterSeconds)&&
+        s.retryAfterSeconds>=0&&s.retryAfterSeconds<=86400))||
+     !object(s.audit,INCIDENT_AUDIT))
+    return incident('SHADOW_INCIDENT_FIXTURE_UNTRUSTED','invalid');
+
+  // Only a simulated complete on-wire HTTP response has a status.
+  // Redirects are represented separately so that no 3xx can be followed.
+  if((s.event==='response'&&s.httpStatus<100)||
+     (s.event==='redirect'&&
+      !(s.httpStatus>=300&&s.httpStatus<=399))||
+     (!['response','redirect'].includes(s.event)&&s.httpStatus!==0))
+    return incident('SHADOW_INCIDENT_EVENT_STATUS_CONTRADICTORY','invalid');
+  if(s.audit.rawAuthorization||s.audit.rawBody||
+     s.audit.unredactedIds||s.audit.autoRetry||
+     s.audit.autoReleaseHold||s.audit.autoResumeRunner)
+    return incident('SHADOW_INCIDENT_AUDIT_OR_AUTOMATION_FORBIDDEN','security');
+  if(s.hasSecretMarker)
+    return incident('SHADOW_INCIDENT_SECRET_EXPOSURE_REVIEW','security');
+  if(s.event==='redirect'||s.httpStatus>=300&&s.httpStatus<=399)
+    return incident('SHADOW_INCIDENT_REDIRECT_FORBIDDEN','network');
+  if(s.event==='timeout'||s.event==='connection_reset'||
+     s.event==='dns_failure'||s.event==='tls_failure')
+    return incident('SHADOW_INCIDENT_NETWORK_UNKNOWN_NO_RETRY','network');
+  if(s.event==='truncated'||s.event==='invalid_json'||
+     !s.responseComplete)
+    return incident('SHADOW_INCIDENT_RESPONSE_INCOMPLETE','provenance');
+  if(s.httpStatus===401)
+    return incident('SHADOW_INCIDENT_AUTHENTICATION_REVIEW','identity');
+  if(s.httpStatus===403)
+    return incident('SHADOW_INCIDENT_AUTHORIZATION_REVIEW','identity');
+  if(s.httpStatus===429)
+    return incident('SHADOW_INCIDENT_RATE_LIMIT_MANUAL_REVIEW','rate-limit');
+  if(s.httpStatus>=500)
+    return incident('SHADOW_INCIDENT_PROVIDER_FAILURE_UNKNOWN','provider');
+  if(s.httpStatus!==200)
+    return incident('SHADOW_INCIDENT_OTHER_STATUS_UNRESOLVED','provider');
+  if(s.contentType!=='application/json'||s.bodyBytes===0)
+    return incident('SHADOW_INCIDENT_UNTRUSTED_200_PAYLOAD','provenance');
+
+  // HTTP 200 with internally consistent mock metadata still carries
+  // no trusted proof of source, invoice completeness, charge or key scope.
+  return incident('SHADOW_INCIDENT_200_UNVERIFIED_NOT_SETTLED','provenance');
+}
