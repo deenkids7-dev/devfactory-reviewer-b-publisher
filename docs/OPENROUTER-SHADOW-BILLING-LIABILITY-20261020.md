@@ -901,6 +901,91 @@ production witness, Runner or MSI check occurred. Some checklist items, such as 
 A genuinely authenticated read-only evidence service is a future
 separately scoped decision; this PR never provisions its secrets.
 
+## Witness outage, key rotation and fork incident drills (OFFLINE ONLY)
+
+The existing `scripts/openrouter-shadow-audit-anchor-offline.mjs`
+now includes `assessSyntheticWitnessIncidentOffline`. The
+existing `test/openrouter-shadow-audit-anchor-offline.test.mjs`
+includes 20 additive adversarial scenarios; the existing synthetic
+admission workflow executes the tests on the PR's exact HEAD.
+**This is a pure classifier of attacker-controlled fixture JSON**,
+not a deployed witness, not a signing service, not durable storage,
+not an authenticated external trust anchor and not a notification
+or recovery executor.
+
+### Mock checkpoints and fail-closed outcomes
+
+An illustrative incident contains the strictly validated
+SHA-256-chained incident audit fixture, a self-declared witness
+identifier/source/availability, and earlier/candidate checkpoints
+with claimed chain sequence, root hash, key epoch, key ID and
+`active`/`revoked` status. The only permitted review fields
+must explicitly declare that an independent signature, witness
+isolation, operator approval and hold-release approval **have NOT
+been verified**. The existing local audit-anchor validator first
+rejects any malformed, unlinked or rewritten mock chain.
+
+| Synthetic failure case | Offline diagnostic | Future human/escalation dependency |
+| --- | --- | --- |
+| No witness response | `SHADOW_WITNESS_OUTAGE_MANUAL_ESCALATION` | Record unresolved case, use separately authorized incident channel |
+| Witness timed out | `SHADOW_WITNESS_TIMEOUT_NO_AUTO_RETRY` | Never infer missing charge or schedule automatic replay |
+| Claimed outage with concurrent candidate proof | `SHADOW_WITNESS_AVAILABILITY_CONTRADICTORY` | Reject inconsistent incident report |
+| Previous checkpoint disagrees with local entry | `SHADOW_WITNESS_PRIOR_FORK_SUSPECTED` | Investigate fork or rewritten local evidence |
+| Candidate root diverges at a known height | `SHADOW_WITNESS_DIVERGENT_ROOT_FORK` | Independent operator examines conflicting roots and witness attestations |
+| Candidate height decreases | `SHADOW_WITNESS_CHECKPOINT_REPLAY` | Treat replay/downgrade as unresolved |
+| Candidate checkpoint is beyond local chain | `SHADOW_WITNESS_FUTURE_CHECKPOINT_UNBOUND` | Require verifiable log synchronization and external proof |
+| Candidate is behind current log | `SHADOW_WITNESS_STALE_CHECKPOINT` | Do not assume newer events or liabilities have been witnessed |
+| Previous/current signer revoked | `SHADOW_WITNESS_REVOKED_PRIOR_KEY` / `SHADOW_WITNESS_REVOKED_CURRENT_KEY` | Verify authenticated revocation and checkpoint validity periods externally |
+| Epoch regresses or key changes at unchanged epoch | `SHADOW_WITNESS_KEY_EPOCH_REGRESSION` / `SHADOW_WITNESS_UNEXPLAINED_KEY_CHANGE` | Review signer rollback or substitution |
+| Key epoch advances | `SHADOW_WITNESS_ROTATION_UNAUTHENTICATED` | Independently verify signed key-rotation chain and revocations |
+| All mock checkpoints and local roots agree | `SHADOW_WITNESS_MATCHING_FIXTURES_NOT_AUTHENTIC` | Consistency alone is **not** independent witness authentication |
+
+**Explicit negative demonstration:** the test deliberately
+rewrites an event, rebuilds the full SHA-256 chain and updates
+both supposed witness checkpoints. The internally matching
+objects are still classified **NOT AUTHENTIC**. The caller
+can forge every fixture including signer IDs and epochs,
+or omit a compromised witness entirely. SHA-256 shape and
+self-consistency are not a witness signature, a public
+transparency log or non-equivocation proof.
+
+Every result keeps `status:BLOCKED`,
+`externalWitnessAuthenticated:false`,
+`providerEvidenceAuthenticated:false`,
+`durableJournalVerified:false`,
+`independentReviewerApproved:false`,
+`maySpend:false`, `mayReserve:false`,
+`mayRetryAmbiguousRequest:false`,
+`mayReleaseHold:false`, `mayDeploy:false`,
+`mayStartRunner:false`, `mayCloseIncident:false`.
+It also reports `checkpointSignatureVerified:false`,
+`trustedWitnessKeyEpochVerified:false`,
+`independentWitnessReachableVerified:false`,
+`realIncidentEscalated:false` and
+`automaticReplayScheduled:false`.
+No simulated incident opens a GitHub PR, writes a persistent
+event, sends a notice or authorizes an action.
+
+### Still needed before any real witness could be trusted
+
+A separately authorized design must place the witness outside
+the original operator/database/runner trust domain; use genuine
+cryptographic signatures with independently pinned signer
+identity and secure rotation/revocation history; authenticate
+timestamp and key epoch at the actual event date; reject replayed,
+missing, forked or non-monotonic checkpoints; preserve an
+append-only, independently retained history; and define outage
+handling, quorum/non-equivocation, durable retransmission
+policies, incident escalation with human identity and audit access.
+All of that requires independent threat review and real integration
+tests—not the currently isolated, self-declared mock objects.
+
+Any real paid OpenRouter attempt with ambiguous billing
+**remains in quarantine** independently of this hypothetical
+witness's availability or apparent health. Neither a perfectly
+matching witness fixture nor an approved source-code review
+alone can release exposure, enable spending or start the Runner.
+
 ## Production blockers still missing
 
 1. Trusted, authenticated billing ledger covering all relevant keys
