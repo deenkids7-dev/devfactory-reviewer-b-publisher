@@ -855,7 +855,7 @@ isolation. Existence of a matching SHA-256 string in GitHub is not
 an external checkpoint, and the current CI is not such a witness.
 None of these prerequisites is delivered or assumed operational.
 
-## Reviewer B — independent approval evidence checklist (all outstanding)
+## Reviewer B — independent approval evidence checklist (NO-GO until all verified)
 
 Before any change in readiness or human gates, an independently
 authorized reviewer must see and verify **all applicable evidence**:
@@ -897,8 +897,7 @@ authorized reviewer must see and verify **all applicable evidence**:
 **Observed on this PR as of this preparatory LOT:** the native
 independent Reviewer B `APPROVED` review is still missing, the
 live spend gate is still BLOCKED, and no real network, paid service,
-production witness, Runner or MSI check occurred. The checklist
-is a set of **unmet prerequisites**, not a reviewer sign-off.
+production witness, Runner or MSI check occurred. Some checklist items, such as the exact-HEAD synthetic CI, can be independently verified; **critical production prerequisites remain unmet**. This document is not a reviewer sign-off.
 A genuinely authenticated read-only evidence service is a future
 separately scoped decision; this PR never provisions its secrets.
 
