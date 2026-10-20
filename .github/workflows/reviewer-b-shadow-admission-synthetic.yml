@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - 'scripts/openrouter-shadow-admission-synthetic-only.mjs'
+      - 'scripts/openrouter-shadow-signed-admission-synthetic-only.mjs'
+      - 'scripts/openrouter-shadow-service-binding-offline.mjs'
+      - 'test/openrouter-shadow-signed-admission-synthetic-only.test.mjs'
       - 'scripts/openrouter-shadow-claim-provenance-readonly.mjs'
       - 'test/openrouter-shadow-admission-synthetic-only.test.mjs'
       - 'sql/reviewer_b_shadow_central_pg_v1.sql'
@@ -57,3 +60,4 @@ jobs:
           set -euo pipefail
           cd source
           node --test test/openrouter-shadow-admission-synthetic-only.test.mjs
+          node --test test/openrouter-shadow-signed-admission-synthetic-only.test.mjs
