@@ -79,6 +79,29 @@ test('PostgreSQL: nonce + receiver challenge consume atomically under contention
   args().slice(0,9)),e=>e.code==='42501');
  assert.equal((await call(a,args())).reason,'SHADOW_CHALLENGE_UNKNOWN');
  await issue(admin);
+
+ // Adversarial issue-time regression: an operator-provisioned challenge
+ // dated in the future is NOT available until its issued_at timestamp.
+ // The previous SQL only checked expires_at, allowing premature use.
+ await admin.query(
+  "INSERT INTO reviewer_b_shadow.issued_shadow_challenges("+
+  "challenge_uuid,issuer,audience,month_utc,target_repo,pr_number,"+
+  "head_sha,service_comment_id,model,upper_micro_eur,shadow_digest,"+
+  "service_digest,issued_at,expires_at) VALUES("+
+  "$1,'synthetic-service-account','shadow-postgres-processor',"+
+  "date_trunc('month',clock_timestamp() AT TIME ZONE 'UTC')::date,"+
+  "$2,$3,$4,$5,15000000,$6,$7,"+
+  "clock_timestamp()+interval '20 seconds',"+
+  "clock_timestamp()+interval '45 seconds')",
+  [uuid(15),repo,5410,'e'.repeat(40),55450,model,digest(35),digest(45)]);
+ const premature=[repo,5410,'e'.repeat(40),55450,model,
+   'synthetic-challenge-5410',15000000,
+   uuid(35),digest(35),uuid(15),digest(45)];
+ assert.equal((await call(a,premature)).reason,
+   'SHADOW_CHALLENGE_BINDING_INVALID_OR_EXPIRED');
+ assert.deepEqual(await state(admin),{
+   euros:'0',proposals:0,nonces:0,consumed:0});
+
  const wrongService=args();wrongService[10]=digest(41);
  const wrongShadow=args();wrongShadow[8]=digest(31);
  const wrongHead=args();wrongHead[2]='b'.repeat(40);
