@@ -228,6 +228,9 @@ test('dropped key, old request and prior statement are detected',()=>withSwitch(
   blocked(compare(encode(example()),encode(a)),
     'SHADOW_CONTINUITY_KEY_DISAPPEARED');
   const b=example();b.attempts.pop();
+  // Avoid an orphan mock invoice: this checks disappearance of the
+  // registered request, not schema rejection of its old reference.
+  b.statements[2].request_ids=[];
   blocked(compare(encode(example()),encode(b)),
     'SHADOW_CONTINUITY_ATTEMPT_DISAPPEARED');
   const c=example();c.statements.pop();
