@@ -1,8 +1,6 @@
 name: Offline budget PostgreSQL 16 isolated test (NO SPEND)
 on:
-  push:
-    branches:
-      - codex/openrouter-atomic-budget-offline
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
