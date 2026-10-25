@@ -1,6 +1,6 @@
 # DevFactory — service de reservation financiere local
 
-Etat : **implementation locale isolee, NON AUTORISEE POUR LES DEPENSES** (2026-10-25).
+Etat : **deploiement local SHADOW actif sur MSI, NON AUTORISE POUR LES DEPENSES** (2026-10-25). La version locale ne constitue pas une autorite financiere independante du Runner au niveau du compte OS.
 
 ## Composants livres
 - `service/finance-reservation-ledger.mjs` : SQLite WAL, `synchronous=FULL`, transactions `BEGIN IMMEDIATE` et journal durable de reservations et de charges.
@@ -36,3 +36,17 @@ Le service est independant **en processus et stockage**, mais n'est pas encore u
 - ajouter l'autorisation exacte du proprietaire pour les SHA des PR #940/#941 avant chaque paid-call.
 
 **Ne pas** presenter cette version locale comme preuve de `MAY_SPEND=true`, et ne pas activer `DeenKids-DevFactory-Autonomy` sur sa seule base.
+
+## Deploiement MSI shadow — preuves du 25 octobre 2026
+- Windows Scheduled Task : `DevFactory-Finance-Ledger-Shadow`, declenchement a l'ouverture de session, execution sous `MSI\\ismah` avec niveau `Limited`, et redemarrages sur echec. Il ne s'agit PAS d'un service Windows administrateur/LocalService.
+- Code installe dans `%LOCALAPPDATA%\\DevFactory\\FinanceReservation\\app`. Registre SQLite persistant dans `state\\ledger.sqlite`. Aucun fichier du Runner n'est modifie.
+- Secrets de client et d'administration distincts, generes aleatoirement au deploiement, stockes via DPAPI CurrentUser dans `secrets`; leurs valeurs ne sont ni publiees ni journalisees. ACL NTFS sur le dossier : seul `MSI\\ismah` et `SYSTEM` ont FullControl.
+- Port local `127.0.0.1:47881` uniquement. Tache `Running`, processus Node identifie, `GET /health` -> `maySpend:false`.
+- `GET /v1/status` authentifie : reservationCount=0, chargeCount=0, `mayReserveForPaidRun:false`, `maySpend:false`, `providerBillingVerified:false`, `independentSignerVerified:false`. Role client sur charges -> HTTP 403.
+- Stop/Start de la tache teste : retour `/health` valide, fichier registre conserve. Test subprocess d'arret/redemarrage avec vraie reservation et charge : PASS. Ensemble du service financier : **12 PASS / 0 FAIL**.
+- Suite complete sur Windows : 3 epreuves d'autres workflows echouent sur CRLF LF; elles ne doivent pas etre masquees ou comptees comme reussies. Ne pas modifier les controles de gouvernance pour obtenir artificiellement du vert.
+- `DeenKids-DevFactory-Autonomy` toujours `Disabled`. Aucun appel inference OpenRouter, aucun depassement budget, aucun `HUMAN_GO`, `MERGE_GO` ni `RUNNER_GO` deduit.
+
+**Limite de confiance** : la tache et le Runner potentiel pourraient tourner sous la meme identite Windows. Ce staging n'est donc PAS une autorite de reservation independante et ne donne aucune permission de depense. Pour la production il faudra un compte OS de service distinct approuve, son propre ACL, une synchronisation financiere serveur authentifiee, les preuves ZDR/FX/compte-entier et la revue formelle sur le SHA exact.
+
+L'installation peut etre reproduite sur un MSI vierge via `scripts/install-finance-reservation-shadow.ps1`. Ce script refuse de remplacer un dossier ou une tache existante afin de conserver les donnees et les secrets.
