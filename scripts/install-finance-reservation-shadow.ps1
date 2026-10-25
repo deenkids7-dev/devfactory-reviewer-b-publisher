@@ -4,7 +4,9 @@ $ErrorActionPreference='Stop'
 $task='DevFactory-Finance-Ledger-Shadow'
 $target=Join-Path $env:LOCALAPPDATA 'DevFactory\FinanceReservation'
 $source=Join-Path $PSScriptRoot '..\service'
-$launcher=Join-Path $PSScriptRoot 'finance-reservation-shadow-start.ps1'
+$unseal=Join-Path $PSScriptRoot 'finance-reservation-windows-unseal.ps1'
+$entrypoint=Join-Path $PSScriptRoot 'finance-reservation-windows-entrypoint.mjs'
+$node='C:\Program Files\nodejs\node.exe'
 if(Test-Path -LiteralPath $target) { throw 'FINANCE_SHADOW_ALREADY_INSTALLED_OR_PARTIAL' }
 if(Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue) { throw 'FINANCE_SHADOW_TASK_ALREADY_EXISTS' }
 if(Get-NetTCPConnection -LocalPort 47881 -State Listen -ErrorAction SilentlyContinue) { throw 'FINANCE_SHADOW_PORT_IN_USE' }
@@ -13,7 +15,9 @@ foreach($name in @('finance-reservation-ledger.mjs','finance-reservation-server.
     throw ('MISSING_SOURCE_'+$name)
   }
 }
-if(-not (Test-Path -LiteralPath $launcher -PathType Leaf)) { throw 'LAUNCHER_MISSING' }
+foreach($file in @($unseal,$entrypoint,$node)) {
+  if(-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw ('INSTALL_INPUT_MISSING_'+$file) }
+}
 $dirs=@($target,(Join-Path $target 'app'),(Join-Path $target 'secrets'),(Join-Path $target 'state'))
 foreach($dir in $dirs) { [void][IO.Directory]::CreateDirectory($dir) }
 $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
@@ -23,7 +27,8 @@ if($LASTEXITCODE -ne 0) { throw 'FINANCE_SHADOW_ACL_FAILED' }
 foreach($name in @('finance-reservation-ledger.mjs','finance-reservation-server.mjs')) {
   Copy-Item -LiteralPath (Join-Path $source $name) -Destination (Join-Path (Join-Path $target 'app') $name)
 }
-Copy-Item -LiteralPath $launcher -Destination (Join-Path (Join-Path $target 'app') 'finance-reservation-shadow-start.ps1')
+Copy-Item -LiteralPath $unseal -Destination (Join-Path (Join-Path $target 'app') 'finance-reservation-windows-unseal.ps1')
+Copy-Item -LiteralPath $entrypoint -Destination (Join-Path (Join-Path $target 'app') 'finance-reservation-windows-entrypoint.mjs')
 function New-Token() {
   $bytes=New-Object 'System.Byte[]' 32
   $rng=[Security.Cryptography.RandomNumberGenerator]::Create()
@@ -37,7 +42,7 @@ foreach($role in @('client','admin')) {
   [IO.File]::WriteAllText((Join-Path (Join-Path $target 'secrets') ($role+'.dpapi')),$cipher,[Text.UTF8Encoding]::new($false))
   $secret=$null
 }
-$action=New-ScheduledTaskAction -Execute (Join-Path $PSHOME 'powershell.exe') -Argument ('-NoProfile -NonInteractive -WindowStyle Hidden -File "'+(Join-Path (Join-Path $target 'app') 'finance-reservation-shadow-start.ps1')+'"')
+$action=New-ScheduledTaskAction -Execute $node -Argument ('"'+(Join-Path (Join-Path $target 'app') 'finance-reservation-windows-entrypoint.mjs')+'"')
 $trigger=New-ScheduledTaskTrigger -AtLogOn -User ([Security.Principal.WindowsIdentity]::GetCurrent().Name)
 $principal=New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
 $settings=New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -MultipleInstances IgnoreNew

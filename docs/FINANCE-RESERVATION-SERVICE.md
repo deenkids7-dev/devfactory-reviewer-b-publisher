@@ -38,12 +38,12 @@ Le service est independant **en processus et stockage**, mais n'est pas encore u
 **Ne pas** presenter cette version locale comme preuve de `MAY_SPEND=true`, et ne pas activer `DeenKids-DevFactory-Autonomy` sur sa seule base.
 
 ## Deploiement MSI shadow — preuves du 25 octobre 2026
-- Windows Scheduled Task : `DevFactory-Finance-Ledger-Shadow`, declenchement a l'ouverture de session, execution sous `MSI\\ismah` avec niveau `Limited`, et redemarrages sur echec. Il ne s'agit PAS d'un service Windows administrateur/LocalService.
+- Windows Scheduled Task : `DevFactory-Finance-Ledger-Shadow`, declenchement a l'ouverture de session, execution sous `MSI\\ismah` avec niveau `Limited`, et redemarrages sur echec. **Action directe Node** (`finance-reservation-windows-entrypoint.mjs`) : la tache suit le vrai processus et l'arrete, sans wrapper PowerShell resident. Il ne s'agit PAS d'un service Windows administrateur/LocalService.
 - Code installe dans `%LOCALAPPDATA%\\DevFactory\\FinanceReservation\\app`. Registre SQLite persistant dans `state\\ledger.sqlite`. Aucun fichier du Runner n'est modifie.
-- Secrets de client et d'administration distincts, generes aleatoirement au deploiement, stockes via DPAPI CurrentUser dans `secrets`; leurs valeurs ne sont ni publiees ni journalisees. ACL NTFS sur le dossier : seul `MSI\\ismah` et `SYSTEM` ont FullControl.
+- Secrets de client et d'administration distincts, generes aleatoirement au deploiement, stockes via DPAPI CurrentUser dans `secrets`; leur dechiffrement ponctuel passe par `finance-reservation-windows-unseal.ps1` dans un pipe prive vers Node, sans argument de ligne de commande ni journal. ACL NTFS sur le dossier : seul `MSI\\ismah` et `SYSTEM` ont FullControl.
 - Port local `127.0.0.1:47881` uniquement. Tache `Running`, processus Node identifie, `GET /health` -> `maySpend:false`.
 - `GET /v1/status` authentifie : reservationCount=0, chargeCount=0, `mayReserveForPaidRun:false`, `maySpend:false`, `providerBillingVerified:false`, `independentSignerVerified:false`. Role client sur charges -> HTTP 403.
-- Stop/Start de la tache teste : retour `/health` valide, fichier registre conserve. Test subprocess d'arret/redemarrage avec vraie reservation et charge : PASS. Ensemble du service financier : **12 PASS / 0 FAIL**.
+- Stop/Start de la tache teste : ancien PID Node effectivement termine, nouveau PID distinct, `/health` valide, fichier registre conserve. Test subprocess d'arret/redemarrage avec vraie reservation et charge : PASS. Ensemble du service financier : **12 PASS / 0 FAIL**.
 - Suite complete sur Windows : 3 epreuves d'autres workflows echouent sur CRLF LF; elles ne doivent pas etre masquees ou comptees comme reussies. Ne pas modifier les controles de gouvernance pour obtenir artificiellement du vert.
 - `DeenKids-DevFactory-Autonomy` toujours `Disabled`. Aucun appel inference OpenRouter, aucun depassement budget, aucun `HUMAN_GO`, `MERGE_GO` ni `RUNNER_GO` deduit.
 
