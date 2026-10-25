@@ -23,6 +23,9 @@ if($PreflightOnly){
   Write-Output 'FINANCE_AUTHORITY_SPENDING_DISABLED'
   return
 }
+$id=[Security.Principal.WindowsIdentity]::GetCurrent()
+$principal=[Security.Principal.WindowsPrincipal]::new($id)
+if(-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){throw 'ADMINISTRATOR_UAC_REQUIRED'}
 $recoveryReady=$false
 if(Test-Path -LiteralPath $root){
   if(-not $ResumePartial){throw 'AUTHORITY_ROOT_EXISTS'}
