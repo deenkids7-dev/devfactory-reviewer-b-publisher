@@ -97,3 +97,64 @@ test('separate CLI process recovers persistent ledger after restart and never au
     assert.equal((await settled.json()).maySpend,false);
     assert.equal((await (await request('/v1/status')).json()).chargeCount,1);
   });
+
+test('killed finance server cannot enable replayed physical calls or double settlement',
+  {timeout:30000},async t=>{
+    const dir=mkdtempSync(join(tmpdir(),'df-finance-physical-crash-'));
+    const db=join(dir,'finance.sqlite');
+    const client=randomBytes(32).toString('hex');
+    const admin=randomBytes(32).toString('hex');
+    const port=await availablePort();
+    const children=[];
+    t.after(async()=>{
+      for(const child of children)await stop(child);
+      rmSync(dir,{recursive:true,force:true,maxRetries:3,retryDelay:50});
+    });
+    const request=(path,{token=client,payload}={})=>fetch('http://127.0.0.1:'+port+path,{
+      method:'POST',signal:AbortSignal.timeout(5000),
+      headers:{authorization:'Bearer '+token,'content-type':'application/json'},
+      body:JSON.stringify(payload),
+    });
+    const physical={
+      id:'durable-run-001',role:'development',pr:952,
+      head:'b'.repeat(40),upperUsdMicros:100000,
+      requestBodySha256:'f'.repeat(64),
+      model:'deepseek/deepseek-v4.1-flash-1017',
+      runId:'run-crash-001',attemptId:'attempt-crash-001',
+    };
+    const original=await launch({db,port,client,admin});
+    children.push(original);
+    const first=await request('/v1/physical-attempts',{payload:physical});
+    assert.equal(first.status,201);
+    // Simulate a response lost before it is processed by an agent.
+    await stop(original);
+    const restarted=await launch({db,port,client,admin});
+    children.push(restarted);
+    const replay=await request('/v1/physical-attempts',{payload:physical});
+    assert.equal(replay.status,409);
+    assert.equal((await replay.json()).error,'PHYSICAL_ATTEMPT_ALREADY_RECORDED');
+    const changedId=await request('/v1/physical-attempts',{
+      payload:{...physical,id:'changed-id'},
+    });
+    assert.equal(changedId.status,409);
+    const over=await request('/v1/charges',{token:admin,
+      payload:{eventId:'overcharge',reservationId:physical.id,
+        amountUsdMicros:100001},
+    });
+    assert.equal(over.status,409);
+    const charge={eventId:'one-charge',reservationId:physical.id,
+      amountUsdMicros:40000};
+    assert.equal((await request('/v1/charges',{token:admin,payload:charge})).status,201);
+    assert.equal((await request('/v1/charges',{token:admin,payload:charge})).status,200);
+    assert.equal((await request('/v1/charges',{token:admin,
+      payload:{...charge,eventId:'second-charge'}})).status,409);
+    const state=await fetch('http://127.0.0.1:'+port+'/v1/status',{
+      headers:{authorization:'Bearer '+client},signal:AbortSignal.timeout(5000),
+    }).then(r=>r.json());
+    assert.equal(state.reservationCount,1);
+    assert.equal(state.chargeCount,1);
+    assert.equal(state.reservedUsdMicros,100000);
+    assert.equal(state.chargedUsdMicros,40000);
+    assert.equal(state.mayReserveForPaidRun,false);
+    assert.equal(state.maySpend,false);
+  });

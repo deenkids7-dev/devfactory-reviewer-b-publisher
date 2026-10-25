@@ -39,15 +39,19 @@ function statusFor(err){
   const msg=err?.message||'SERVICE_UNAVAILABLE';
   if(msg==='PAYLOAD_TOO_LARGE')return [413,msg];
   if(['INVALID_CONTENT_TYPE','INVALID_JSON','INVALID_RESERVATION',
-    'INVALID_CHARGE'].includes(msg))return [400,msg];
+    'INVALID_CHARGE','INVALID_PHYSICAL_ATTEMPT'].includes(msg))return [400,msg];
   if(['RESERVATION_CONFLICT','CHARGE_CONFLICT','ROLE_CAP_EXCEEDED',
-    'GLOBAL_CAP_EXCEEDED','UNKNOWN_RESERVATION'].includes(msg))
+    'GLOBAL_CAP_EXCEEDED','UNKNOWN_RESERVATION',
+    'PHYSICAL_ATTEMPT_ALREADY_RECORDED',
+    'RESERVATION_ALREADY_CHARGED','CHARGE_EXCEEDS_RESERVATION'].includes(msg))
     return [409,msg];
   return [503,'SERVICE_UNAVAILABLE'];
 }
 export function createFinanceServer({ledger,clientToken,adminToken}={}){
   if(!ledger||typeof ledger.reserve!=='function'||
-     typeof ledger.recordCharge!=='function'||typeof ledger.status!=='function')
+     typeof ledger.recordCharge!=='function'||
+     typeof ledger.reservePhysicalAttempt!=='function'||
+     typeof ledger.status!=='function')
     throw Error('LEDGER_REQUIRED');
   if(typeof clientToken!=='string'||!TOKEN.test(clientToken)||
      typeof adminToken!=='string'||!TOKEN.test(adminToken)||
@@ -61,6 +65,7 @@ export function createFinanceServer({ledger,clientToken,adminToken}={}){
     const routes={
       '/v1/status':'GET',
       '/v1/reservations':'POST',
+      '/v1/physical-attempts':'POST',
       '/v1/charges':'POST',
     };
     if(!Object.hasOwn(routes,pathname)){
@@ -76,7 +81,7 @@ export function createFinanceServer({ledger,clientToken,adminToken}={}){
     if(!client&&!admin){
       send(res,401,{error:'UNAUTHENTICATED'});return;
     }
-    if((pathname==='/v1/reservations'&&!client)||
+    if((['/v1/reservations','/v1/physical-attempts'].includes(pathname)&&!client)||
        (pathname==='/v1/charges'&&!admin)){
       send(res,403,{error:'WRONG_ROLE'});return;
     }
@@ -91,6 +96,9 @@ export function createFinanceServer({ledger,clientToken,adminToken}={}){
       if(pathname==='/v1/reservations'){
         const result=ledger.reserve(payload);
         send(res,result.idempotent?200:201,result);
+      }else if(pathname==='/v1/physical-attempts'){
+        const result=ledger.reservePhysicalAttempt(payload);
+        send(res,201,result);
       }else{
         const result=ledger.recordCharge(payload);
         send(res,result.idempotent?200:201,result);
